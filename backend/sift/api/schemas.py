@@ -52,6 +52,7 @@ class MovieOut(BaseModel):
     library_section: str | None
     is_kids: bool
     monitored: bool
+    in_plex: bool
     has_file: bool
     quality: str | None
     file_size: int | None

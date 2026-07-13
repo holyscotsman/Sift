@@ -57,6 +57,7 @@ export interface MovieQuery {
   section?: string;
   is_kids?: boolean;
   monitored?: boolean;
+  in_plex?: boolean;
   has_file?: boolean;
   sort?: string;
   order?: "asc" | "desc";

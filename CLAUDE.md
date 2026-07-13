@@ -63,10 +63,15 @@ audited); deletes may not. Never weaken this without a louder test.
 
 ## 5. Source-of-truth map (resolve conflicts by this table)
 
+**Plex is the source of truth for library membership** (owner decision, overriding the
+original game-plan default that made Radarr the catalog authority). A movie is "in the
+library" / "owned" iff it's present in a Plex movie section (`movies.in_plex`). Radarr
+is a **management overlay**, not the library definition.
+
 | Source | Authoritative for |
 |---|---|
-| **Radarr** | Owned/monitored, quality profile + cutoff, TMDB collection membership, file presence. |
-| **Plex** | What's playable, per-user watch state, user ratings, kids-vs-adult separation. |
+| **Plex** | **Library membership + "owned" (`in_plex`)**, what's playable, per-user watch state, user ratings, kids-vs-adult separation. |
+| **Radarr** | Monitored/wanted, quality profile + cutoff, TMDB collection membership, Radarr file state (`has_file`, for duplicate/upgrade analysis) — an overlay, not the library. |
 | **Tautulli** | Watch history: plays, last-played, completion. |
 | **TMDB** | External ratings + vote counts, collection / keyword / person graph. |
 

@@ -33,6 +33,7 @@ def list_movies(
     section: str | None = None,
     is_kids: bool | None = None,
     monitored: bool | None = None,
+    in_plex: bool | None = None,
     has_file: bool | None = None,
     sort: str = "title",
     order: str = "asc",
@@ -48,6 +49,8 @@ def list_movies(
         stmt = stmt.where(Movie.is_kids.is_(is_kids))
     if monitored is not None:
         stmt = stmt.where(Movie.monitored.is_(monitored))
+    if in_plex is not None:
+        stmt = stmt.where(Movie.in_plex.is_(in_plex))
     if has_file is not None:
         stmt = stmt.where(Movie.has_file.is_(has_file))
 

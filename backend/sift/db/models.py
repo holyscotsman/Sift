@@ -94,6 +94,10 @@ class Movie(Base):
     library_section: Mapped[str | None] = mapped_column(String(255), index=True)
     is_kids: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     monitored: Mapped[bool] = mapped_column(Boolean, default=False)
+    # `in_plex` is the source of truth for library membership (present & playable in
+    # a Plex movie section). `has_file` is Radarr's separate view (file downloaded),
+    # kept for duplicate/upgrade analysis but NOT the definition of "in my library".
+    in_plex: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     has_file: Mapped[bool] = mapped_column(Boolean, default=False)
     quality: Mapped[str | None] = mapped_column(String(64))
     file_size: Mapped[int | None] = mapped_column(BigInteger)

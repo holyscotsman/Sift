@@ -320,17 +320,21 @@ class ScanPipeline:
                     continue
                 movie = session.get(Movie, tmdb_id)
                 if movie is None:
-                    # Playable in Plex but not in the Radarr catalog: create a stub.
+                    # In Plex but not in the Radarr catalog — Plex is the library
+                    # authority, so this is a first-class library entry, not a stub.
                     movie = Movie(
                         tmdb_id=tmdb_id,
                         title=data["title"],
                         year=data["year"],
-                        has_file=True,
                     )
                     session.add(movie)
+                # Presence in a Plex movie section IS library membership.
+                movie.in_plex = True
                 movie.plex_rating_key = data["plex_rating_key"]
                 movie.library_section = data["library_section"]
                 movie.is_kids = data["is_kids"]
+                movie.title = movie.title or data["title"]
+                movie.year = movie.year if movie.year is not None else data["year"]
                 movie.imdb_id = movie.imdb_id or data["imdb_id"]
                 written += 1
             session.commit()
@@ -372,7 +376,7 @@ class ScanPipeline:
     def _tmdb_targets(self, limit: int) -> list[int]:
         with self.factory() as session:
             rows = session.scalars(
-                select(Movie.tmdb_id).where(Movie.has_file.is_(True)).limit(limit)
+                select(Movie.tmdb_id).where(Movie.in_plex.is_(True)).limit(limit)
             )
             return list(rows)
 
@@ -414,10 +418,11 @@ class ScanPipeline:
 
     def _finalize_counts(self) -> dict[str, int]:
         with self.factory() as session:
+            # "Owned" = in your Plex library (Plex is the source of truth).
             owned_ids = {
                 tmdb
                 for (tmdb,) in session.execute(
-                    select(Movie.tmdb_id).where(Movie.has_file.is_(True))
+                    select(Movie.tmdb_id).where(Movie.in_plex.is_(True))
                 )
             }
             for coll in session.scalars(select(Collection)):
@@ -426,10 +431,10 @@ class ScanPipeline:
                         CollectionMember.collection_id == coll.tmdb_collection_id
                     )
                 ).all()
-                owned = sum(1 for m in members if m.tmdb_id in owned_ids or m.owned)
-                coll.owned_count = owned
+                for m in members:
+                    m.owned = m.tmdb_id in owned_ids
+                coll.owned_count = sum(1 for m in members if m.owned)
                 coll.total_count = len(members)
-            movie_count = session.scalar(select(Movie.tmdb_id).limit(1))
             total_movies = len(list(session.scalars(select(Movie.tmdb_id))))
             session.commit()
-        return {"total_movies": total_movies, "has_any": 1 if movie_count else 0}
+        return {"total_movies": total_movies, "in_plex": len(owned_ids)}

@@ -95,10 +95,20 @@ async def test_full_scan_populates_snapshot_and_kids_guard(factory, settings):
         assert session.scalar(select(func.count()).select_from(Movie)) == 4
         matrix = session.get(Movie, 603)
         assert matrix.plex_rating_key == "1001" and matrix.is_kids is False
+        assert matrix.in_plex is True  # in a Plex movie section
         toy = session.get(Movie, 862)
         assert toy.is_kids is True  # kids section guard applied
         plex_only = session.get(Movie, 11)
-        assert plex_only is not None and plex_only.has_file is True
+        assert plex_only is not None and plex_only.in_plex is True
+        # In the Radarr catalog but NOT in Plex → not part of the library.
+        reloaded = session.get(Movie, 604)
+        assert reloaded is not None and reloaded.in_plex is False
+
+        # "Owned"/library membership is Plex presence: 603, 862, 11 (not 604).
+        in_plex_count = session.scalar(
+            select(func.count()).select_from(Movie).where(Movie.in_plex.is_(True))
+        )
+        assert in_plex_count == 3
 
         watches = session.scalars(select(WatchHistory)).all()
         assert len(watches) == 2

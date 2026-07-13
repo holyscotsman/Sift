@@ -10,7 +10,14 @@ import { useMovies } from "@/lib/hooks";
 import type { Movie } from "@/lib/types";
 
 type View = "grid" | "table";
-type Quick = "all" | "owned" | "monitored" | "kids";
+type Quick = "plex" | "all" | "monitored" | "kids";
+
+const QUICK_LABELS: Record<Quick, string> = {
+  plex: "In Plex",
+  all: "All",
+  monitored: "Monitored",
+  kids: "Kids",
+};
 
 function posterGradient(id: number): string {
   const hue = (id * 47) % 360;
@@ -21,7 +28,8 @@ export function Library() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [view, setView] = useState<View>("grid");
-  const [quick, setQuick] = useState<Quick>("all");
+  // Default to the Plex library — Plex is the source of truth for what you have.
+  const [quick, setQuick] = useState<Quick>("plex");
   const [sort, setSort] = useState("title");
   const [page, setPage] = useState(1);
   const pageSize = view === "grid" ? 24 : 50;
@@ -32,7 +40,7 @@ export function Library() {
   const query = useMemo(
     () => ({
       q: q || undefined,
-      has_file: quick === "owned" ? true : undefined,
+      in_plex: quick === "plex" ? true : undefined,
       monitored: quick === "monitored" ? true : undefined,
       is_kids: quick === "kids" ? true : undefined,
       sort,
@@ -57,7 +65,9 @@ export function Library() {
             Library
           </h1>
           <p className="mt-1 text-sm text-fg2">
-            {loading ? "Loading…" : `Showing ${from}–${to} of ${total.toLocaleString()} scored`}
+            {loading
+              ? "Loading…"
+              : `${QUICK_LABELS[quick]} · showing ${from}–${to} of ${total.toLocaleString()}`}
             {q && <span className="text-fg3"> · filtered by “{q}”</span>}
           </p>
         </div>
@@ -72,15 +82,15 @@ export function Library() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(["all", "owned", "monitored", "kids"] as Quick[]).map((k) => (
+        {(["plex", "all", "monitored", "kids"] as Quick[]).map((k) => (
           <button
             key={k}
             onClick={() => setQuick(k)}
-            className={`rounded-pill px-3 py-1 text-[13px] font-semibold capitalize ${
+            className={`rounded-pill px-3 py-1 text-[13px] font-semibold ${
               quick === k ? "bg-accent-soft text-accent" : "text-fg2 hover:bg-bg2"
             }`}
           >
-            {k}
+            {QUICK_LABELS[k]}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2 text-sm">

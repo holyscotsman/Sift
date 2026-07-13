@@ -29,8 +29,9 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
 def _counts(session: Session) -> Counts:
     return Counts(
         movies=session.scalar(select(func.count()).select_from(Movie)) or 0,
+        # "Owned" = present in your Plex library (Plex is the source of truth).
         owned=session.scalar(
-            select(func.count()).select_from(Movie).where(Movie.has_file.is_(True))
+            select(func.count()).select_from(Movie).where(Movie.in_plex.is_(True))
         )
         or 0,
         monitored=session.scalar(

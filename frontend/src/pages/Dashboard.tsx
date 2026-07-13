@@ -66,8 +66,8 @@ export function Dashboard() {
                 <Pill tone={score >= 55 ? "keep" : "borderline"}>{band}</Pill>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
+                <Factor label="In Plex" value={c?.owned ?? 0} dot="var(--keep)" />
                 <Factor label="Indexed" value={c?.movies ?? 0} dot="var(--accent)" />
-                <Factor label="Owned" value={c?.owned ?? 0} dot="var(--keep)" />
                 <Factor label="Monitored" value={c?.monitored ?? 0} dot="var(--borderline)" />
                 <Factor label="Collections" value={c?.collections ?? 0} dot="var(--accent2)" />
               </div>
@@ -76,17 +76,17 @@ export function Dashboard() {
         </Segment>
 
         <Segment>
-          <span className="eyebrow">Owned movies</span>
+          <span className="eyebrow">In your Plex library</span>
           <div className="mt-2 font-display text-[46px] font-extrabold leading-none">
             {loading ? <Skeleton className="h-11 w-24" /> : (c?.owned ?? 0).toLocaleString()}
           </div>
           <div className="mt-3 flex h-2 overflow-hidden rounded-pill bg-bg2">
-            <Bar value={c?.owned ?? 0} total={c?.movies || 1} color="var(--keep)" />
-            <Bar value={missing} total={c?.movies || 1} color="var(--borderline)" />
+            <Bar value={c?.owned ?? 0} total={(c?.owned ?? 0) + missing || 1} color="var(--keep)" />
+            <Bar value={missing} total={(c?.owned ?? 0) + missing || 1} color="var(--borderline)" />
           </div>
           <div className="mt-2 flex gap-4 text-xs text-fg3">
-            <Legend color="var(--keep)" label={`Owned ${c?.owned ?? 0}`} />
-            <Legend color="var(--borderline)" label={`Wanted ${missing}`} />
+            <Legend color="var(--keep)" label={`In Plex ${c?.owned ?? 0}`} />
+            <Legend color="var(--borderline)" label={`Wanted in Radarr ${missing}`} />
           </div>
         </Segment>
 

@@ -42,6 +42,7 @@ export interface Movie {
   library_section: string | null;
   is_kids: boolean;
   monitored: boolean;
+  in_plex: boolean;
   has_file: boolean;
   quality: string | null;
   file_size: number | null;

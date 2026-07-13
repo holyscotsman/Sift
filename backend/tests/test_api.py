@@ -30,21 +30,29 @@ def test_status_counts(client):
     c, factory = client
     assert c.get("/api/status").json()["counts"]["movies"] == 0
     with factory() as session:
-        session.add(Movie(tmdb_id=603, title="The Matrix", has_file=True, monitored=True))
+        # in_plex=True → counts as owned (Plex is the source of truth).
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True, monitored=True))
+        # In Radarr's catalog but not in Plex → indexed but not owned.
+        session.add(Movie(tmdb_id=604, title="Reloaded", monitored=True, has_file=True))
         session.commit()
     counts = c.get("/api/status").json()["counts"]
-    assert counts["movies"] == 1 and counts["owned"] == 1 and counts["monitored"] == 1
+    assert counts["movies"] == 2 and counts["owned"] == 1 and counts["monitored"] == 2
 
 
 def test_movies_list_and_filter(client):
     c, factory = client
     with factory() as session:
-        session.add(Movie(tmdb_id=603, title="The Matrix", is_kids=False, has_file=True))
-        session.add(Movie(tmdb_id=862, title="Toy Story", is_kids=True, has_file=True))
+        session.add(Movie(tmdb_id=603, title="The Matrix", is_kids=False, in_plex=True))
+        session.add(Movie(tmdb_id=862, title="Toy Story", is_kids=True, in_plex=True))
+        # In Radarr's catalog only (wanted) — not in the Plex library.
+        session.add(Movie(tmdb_id=604, title="Reloaded", monitored=True, in_plex=False))
         session.commit()
 
     everything = c.get("/api/movies").json()
-    assert everything["total"] == 2
+    assert everything["total"] == 3
+
+    in_plex = c.get("/api/movies", params={"in_plex": True}).json()
+    assert in_plex["total"] == 2  # the Plex library, not the Radarr wanted item
 
     kids = c.get("/api/movies", params={"is_kids": True}).json()
     assert kids["total"] == 1 and kids["items"][0]["tmdb_id"] == 862
