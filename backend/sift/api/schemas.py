@@ -113,6 +113,59 @@ class ProposeActionIn(BaseModel):
     dry_run: bool = True
 
 
+class SignalOut(BaseModel):
+    key: str
+    label: str
+    weight: float
+    contribution: float
+    available: bool
+    detail: str
+
+
+class JunkCandidate(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    poster_url: str | None
+    library_section: str | None
+    quality: str | None
+    file_size: int | None
+    junk_score: float
+    band: str
+    kids_guard: bool
+    rationale: str
+    signals: list[SignalOut]
+
+
+class JunkResponse(BaseModel):
+    items: list[JunkCandidate]
+    total: int
+
+
+class CollectionMemberOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    owned: bool
+
+
+class CollectionGap(BaseModel):
+    collection_id: int
+    name: str
+    owned_count: int
+    total_count: int
+    members: list[CollectionMemberOut]
+
+
+class MissingCollectionsResponse(BaseModel):
+    collections: list[CollectionGap]
+
+
+class RecommendationsResponse(BaseModel):
+    items: list[dict[str, Any]]
+    note: str | None = None
+
+
 class ActionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

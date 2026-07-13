@@ -90,10 +90,14 @@ class JunkThresholds(BaseModel):
     """Deterministic junk-scoring knobs (Phase 1). Data decides; the LLM explains."""
 
     min_votes: int = 50
-    rating_floor: float = 5.0
+    rating_floor: float = 5.0  # on a 0–10 scale
+    rating_prior: float = 6.0  # Bayesian prior mean pulled toward on low vote counts
     unwatched_years: int = 3
     low_completion_pct: float = 0.25
     exclude_kids_sections: bool = True
+    # Composite junk score (0–100) band cutoffs.
+    junk_cutoff: float = 60.0
+    borderline_cutoff: float = 40.0
 
 
 class AIConfig(BaseModel):

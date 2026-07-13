@@ -89,6 +89,54 @@ export interface ActionRecord {
   error: string | null;
 }
 
+export interface Signal {
+  key: string;
+  label: string;
+  weight: number;
+  contribution: number;
+  available: boolean;
+  detail: string;
+}
+
+export interface JunkCandidate {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  poster_url: string | null;
+  library_section: string | null;
+  quality: string | null;
+  file_size: number | null;
+  junk_score: number;
+  band: "keep" | "borderline" | "junk";
+  kids_guard: boolean;
+  rationale: string;
+  signals: Signal[];
+}
+
+export interface JunkResponse {
+  items: JunkCandidate[];
+  total: number;
+}
+
+export interface CollectionMember {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  owned: boolean;
+}
+
+export interface CollectionGap {
+  collection_id: number;
+  name: string;
+  owned_count: number;
+  total_count: number;
+  members: CollectionMember[];
+}
+
+export interface MissingCollectionsResponse {
+  collections: CollectionGap[];
+}
+
 // Live scan progress frames pushed over /ws/scan/{id}.
 export interface ScanProgressEvent {
   event: "progress";

@@ -3,20 +3,6 @@
 
 import { PlaceholderPage } from "@/components/ui";
 
-export const Missing = () => (
-  <PlaceholderPage
-    title="Missing"
-    note="Collection gaps (deterministic) and taste-based recommendations (AI, ranked by fit) land with the Phase 1–2 analysis engine. This screen will show owned vs missing collection slots and a ranked recommendation list with rationale."
-  />
-);
-
-export const Junk = () => (
-  <PlaceholderPage
-    title="Junk — removal queue"
-    note="Sift never deletes on its own. This queue will list vote-weighted junk candidates with per-signal breakdowns and an approval-gated, irreversible-delete confirm modal. Wired once the Phase-1 junk scorer and the action-execution path are live."
-  />
-);
-
 export const Ask = () => (
   <PlaceholderPage
     title="Ask"

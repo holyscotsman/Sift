@@ -22,7 +22,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import __version__
 from .actions.engine import ActionEngine
 from .actions.radarr_writes import RadarrWriter
-from .api import routes_actions, routes_health, routes_movies, routes_scan, ws
+from .api import (
+    routes_actions,
+    routes_analysis,
+    routes_health,
+    routes_movies,
+    routes_scan,
+    ws,
+)
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
@@ -80,7 +87,7 @@ def create_app(
     # run lifespan in every path) always has it.
     app.state.scan_tasks = set()
 
-    for module in (routes_health, routes_scan, routes_movies, routes_actions):
+    for module in (routes_health, routes_scan, routes_movies, routes_actions, routes_analysis):
         app.include_router(module.router)
     app.include_router(ws.router)
 

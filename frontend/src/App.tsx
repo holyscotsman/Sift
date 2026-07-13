@@ -7,8 +7,10 @@ import { ScanProvider } from "@/lib/scan";
 import { Activity } from "@/pages/Activity";
 import { Dashboard } from "@/pages/Dashboard";
 import { DesignSystem } from "@/pages/DesignSystem";
+import { Junk } from "@/pages/Junk";
 import { Library } from "@/pages/Library";
-import { Ask, Junk, Missing, Settings, TasteProfile } from "@/pages/placeholders";
+import { Missing } from "@/pages/Missing";
+import { Ask, Settings, TasteProfile } from "@/pages/placeholders";
 
 export default function App() {
   return (

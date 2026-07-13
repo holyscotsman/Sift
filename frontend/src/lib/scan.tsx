@@ -15,6 +15,7 @@ export const SCAN_PHASES: { key: string; label: string }[] = [
   { key: "tautulli", label: "Pulling Tautulli history" },
   { key: "tmdb", label: "Enriching TMDB metadata" },
   { key: "finalize", label: "Finalizing snapshot" },
+  { key: "score", label: "Scoring library" },
 ];
 
 export type PhaseState = "idle" | "active" | "done";

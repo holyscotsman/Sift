@@ -120,6 +120,24 @@
     transform: translateX(100%);
   }
 }
+@keyframes sift-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sift-modal {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes sift-aurora-a {
   0%,
   100% {

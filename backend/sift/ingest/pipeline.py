@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..analysis import junk
 from ..clients.plex import PlexClient
 from ..clients.radarr import RadarrClient
 from ..clients.tautulli import TautulliClient
@@ -40,7 +41,7 @@ from . import normalize
 
 log = logging.getLogger("sift.ingest")
 
-PHASES = ("radarr", "plex", "tautulli", "tmdb", "finalize")
+PHASES = ("radarr", "plex", "tautulli", "tmdb", "finalize", "score")
 
 
 @dataclass
@@ -178,6 +179,11 @@ class ScanPipeline:
 
     async def _phase_finalize(self) -> dict[str, int]:
         return await asyncio.to_thread(self._finalize_counts)
+
+    async def _phase_score(self) -> dict[str, int]:
+        # Deterministic junk scoring over the Plex library. Data decides the score.
+        scored = await asyncio.to_thread(junk.compute_and_store, self.factory, self.settings.junk)
+        return {"scored": scored}
 
     # ------------------------------------------------------------- sync persistence
 

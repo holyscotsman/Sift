@@ -5,6 +5,8 @@ import type {
   ActionRecord,
   ActionType,
   HealthResponse,
+  JunkResponse,
+  MissingCollectionsResponse,
   MovieListResponse,
   ScanRun,
   ScanStartResponse,
@@ -84,6 +86,9 @@ export const api = {
       method: "POST",
     }),
   scanGet: (id: number) => request<ScanRun>(`/api/scan/${id}`),
+  junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),
+  missingCollections: () =>
+    request<MissingCollectionsResponse>("/api/missing/collections"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   proposeAction: (body: {
     type: ActionType;
