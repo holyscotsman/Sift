@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:#070812;font-family:'Hanken Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:var(--display),'Hanken Grotesk',sans-serif;letter-spacing:-.015em}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0;text-align:left}
+  input,textarea,select{font:inherit;color:inherit}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--accent);opacity:.82}
+  ::selection{background:var(--accent-soft)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+  button:focus:not(:focus-visible),input:focus:not(:focus-visible),[tabindex]:focus:not(:focus-visible){outline:none}
+  *::-webkit-scrollbar{width:11px;height:11px}
+  *::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+  *::-webkit-scrollbar-thumb:hover{background:var(--fg-3)}
+  *::-webkit-scrollbar-track{background:transparent}
+  @keyframes sift-shimmer{0%{background-position:-460px 0}100%{background-position:460px 0}}
+  @keyframes sift-fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes sift-rise{from{opacity:0;transform:perspective(1100px) rotateX(7deg) translateY(20px)}to{opacity:1;transform:none}}
+  @keyframes sift-drawer{from{transform:translateX(103%) rotateY(-7deg)}to{transform:none}}
+  @keyframes sift-backdrop{from{opacity:0}to{opacity:1}}
+  @keyframes sift-modal{from{opacity:0;transform:translateY(22px) scale(.95)}to{opacity:1;transform:none}}
+  @keyframes sift-toast{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes sift-spin{to{transform:rotate(360deg)}}
+  @keyframes sift-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  @keyframes sift-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  @keyframes sift-orbrot{to{transform:rotate(360deg)}}
+  @keyframes sift-radar{to{transform:rotate(360deg)}}
+  @keyframes sift-aurora-a{0%{transform:translate(-6%,-4%) scale(1)}50%{transform:translate(10%,8%) scale(1.2)}100%{transform:translate(-6%,-4%) scale(1)}}
+  @keyframes sift-aurora-b{0%{transform:translate(6%,8%) scale(1.12)}50%{transform:translate(-8%,-6%) scale(1)}100%{transform:translate(6%,8%) scale(1.12)}}
+  @keyframes sift-aurora-c{0%{transform:translate(0,4%) scale(1)}50%{transform:translate(5%,-6%) scale(1.24)}100%{transform:translate(0,4%) scale(1)}}
+  section[data-screen-label]{animation:sift-fadeup var(--dur) ease-out}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div ref="{{ rootRef }}" style="--sans:'Hanken Grotesk',system-ui,sans-serif;--display:'Bricolage Grotesque','Hanken Grotesk',sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--r-sm:9px;--r-md:12px;--r-lg:18px;--r-xl:26px;--r-pill:999px;--nav-w:246px;--topbar-h:60px;--dur-fast:.16s;--dur:.28s;--dur-slow:.46s;--card-pad:20px;--gap:16px;--row-h:50px;--fs-body:14px;--fs-cap:12px;--bg-0:#070812;--bg-1:linear-gradient(158deg,#191c33,#0f1124);--bg-1s:#141731;--bg-2:#1b1f3c;--bg-3:#272c4e;--line:rgba(150,165,255,.11);--line-2:rgba(150,165,255,.22);--fg:#eef0ff;--fg-2:#9ea6d4;--fg-3:#6a7099;--accent:#2ee6e6;--accent2:#e85cf5;--accent-fg:#04141a;--grad:linear-gradient(120deg,#2ee6e6,#8a7bf0 52%,#e85cf5);--accent-soft:rgba(46,230,230,.15);--accent-line:rgba(46,230,230,.44);--keep:#4be6a4;--keep-soft:rgba(75,230,164,.14);--borderline:#ffc24a;--borderline-soft:rgba(255,194,74,.15);--junk:#ff6b8a;--junk-soft:rgba(255,107,138,.15);--glow:0 0 24px -5px rgba(46,230,230,.5);--glow-soft:0 0 16px -6px rgba(46,230,230,.4);--elev:inset 0 1px 0 rgba(255,255,255,.06),0 24px 48px -26px rgba(0,0,0,.9);--shadow-1:0 2px 10px -3px rgba(0,0,0,.55);--shadow-2:0 34px 80px -28px rgba(0,0,0,.9),0 10px 30px -14px rgba(0,0,0,.6);--backdrop:rgba(5,6,16,.66);--chrome:rgba(11,13,30,.72);--aura-a:rgba(46,230,230,.5);--aura-b:rgba(232,92,245,.42);--aura-c:rgba(126,110,246,.42);min-height:100vh;height:100vh;position:relative;display:flex;flex-direction:column;overflow:hidden;background:var(--bg-0);color:var(--fg);font-family:var(--sans);font-size:var(--fs-body);font-variant-numeric:tabular-nums;transition:background-color var(--dur),color var(--dur)">
+  <div aria-hidden="true" style="position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none">
+    <div style="position:absolute;width:62vw;height:62vw;left:-16vw;top:-24vw;border-radius:50%;background:radial-gradient(circle,var(--aura-a),transparent 68%);filter:blur(98px);opacity:.3;animation:sift-aurora-a 26s ease-in-out infinite;animation-play-state:var(--anim)"></div>
+    <div style="position:absolute;width:56vw;height:56vw;right:-12vw;top:-6vw;border-radius:50%;background:radial-gradient(circle,var(--aura-b),transparent 68%);filter:blur(108px);opacity:.26;animation:sift-aurora-b 33s ease-in-out infinite;animation-play-state:var(--anim)"></div>
+    <div style="position:absolute;width:68vw;height:68vw;left:14vw;bottom:-34vw;border-radius:50%;background:radial-gradient(circle,var(--aura-c),transparent 68%);filter:blur(116px);opacity:.22;animation:sift-aurora-c 30s ease-in-out infinite;animation-play-state:var(--anim)"></div>
+  </div>
+
+  <!-- ============ TOP BAR ============ -->
+  <header style="height:var(--topbar-h);flex:none;display:flex;align-items:center;gap:12px;padding:0 12px 0 16px;margin:14px 14px 0;background:var(--chrome);backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--shadow-2);position:relative;z-index:60;transition:background-color var(--dur),border-color var(--dur)">
+    <div style="display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em;flex:none">
+      <span style="display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--grad);color:var(--accent-fg);box-shadow:var(--glow)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 8v4.5l-4 2V13L4 5z"/></svg>
+      </span>
+      Sift
+    </div>
+    <div style="position:relative;flex:1;max-width:400px;margin-left:6px">
+      <div style="display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;background:var(--bg-2);border-radius:var(--r-md);color:var(--fg-3)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <input ref="{{ bar.searchRef }}" value="{{ bar.search }}" onInput="{{ bar.onSearch }}" onFocus="{{ bar.onSearchFocus }}" onBlur="{{ bar.onSearchBlur }}" placeholder="Search your library…" style="flex:1;background:none;border:none;outline:none;color:var(--fg);font-size:13px" />
+        <span style="font-size:11px;font-weight:600;color:var(--fg-3);border:1px solid var(--line-2);border-radius:5px;padding:1px 6px">/</span>
+      </div>
+      <sc-if value="{{ bar.showResults }}">
+        <div style="position:absolute;top:46px;left:0;right:0;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-2);overflow:hidden;z-index:70;animation:sift-fadeup var(--dur-fast) ease-out">
+          <sc-for list="{{ bar.searchResults }}" as="r" hint-placeholder-count="3">
+            <button onMouseDown="{{ r.open }}" style="display:flex;align-items:center;gap:11px;width:100%;padding:9px 12px;color:var(--fg);background:{{ r.rowBg }}" style-hover="background:var(--bg-2)">
+              <span style="width:26px;height:36px;border-radius:5px;flex:none;background:{{ r.poster }}"></span>
+              <span style="flex:1;font-weight:600;font-size:13px">{{ r.title }}</span>
+              <span style="font-size:12px;color:var(--fg-3)">{{ r.year }}</span>
+            </button>
+          </sc-for>
+          <sc-if value="{{ bar.noResults }}"><div style="padding:14px;color:var(--fg-3);font-size:13px">No matches for "{{ bar.search }}"</div></sc-if>
+        </div>
+      </sc-if>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:5px;padding:0 4px">
+      <sc-for list="{{ bar.health }}" as="h">
+        <div onMouseEnter="{{ h.enter }}" onMouseLeave="{{ h.leave }}" style="position:relative;padding:6px 3px;cursor:default">
+          <span style="display:block;width:9px;height:9px;border-radius:50%;background:{{ h.color }};box-shadow:{{ h.glow }}"></span>
+          <sc-if value="{{ h.hovered }}">
+            <div style="position:absolute;top:26px;right:-8px;white-space:nowrap;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:var(--shadow-2);padding:8px 11px;z-index:80;animation:sift-fadeup var(--dur-fast) ease-out">
+              <div style="font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:7px">{{ h.name }}<span style="width:7px;height:7px;border-radius:50%;background:{{ h.color }}"></span></div>
+              <div style="font-size:11.5px;color:var(--fg-3);margin-top:2px">{{ h.detail }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <button onClick="{{ bar.cycleDensity }}" title="{{ bar.densityTitle }}" style="width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:var(--r-sm);color:var(--fg-2)" style-hover="background:var(--bg-2);color:var(--fg)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16" stroke-dasharray="{{ bar.densityDash }}"/></svg>
+    </button>
+    <button onClick="{{ bar.cycleTheme }}" title="{{ bar.themeTitle }}" style="width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:var(--r-sm);color:var(--fg-2)" style-hover="background:var(--bg-2);color:var(--fg)">{{ bar.themeIcon }}</button>
+    <button onClick="{{ bar.toggleScanPanel }}" style="display:flex;align-items:center;gap:8px;height:34px;padding:0 13px 0 10px;border-radius:var(--r-pill);background:var(--bg-2);color:var(--fg-2);font-size:12.5px;font-weight:600;flex:none" style-hover="background:var(--bg-3)">
+      <sc-if value="{{ bar.scanning }}">{{ bar.ringMini }}<span style="color:var(--fg)">Scanning {{ bar.scanPct }}%</span></sc-if>
+      <sc-if value="{{ bar.idle }}"><span style="width:8px;height:8px;border-radius:50%;background:var(--keep)"></span>Idle</sc-if>
+    </button>
+    <button onClick="{{ bar.runScan }}" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 15px;border-radius:var(--r-md);background:var(--grad);color:var(--accent-fg);font-weight:700;font-size:13px;box-shadow:var(--glow);flex:none" style-hover="filter:brightness(1.08)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L4 14h6l-1 7 9-11h-6l1-7z"/></svg>
+      {{ bar.scanBtnLabel }}
+    </button>
+  </header>
+
+  <!-- ============ TOP NAV ============ -->
+  <nav style="flex:none;margin:12px 14px 0;padding:6px;border-radius:var(--r-xl);background:var(--bg-1);border:1px solid var(--line);box-shadow:var(--elev);display:flex;align-items:center;flex-wrap:wrap;gap:4px;position:relative;z-index:50">
+    <sc-for list="{{ nav.items }}" as="n" hint-placeholder-count="8">
+      <button onClick="{{ n.onClick }}" style="{{ n.style }}" style-hover="{{ n.hover }}">
+        <span style="display:grid;place-items:center;width:18px;height:18px;flex:none">{{ n.icon }}</span>{{ n.label }}
+        <sc-if value="{{ n.badgeShow }}"><span style="min-width:17px;height:17px;padding:0 5px;display:grid;place-items:center;font-size:10.5px;font-weight:800;border-radius:999px;background:{{ n.badgeBg }};color:{{ n.badgeFg }}">{{ n.badge }}</span></sc-if>
+      </button>
+    </sc-for>
+    <div style="flex:1;min-width:8px"></div>
+    <button onClick="{{ nav.ds.onClick }}" style="{{ nav.ds.style }}" style-hover="{{ nav.ds.hover }}"><span style="display:grid;place-items:center;width:18px;height:18px;flex:none">{{ nav.ds.icon }}</span>Design System</button>
+  </nav>
+
+  <!-- ============ SCAN PANEL ============ -->
+  <sc-if value="{{ bar.scanPanelOpen }}">
+    <div style="position:absolute;top:calc(var(--topbar-h) + 24px);right:26px;width:312px;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-2);z-index:55;padding:18px;animation:sift-fadeup var(--dur) ease-out">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div style="position:relative;width:80px;height:80px;flex:none;perspective:280px">
+          <div style="position:absolute;inset:2px;transform:rotateX(56deg);transform-style:preserve-3d">
+            <div style="position:absolute;inset:0;border-radius:50%;border:1px solid var(--line-2)"></div>
+            <div style="position:absolute;inset:16%;border-radius:50%;border:1px solid var(--line)"></div>
+            <div style="position:absolute;inset:34%;border-radius:50%;border:1px solid var(--line)"></div>
+            <div style="position:absolute;inset:0;border-radius:50%;overflow:hidden"><div style="position:absolute;inset:0;background:conic-gradient(from 0deg,var(--accent),var(--accent-soft) 60deg,transparent 130deg);opacity:.8;animation:sift-radar 1.5s linear infinite;animation-play-state:var(--anim)"></div></div>
+            <div style="position:absolute;inset:44%;border-radius:50%;background:var(--accent);box-shadow:var(--glow)"></div>
+          </div>
+          <div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:19px;text-shadow:0 2px 6px rgba(0,0,0,.6)">{{ bar.scanPct }}<span style="font-size:11px;color:var(--fg-3);margin-left:1px">%</span></div>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px">{{ bar.scanTitle }}</div>
+          <div style="font-size:12px;color:var(--fg-3);margin-top:2px">{{ bar.scanSub }}</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ bar.phases }}" as="p">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 2px">
+            <span style="width:18px;height:18px;flex:none;display:grid;place-items:center;border-radius:50%;background:{{ p.dotBg }};color:{{ p.dotFg }}">{{ p.mark }}</span>
+            <span style="font-size:12.5px;color:{{ p.color }};font-weight:{{ p.weight }}">{{ p.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ BODY ============ -->
+  <div style="flex:1;display:flex;min-height:0;position:relative;z-index:1">
+    <!-- MAIN -->
+    <main style="flex:1;overflow-x:hidden;overflow-y:auto;min-width:0">
+      <div style="max-width:1320px;margin:0 auto;padding:32px 40px 64px">
+
+        <!-- ===== DASHBOARD ===== -->
+        <sc-if value="{{ isDashboard }}">
+          <section data-screen-label="Dashboard">
+            <div style="margin-bottom:22px">
+              <h1 style="margin:0;font-size:30px;font-weight:800;letter-spacing:-.02em">Dashboard</h1>
+              <p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Your library at a glance</p>
+            </div>
+
+            <div data-tilt="1" style="position:relative;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);padding:16px 8px;display:flex;flex-wrap:wrap;align-items:stretch;gap:2px;margin-bottom:22px;transform-style:preserve-3d;transition:transform var(--dur-fast)">
+              <div data-sheen style="position:absolute;inset:0;border-radius:var(--r-xl);pointer-events:none;z-index:4;mix-blend-mode:screen;background:transparent"></div>
+              <div style="flex:1.7 1 250px;display:flex;align-items:center;gap:16px;padding:8px 22px;min-width:0">
+                <div style="position:relative;width:96px;height:96px;flex:none;animation:sift-float 7s ease-in-out infinite;animation-play-state:var(--anim)">
+                  <div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#eafcff,var(--accent) 42%,var(--accent2) 98%);box-shadow:0 10px 24px -14px var(--accent-line),inset -6px -8px 18px rgba(0,0,0,.32),inset 5px 6px 13px rgba(255,255,255,.3)"></div>
+                  <div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:30px;color:#06121e">{{ db.health.value }}</div>
+                </div>
+                <div style="min-width:0">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-3)">Library health</div>
+                  <div style="display:flex;align-items:center;gap:9px;margin-top:3px"><span style="font-family:var(--display);font-size:20px;font-weight:700">Excellent standing</span><span style="font-size:11px;font-weight:700;color:var(--keep);background:var(--keep-soft);padding:2px 9px;border-radius:var(--r-pill)">{{ db.health.badge }}</span></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+                    <sc-for list="{{ db.health.factors }}" as="f"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--fg-2);background:var(--bg-2);padding:3px 10px;border-radius:var(--r-pill)"><span style="width:6px;height:6px;border-radius:50%;background:{{ f.color }}"></span>{{ f.label }}&nbsp;<strong style="color:{{ f.color }}">{{ f.val }}</strong></span></sc-for>
+                  </div>
+                </div>
+              </div>
+              <div style="width:1px;align-self:stretch;background:var(--line);margin:14px 0"></div>
+              <div style="flex:1.1 1 176px;padding:8px 22px;min-width:0;display:flex;flex-direction:column;justify-content:center">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-3)">Owned movies</div>
+                <div style="font-family:var(--display);font-size:46px;font-weight:800;line-height:1;margin-top:2px">{{ db.owned.value }}</div>
+                <div style="display:flex;height:8px;border-radius:99px;overflow:hidden;margin-top:13px;background:var(--bg-2)"><sc-for list="{{ db.owned.sections }}" as="s"><div style="width:{{ s.pct }};background:{{ s.color }}"></div></sc-for></div>
+                <div style="display:flex;flex-wrap:wrap;gap:11px;margin-top:9px"><sc-for list="{{ db.owned.sections }}" as="s"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--fg-2)"><span style="width:8px;height:8px;border-radius:2px;background:{{ s.color }}"></span>{{ s.label }}&nbsp;<strong>{{ s.val }}</strong></span></sc-for></div>
+              </div>
+              <sc-for list="{{ db.gauges }}" as="g">
+                <div style="width:1px;align-self:stretch;background:var(--line);margin:14px 0"></div>
+                <div style="flex:1 1 118px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px 10px">
+                  <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--fg-3)">{{ g.label }}</div>
+                  <div style="position:relative;width:80px;height:80px">{{ g.ring }}<div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:24px;color:{{ g.color }}">{{ g.value }}</div></div>
+                  <div style="font-size:11.5px;color:var(--fg-3);text-align:center">{{ g.sub }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:var(--gap);margin-top:22px">
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:15px">
+                  <span style="display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--junk-soft);color:var(--junk)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v5M12 18v.4"/></svg></span>
+                  <h2 style="margin:0;font-size:16px;font-weight:700">Needs your attention</h2>
+                  <span style="margin-left:auto;font-size:12px;font-weight:700;color:var(--junk);background:var(--junk-soft);border-radius:var(--r-pill);padding:2px 9px">{{ db.needsCount }} pending</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ db.needs }}" as="a" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:var(--r-md);background:var(--bg-2)">
+                      <span style="width:34px;height:48px;border-radius:6px;flex:none;background:{{ a.poster }}"></span>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.title }}</div>
+                        <div style="font-size:12px;color:var(--fg-3);margin-top:1px">{{ a.reason }}</div>
+                      </div>
+                      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:{{ a.bandColor }};background:{{ a.bandSoft }};border-radius:var(--r-pill);padding:3px 9px;flex:none"><span style="width:6px;height:6px;border-radius:50%;background:{{ a.bandColor }}"></span>{{ a.bandLabel }} {{ a.score }}</span>
+                      <button onClick="{{ a.review }}" style="flex:none;padding:7px 13px;border-radius:var(--r-sm);background:var(--bg-3);color:var(--fg);font-size:12.5px;font-weight:700" style-hover="background:var(--accent);color:var(--accent-fg)">Review</button>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ db.needsEmpty }}"><div style="padding:22px;text-align:center;color:var(--fg-3);font-size:13px">Nothing awaiting approval. You're all caught up.</div></sc-if>
+                </div>
+              </div>
+
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:15px">
+                  <h2 style="margin:0;font-size:16px;font-weight:700">Recent activity</h2>
+                  <button onClick="{{ db.goActivity }}" style="margin-left:auto;font-size:12.5px;font-weight:700;color:var(--accent)" style-hover="opacity:.75">View all</button>
+                </div>
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ db.activity }}" as="e" hint-placeholder-count="4">
+                    <div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)">
+                      <span style="width:8px;height:8px;border-radius:50%;flex:none;margin-top:5px;background:{{ e.color }}"></span>
+                      <div style="flex:1"><div style="font-size:13px;font-weight:600;line-height:1.3">{{ e.text }}</div><div style="font-size:11.5px;color:var(--fg-3);margin-top:2px">{{ e.tier }} · {{ e.time }}</div></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:22px">
+              <h2 style="margin:0 0 13px;font-size:16px;font-weight:700">Quick actions</h2>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--gap)">
+                <sc-for list="{{ db.quick }}" as="q">
+                  <button onClick="{{ q.onClick }}" data-tilt="1" style="display:flex;align-items:center;gap:13px;padding:16px;border-radius:var(--r-lg);background:var(--bg-1);border:1px solid var(--line);text-align:left;box-shadow:var(--shadow-1);transform-style:preserve-3d;transition:transform var(--dur-fast),border-color var(--dur-fast)" style-hover="border-color:var(--accent-line)">
+                    <span style="display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:10px;background:var(--accent-soft);color:var(--accent)">{{ q.icon }}</span>
+                    <div><div style="font-weight:700;font-size:13.5px">{{ q.title }}</div><div style="font-size:12px;color:var(--fg-3);margin-top:1px">{{ q.sub }}</div></div>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+        <!-- ===== LIBRARY ===== -->
+        <sc-if value="{{ isLibrary }}">
+          <section data-screen-label="Library">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px">
+              <div>
+                <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Library</h1>
+                <p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Showing {{ lib.rangeFrom }}–{{ lib.rangeTo }} of {{ lib.count }} scored · {{ lib.total }} indexed in Plex</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;padding:3px;border-radius:10px;background:var(--bg-2)">
+                <button onClick="{{ lib.setGrid }}" title="Poster grid" style="{{ lib.gridBtn }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg></button>
+                <button onClick="{{ lib.setTable }}" title="Data table" style="{{ lib.tableBtn }}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:13px">
+              <span style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-right:2px">Views</span>
+              <sc-for list="{{ lib.views }}" as="v"><button onClick="{{ v.apply }}" style="{{ v.style }}">{{ v.name }}</button></sc-for>
+              <button style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--r-pill);border:1px dashed var(--line-2);color:var(--fg-3);font-size:12.5px;font-weight:700" style-hover="color:var(--accent);border-color:var(--accent)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Save view</button>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+              <div style="display:flex;gap:3px;padding:3px;border-radius:var(--r-pill);background:var(--bg-2)">
+                <sc-for list="{{ lib.sections }}" as="sec"><button onClick="{{ sec.onClick }}" style="{{ sec.style }}">{{ sec.label }}</button></sc-for>
+              </div>
+              <div style="width:1px;height:22px;background:var(--line)"></div>
+              <sc-for list="{{ lib.filters }}" as="f">
+                <div style="position:relative">
+                  <button onClick="{{ f.toggle }}" style="{{ f.style }}">
+                    {{ f.display }}
+                    <sc-if value="{{ f.active }}"><span onClick="{{ f.clear }}" style="display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:var(--accent-fg)"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span></sc-if>
+                    <sc-if value="{{ f.notActive }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></sc-if>
+                  </button>
+                  <sc-if value="{{ f.open }}">
+                    <div style="position:absolute;top:40px;left:0;min-width:170px;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-2);z-index:30;padding:5px;animation:sift-fadeup var(--dur-fast) ease-out">
+                      <sc-for list="{{ f.options }}" as="o"><button onMouseDown="{{ o.select }}" style="display:block;width:100%;padding:8px 11px;border-radius:7px;font-size:13px;font-weight:600;color:{{ o.color }}" style-hover="background:var(--bg-2)">{{ o.label }}</button></sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <div style="flex:1"></div>
+              <sc-if value="{{ lib.table }}">
+                <div style="position:relative">
+                  <button onClick="{{ lib.toggleColMenu }}" style="display:flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:var(--r-md);border:1px solid var(--line-2);color:var(--fg-2);font-size:12.5px;font-weight:600" style-hover="border-color:var(--fg-3)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Columns</button>
+                  <sc-if value="{{ lib.colMenuOpen }}">
+                    <div style="position:absolute;top:40px;right:0;min-width:180px;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow-2);z-index:30;padding:6px;animation:sift-fadeup var(--dur-fast) ease-out">
+                      <sc-for list="{{ lib.colToggles }}" as="ct"><button onMouseDown="{{ ct.toggle }}" style="display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;border-radius:7px;font-size:13px;font-weight:600" style-hover="background:var(--bg-2)"><span style="width:16px;height:16px;border-radius:5px;display:grid;place-items:center;background:{{ ct.boxBg }};border:1.5px solid {{ ct.boxBorder }};color:var(--accent-fg)">{{ ct.check }}</span>{{ ct.label }}</button></sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ lib.hasSelection }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 15px;margin-bottom:14px;border-radius:var(--r-md);background:var(--accent-soft);border:1px solid var(--accent-line)">
+                <span style="font-weight:700;font-size:13px;color:var(--accent)">{{ lib.selectedCount }} selected</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ lib.bulkMonitor }}" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:var(--r-sm);background:var(--bg-1);color:var(--fg);font-size:12.5px;font-weight:700" style-hover="filter:brightness(1.1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16l-6-4-6 4z"/></svg>Monitor</button>
+                <button onClick="{{ lib.bulkReview }}" style="padding:7px 13px;border-radius:var(--r-sm);background:var(--bg-1);color:var(--fg);font-size:12.5px;font-weight:700" style-hover="filter:brightness(1.1)">Add to review queue</button>
+                <button onClick="{{ lib.clearSel }}" style="padding:7px 11px;border-radius:var(--r-sm);color:var(--fg-2);font-size:12.5px;font-weight:700" style-hover="background:var(--bg-1)">Clear</button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.loading }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:16px">
+                <sc-for list="{{ lib.skeletons }}" as="sk" hint-placeholder-count="12">
+                  <div style="display:flex;flex-direction:column;gap:9px">
+                    <div style="aspect-ratio:2/3;border-radius:var(--r-md);background:linear-gradient(90deg,var(--bg-2),var(--bg-3),var(--bg-2));background-size:460px 100%;animation:sift-shimmer 1.4s infinite;animation-play-state:var(--anim)"></div>
+                    <div style="height:11px;width:80%;border-radius:6px;background:linear-gradient(90deg,var(--bg-2),var(--bg-3),var(--bg-2));background-size:460px 100%;animation:sift-shimmer 1.4s infinite;animation-play-state:var(--anim)"></div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.gridReady }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:16px">
+                <sc-for list="{{ lib.movies }}" as="m" hint-placeholder-count="12">
+                  <button onClick="{{ m.open }}" style="text-align:left;display:flex;flex-direction:column;gap:9px">
+                    <div data-tilt="strong" style="position:relative;aspect-ratio:2/3;border-radius:var(--r-md);overflow:hidden;background:{{ m.poster }};box-shadow:var(--elev);transform-style:preserve-3d;will-change:transform;transition:transform var(--dur-fast),box-shadow var(--dur-fast)">
+                      <div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.16),transparent 55%)"></div>
+                      <div data-sheen style="position:absolute;inset:0;z-index:4;pointer-events:none;mix-blend-mode:screen;background:transparent"></div>
+                      <div data-parallax="7" style="position:absolute;top:8px;left:8px;display:flex;gap:5px"><span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:var(--r-pill);background:rgba(0,0,0,.5);color:#fff;backdrop-filter:blur(4px)">{{ m.quality }}</span></div>
+                      <sc-if value="{{ m.mon }}"><span style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.35),var(--glow-soft)"></span></sc-if>
+                      <div data-parallax="10" style="position:absolute;left:0;right:0;bottom:0;padding:26px 10px 10px;background:linear-gradient(to top,rgba(0,0,0,.72),transparent)"><div style="font-weight:700;font-size:13px;line-height:1.2;color:#fff">{{ m.title }}</div></div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;padding:0 2px"><span style="font-size:12px;color:var(--fg-3)">{{ m.year }}</span><span style="width:3px;height:3px;border-radius:50%;background:var(--fg-3)"></span><span style="font-size:12px;font-weight:700;color:{{ m.ratingColor }}">{{ m.rating }}</span><span style="margin-left:auto;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:var(--r-pill);background:{{ m.secSoft }};color:{{ m.secColor }}">{{ m.section }}</span></div>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.tableReady }}">
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:12px;padding:0 16px;height:44px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--fg-3)">
+                  <button onClick="{{ lib.toggleAll }}" style="width:17px;height:17px;flex:none;border-radius:5px;border:1.5px solid var(--line-2);display:grid;place-items:center;background:{{ lib.allBoxBg }};color:var(--accent-fg)">{{ lib.allCheck }}</button>
+                  <button onClick="{{ lib.hTitle.onClick }}" style="flex:1;display:flex;align-items:center;gap:5px;font:inherit;letter-spacing:inherit;text-transform:inherit;color:{{ lib.hTitle.color }}">Title {{ lib.hTitle.arrow }}</button>
+                  <sc-if value="{{ lib.showYear }}"><button onClick="{{ lib.hYear.onClick }}" style="width:56px;text-align:right;font:inherit;letter-spacing:inherit;text-transform:inherit;color:{{ lib.hYear.color }}">Year {{ lib.hYear.arrow }}</button></sc-if>
+                  <sc-if value="{{ lib.showSection }}"><div style="width:70px">Library</div></sc-if>
+                  <sc-if value="{{ lib.showQuality }}"><div style="width:110px">Quality</div></sc-if>
+                  <sc-if value="{{ lib.showRating }}"><button onClick="{{ lib.hRating.onClick }}" style="width:64px;text-align:right;font:inherit;letter-spacing:inherit;text-transform:inherit;color:{{ lib.hRating.color }}">Rating {{ lib.hRating.arrow }}</button></sc-if>
+                  <sc-if value="{{ lib.showPlays }}"><button onClick="{{ lib.hPlays.onClick }}" style="width:56px;text-align:right;font:inherit;letter-spacing:inherit;text-transform:inherit;color:{{ lib.hPlays.color }}">Plays {{ lib.hPlays.arrow }}</button></sc-if>
+                  <sc-if value="{{ lib.showSize }}"><button onClick="{{ lib.hSize.onClick }}" style="width:74px;text-align:right;font:inherit;letter-spacing:inherit;text-transform:inherit;color:{{ lib.hSize.color }}">Size {{ lib.hSize.arrow }}</button></sc-if>
+                  <sc-if value="{{ lib.showMon }}"><div style="width:88px">Monitored</div></sc-if>
+                </div>
+                <sc-for list="{{ lib.movies }}" as="m" hint-placeholder-count="10">
+                  <div onClick="{{ m.open }}" style="display:flex;align-items:center;gap:12px;padding:0 16px;height:var(--row-h);border-bottom:1px solid var(--line);cursor:pointer;background:{{ m.rowBg }};font-variant-numeric:tabular-nums" style-hover="background:var(--bg-2)">
+                    <button onClick="{{ m.toggleSel }}" style="width:17px;height:17px;flex:none;border-radius:5px;border:1.5px solid {{ m.boxBorder }};display:grid;place-items:center;background:{{ m.boxBg }};color:var(--accent-fg)">{{ m.check }}</button>
+                    <span style="width:26px;height:37px;flex:none;border-radius:5px;background:{{ m.poster }}"></span>
+                    <span style="flex:1;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.title }}</span>
+                    <sc-if value="{{ lib.showYear }}"><span style="width:56px;text-align:right;font-size:13px;color:var(--fg-2)">{{ m.year }}</span></sc-if>
+                    <sc-if value="{{ lib.showSection }}"><span style="width:70px"><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--r-pill);background:{{ m.secSoft }};color:{{ m.secColor }}">{{ m.section }}</span></span></sc-if>
+                    <sc-if value="{{ lib.showQuality }}"><span style="width:110px;font-size:12.5px;color:var(--fg-2)">{{ m.quality }}</span></sc-if>
+                    <sc-if value="{{ lib.showRating }}"><span style="width:64px;text-align:right;font-size:13px;font-weight:700;color:{{ m.ratingColor }}">{{ m.rating }}</span></sc-if>
+                    <sc-if value="{{ lib.showPlays }}"><span style="width:56px;text-align:right;font-size:13px;color:var(--fg-2)">{{ m.plays }}</span></sc-if>
+                    <sc-if value="{{ lib.showSize }}"><span style="width:74px;text-align:right;font-size:13px;color:var(--fg-2)">{{ m.size }}</span></sc-if>
+                    <sc-if value="{{ lib.showMon }}"><span style="width:88px;display:flex;align-items:center;gap:6px;font-size:12.5px;color:{{ m.monColor }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ m.monColor }}"></span>{{ m.monLabel }}</span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.showPager }}">
+              <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:22px">
+                <button onClick="{{ lib.prevPage }}" disabled="{{ lib.prevDisabled }}" style="{{ lib.prevStyle }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Prev</button>
+                <span style="font-size:13px;font-weight:700;color:var(--fg-2)">Page {{ lib.page }} <span style="color:var(--fg-3);font-weight:600">of {{ lib.totalPages }}</span></span>
+                <button onClick="{{ lib.nextPage }}" disabled="{{ lib.nextDisabled }}" style="{{ lib.nextStyle }}">Next<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.empty }}">
+              <div style="padding:60px;text-align:center;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg)">
+                <div style="font-size:16px;font-weight:700;margin-bottom:6px">No movies match these filters</div>
+                <div style="font-size:13px;color:var(--fg-3);margin-bottom:16px">Try widening your filters or clearing the current view.</div>
+                <button onClick="{{ lib.resetFilters }}" style="padding:9px 16px;border-radius:var(--r-md);background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:13px">Clear filters</button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lib.anyMenuOpen }}"><div onClick="{{ lib.closeMenus }}" style="position:fixed;inset:0;z-index:25"></div></sc-if>
+          </section>
+        </sc-if>
+        <!-- ===== MISSING ===== -->
+        <sc-if value="{{ isMissing }}">
+          <section data-screen-label="Missing">
+            <div style="margin-bottom:22px">
+              <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Missing</h1>
+              <p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Collection gaps Sift can fill, plus taste-based picks worth adding.</p>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <h2 style="margin:0;font-size:16px;font-weight:700">Collection gaps</h2>
+              <span style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);background:var(--bg-2);padding:3px 9px;border-radius:var(--r-pill)">Deterministic</span>
+              <span style="font-size:12.5px;color:var(--fg-3)">{{ miss.gapTotal }} films across {{ miss.collCount }} collections</span>
+            </div>
+            <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden;margin-bottom:34px">
+              <sc-for list="{{ miss.collections }}" as="col" hint-placeholder-count="4">
+                <div style="{{ col.rowStyle }}">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <h3 style="margin:0;font-size:15px;font-weight:700">{{ col.name }}</h3>
+                    <span style="font-size:11.5px;font-weight:700;color:var(--keep);background:var(--keep-soft);padding:2px 9px;border-radius:var(--r-pill)">{{ col.ownedCount }} owned</span>
+                    <span style="font-size:11.5px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:var(--r-pill)">{{ col.missingCount }} missing</span>
+                  </div>
+                  <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:4px">
+                    <sc-for list="{{ col.owned }}" as="o">
+                      <button onClick="{{ o.open }}" style="width:82px;flex:none;text-align:left">
+                        <div style="aspect-ratio:2/3;border-radius:8px;background:{{ o.poster }};position:relative;overflow:hidden;box-shadow:var(--shadow-1)"><div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.14),transparent 55%)"></div><span style="position:absolute;top:5px;right:5px;width:17px;height:17px;border-radius:50%;background:var(--keep);color:#04140f;display:grid;place-items:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span></div>
+                        <div style="font-size:11px;color:var(--fg-3);margin-top:5px">{{ o.year }}</div>
+                      </button>
+                    </sc-for>
+                    <div style="width:1px;background:var(--line);margin:0 2px"></div>
+                    <sc-for list="{{ col.missing }}" as="mm">
+                      <div style="width:82px;flex:none">
+                        <div style="aspect-ratio:2/3;border-radius:8px;background:{{ mm.poster }};border:1.5px dashed var(--line-2);display:grid;place-items:center;color:var(--fg-3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+                        <div style="font-size:11px;font-weight:600;color:var(--fg-2);margin-top:5px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ mm.t }}</div>
+                        <sc-if value="{{ mm.auto }}"><div style="display:flex;align-items:center;gap:4px;margin-top:5px;font-size:10.5px;font-weight:700;color:var(--keep)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Added auto</div></sc-if>
+                        <sc-if value="{{ mm.notAuto }}"><button onClick="{{ mm.add }}" style="margin-top:5px;width:100%;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700" style-hover="background:var(--accent);color:var(--accent-fg)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <h2 style="margin:0;font-size:16px;font-weight:700">Recommended for you</h2>
+              <span style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:var(--r-pill)">AI</span>
+              <div style="flex:1"></div>
+              <span style="font-size:12px;color:var(--fg-3)">Sort</span>
+              <div style="display:flex;gap:2px;padding:3px;border-radius:var(--r-pill);background:var(--bg-2)"><button onClick="{{ miss.sortFit }}" style="{{ miss.sortFitStyle }}">Fit</button><button onClick="{{ miss.sortYear }}" style="{{ miss.sortYearStyle }}">Year</button></div>
+            </div>
+            <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden">
+              <sc-for list="{{ miss.recs }}" as="r" hint-placeholder-count="6">
+                <div style="{{ r.rowStyle }}">
+                  <div data-tilt="strong" style="width:56px;flex:none;aspect-ratio:2/3;border-radius:8px;background:{{ r.poster }};position:relative;overflow:hidden;box-shadow:var(--shadow-1);transform-style:preserve-3d;transition:transform var(--dur-fast)"><div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.14),transparent 55%)"></div><div data-sheen style="position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;background:transparent"></div></div>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:9px"><span style="font-weight:700;font-size:14.5px">{{ r.title }}</span><span style="font-size:12px;color:var(--fg-3)">{{ r.year }} · {{ r.genres }}</span></div>
+                    <p style="margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--fg-2);max-width:52ch">{{ r.why }}</p>
+                  </div>
+                  <div style="position:relative;width:46px;height:46px;flex:none;display:grid;place-items:center">{{ r.fitRing }}<div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:14px;color:{{ r.fitColor }}">{{ r.fit }}</div></div>
+                  <div style="display:flex;gap:8px;flex:none">
+                    <button onClick="{{ r.add }}" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 15px;border-radius:var(--r-md);background:var(--grad);color:var(--accent-fg);font-size:12.5px;font-weight:700;box-shadow:var(--glow)" style-hover="filter:brightness(1.08)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+                    <button onClick="{{ r.dismiss }}" style="padding:9px 14px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg-2);font-size:12.5px;font-weight:700" style-hover="background:var(--bg-3)">Dismiss</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ miss.recEmpty }}"><div style="padding:50px;text-align:center;color:var(--fg-3);font-size:13.5px;background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg)">You've reviewed every recommendation. Run a scan to generate fresh picks.</div></sc-if>
+          </section>
+        </sc-if>
+
+        <!-- ===== JUNK ===== -->
+        <sc-if value="{{ isJunk }}">
+          <section data-screen-label="Junk">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px">
+              <div>
+                <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Removal queue</h1>
+                <p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Sift never deletes on its own. Every removal below needs your approval.</p>
+              </div>
+              <sc-if value="{{ junk.hasPending }}"><button onClick="{{ junk.approveAll }}" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:var(--r-md);background:var(--junk);color:#fff;font-weight:700;font-size:13px" style-hover="filter:brightness(1.08)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Approve all ({{ junk.pendingCount }})</button></sc-if>
+            </div>
+            <sc-if value="{{ junk.allClear }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:14px 17px;margin-bottom:14px;border-radius:var(--r-lg);background:var(--keep-soft);border:1px solid var(--keep);box-shadow:var(--glow-soft)">
+                <span style="display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:50%;background:var(--keep);color:#04140f"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span>
+                <div><div style="font-weight:700;font-size:13.5px;color:var(--keep)">All caught up</div><div style="font-size:12.5px;color:var(--fg-2);margin-top:1px">No removals are waiting on you. Decisions below stay on record.</div></div>
+              </div>
+            </sc-if>
+            <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden">
+              <sc-for list="{{ junk.items }}" as="j" hint-placeholder-count="5">
+                <div style="{{ j.rowStyle }}">
+                  <div style="display:flex;gap:16px">
+                    <div data-tilt="strong" style="width:70px;flex:none;aspect-ratio:2/3;border-radius:var(--r-md);background:{{ j.poster }};position:relative;overflow:hidden;box-shadow:var(--shadow-1);transform-style:preserve-3d;transition:transform var(--dur-fast)"><div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.14),transparent 55%)"></div><div data-sheen style="position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;background:transparent"></div></div>
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:flex-start;gap:12px">
+                        <div style="flex:1;min-width:0">
+                          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><h3 style="margin:0;font-size:16px;font-weight:700">{{ j.title }}</h3><span style="font-size:12.5px;color:var(--fg-3)">{{ j.year }}</span></div>
+                          <div style="display:flex;gap:7px;margin-top:7px;flex-wrap:wrap"><span style="font-size:11.5px;font-weight:600;color:var(--fg-2);background:var(--bg-2);padding:2px 9px;border-radius:var(--r-pill)">{{ j.quality }}</span><span style="font-size:11.5px;font-weight:600;color:var(--fg-2);background:var(--bg-2);padding:2px 9px;border-radius:var(--r-pill)">{{ j.size }}</span></div>
+                          <sc-if value="{{ j.kids }}"><div style="display:inline-flex;align-items:center;gap:7px;margin-top:10px;font-size:12px;font-weight:700;color:var(--borderline);background:var(--borderline-soft);padding:5px 11px;border-radius:var(--r-md)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>Kids library — protected from rating-only removal</div></sc-if>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;flex:none">
+                          <div style="text-align:right"><div style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:{{ j.bandColor }};background:{{ j.bandSoft }};padding:4px 11px;border-radius:var(--r-pill)"><span style="width:7px;height:7px;border-radius:50%;background:{{ j.bandColor }}"></span>{{ j.band }}</div></div>
+                          <div style="position:relative;width:52px;height:52px;flex:none;display:grid;place-items:center">{{ j.ring }}<div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:16px">{{ j.score }}</div></div>
+                        </div>
+                      </div>
+                      <p style="margin:12px 0 0;font-size:13px;line-height:1.55;color:var(--fg-2)">{{ j.rationale }}</p>
+                    </div>
+                  </div>
+
+                  <button onClick="{{ j.toggle }}" style="display:flex;align-items:center;gap:7px;margin-top:14px;font-size:12.5px;font-weight:700;color:var(--fg-2)" style-hover="color:var(--fg)"><span style="transition:transform var(--dur);transform:{{ j.chevT }};display:grid;place-items:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>Signal breakdown</button>
+                  <sc-if value="{{ j.expanded }}">
+                    <div style="margin-top:12px;padding:15px;border-radius:var(--r-md);background:var(--bg-2);display:flex;flex-direction:column;gap:13px;animation:sift-fadeup var(--dur) ease-out">
+                      <sc-for list="{{ j.signals }}" as="sig">
+                        <div>
+                          <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;margin-bottom:5px"><span style="font-weight:700;color:var(--fg)">{{ sig.k }}</span><span style="color:var(--fg-3)">{{ sig.v }}</span></div>
+                          <div style="height:6px;border-radius:99px;background:var(--bg-0);overflow:hidden"><div style="height:100%;width:{{ sig.pct }};background:{{ sig.barColor }};border-radius:99px;transition:width var(--dur-slow)"></div></div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:15px">
+                    <sc-if value="{{ j.pending }}">
+                      <div style="flex:1"></div>
+                      <button onClick="{{ j.reject }}" style="display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg);font-weight:700;font-size:13px" style-hover="background:var(--bg-3)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>Keep it</button>
+                      <button onClick="{{ j.approve }}" style="display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--r-md);background:var(--junk-soft);color:var(--junk);font-weight:700;font-size:13px" style-hover="background:var(--junk);color:#fff"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 12.5h10L18 7"/></svg>Approve removal</button>
+                    </sc-if>
+                    <sc-if value="{{ j.decided }}">
+                      <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:{{ j.statusColor }};background:{{ j.statusSoft }};padding:6px 13px;border-radius:var(--r-pill)"><span style="width:7px;height:7px;border-radius:50%;background:{{ j.statusColor }}"></span>{{ j.statusLabel }}</span>
+                      <div style="flex:1"></div>
+                      <button onClick="{{ j.change }}" style="font-size:12.5px;font-weight:700;color:var(--fg-3);padding:7px 12px;border-radius:var(--r-sm)" style-hover="background:var(--bg-2);color:var(--fg)">Change decision</button>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-if>
+        <!-- ===== ASK ===== -->
+        <sc-if value="{{ isAsk }}">
+          <section data-screen-label="Ask" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 82px);min-height:460px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex:none;margin-bottom:16px">
+              <div><h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Ask</h1><p style="margin:4px 0 0;color:var(--fg-3);font-size:14px">Natural-language questions over your whole library.</p></div>
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="font-size:12px;color:var(--fg-3);font-weight:600">Model</span>
+                <div style="display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--bg-2)"><sc-for list="{{ ask.models }}" as="mo"><button onClick="{{ mo.onClick }}" style="{{ mo.style }}">{{ mo.label }}</button></sc-for></div>
+              </div>
+            </div>
+
+            <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:20px;padding:4px 2px 8px">
+              <sc-for list="{{ ask.thread }}" as="msg">
+                <sc-if value="{{ msg.user }}">
+                  <div style="align-self:flex-end;max-width:76%;padding:12px 16px;border-radius:16px 16px 4px 16px;background:var(--accent-soft);color:var(--fg);font-size:14px;line-height:1.5;font-weight:500">{{ msg.text }}</div>
+                </sc-if>
+                <sc-if value="{{ msg.single }}">
+                  <div style="align-self:flex-start;max-width:88%;width:100%">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--fg-3)"><span style="width:20px;height:20px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.3-4.2A7.5 7.5 0 1 1 20 11.5z"/></svg></span><span style="font-weight:700;color:var(--fg-2)">{{ msg.model }}</span><span>· {{ msg.latency }}</span></div>
+                    <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:14px;padding:16px"><p style="margin:0;font-size:14px;line-height:1.6;color:var(--fg)">{{ msg.text }}<sc-if value="{{ msg.cursor }}"><span style="display:inline-block;width:8px;height:15px;margin-left:2px;transform:translateY(2px);background:var(--accent);border-radius:2px;animation:sift-pulse .8s ease-in-out infinite"></span></sc-if></p>
+                      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px"><sc-for list="{{ msg.movies }}" as="mv"><button onClick="{{ mv.open }}" style="display:flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border-radius:var(--r-pill);background:var(--bg-2);color:var(--fg);font-size:12px;font-weight:700" style-hover="background:var(--bg-3)"><span style="width:14px;height:20px;border-radius:3px;background:var(--accent-soft)"></span>{{ mv.title }}</button></sc-for></div>
+                      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span style="font-size:11px;color:var(--fg-3);font-weight:600">Sources</span><sc-for list="{{ msg.sources }}" as="sr"><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--fg-2);background:var(--bg-2);padding:3px 9px;border-radius:var(--r-pill)"><span style="width:6px;height:6px;border-radius:50%;background:{{ sr.color }}"></span>{{ sr.name }}</span></sc-for></div>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ msg.compare }}">
+                  <div style="align-self:flex-start;width:100%">
+                    <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1.6"/><rect x="14" y="4" width="7" height="16" rx="1.6"/></svg>Compare · two models side by side</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                      <sc-for list="{{ msg.panes }}" as="pane">
+                        <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden">
+                          <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--bg-2)"><span style="font-weight:700;font-size:12.5px;color:var(--fg)">{{ pane.model }}</span><div style="flex:1"></div><span style="font-size:11px;color:var(--fg-3);font-weight:600">{{ pane.latency }}</span><sc-if value="{{ pane.hasCost }}"><span style="font-size:11px;color:var(--fg-3);font-weight:600;background:var(--bg-0);padding:2px 7px;border-radius:5px">{{ pane.cost }}</span></sc-if></div>
+                          <div style="padding:14px;flex:1;display:flex;flex-direction:column"><p style="margin:0;font-size:13px;line-height:1.55;color:var(--fg)">{{ pane.text }}<sc-if value="{{ pane.cursor }}"><span style="display:inline-block;width:7px;height:14px;margin-left:2px;transform:translateY(2px);background:var(--accent);border-radius:2px;animation:sift-pulse .8s ease-in-out infinite"></span></sc-if></p>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px"><sc-for list="{{ pane.movies }}" as="mv"><button onClick="{{ mv.open }}" style="display:flex;align-items:center;gap:5px;padding:3px 9px 3px 4px;border-radius:var(--r-pill);background:var(--bg-2);color:var(--fg);font-size:11.5px;font-weight:700" style-hover="background:var(--bg-3)"><span style="width:12px;height:17px;border-radius:3px;background:var(--accent-soft)"></span>{{ mv.title }}</button></sc-for></div>
+                            <button onClick="{{ pane.use }}" style="margin-top:auto;padding-top:12px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--accent)" style-hover="opacity:.75"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>Use this answer</button>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span style="font-size:11px;color:var(--fg-3);font-weight:600">Sources</span><sc-for list="{{ msg.sources }}" as="sr"><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--fg-2);background:var(--bg-2);padding:3px 9px;border-radius:var(--r-pill)"><span style="width:6px;height:6px;border-radius:50%;background:{{ sr.color }}"></span>{{ sr.name }}</span></sc-for></div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ msg.hasFollowups }}">
+                  <div style="align-self:flex-start;max-width:88%;display:flex;flex-wrap:wrap;gap:8px;margin-top:-8px">
+                    <span style="font-size:11px;color:var(--fg-3);font-weight:700;align-self:center">Follow up</span>
+                    <sc-for list="{{ msg.followups }}" as="fu"><button onClick="{{ fu.onClick }}" style="display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:var(--r-pill);border:1px solid var(--line-2);color:var(--fg-2);font-size:12.5px;font-weight:600" style-hover="border-color:var(--accent);color:var(--accent)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>{{ fu.q }}</button></sc-for>
+                  </div>
+                </sc-if>
+              </sc-for>
+              <sc-if value="{{ ask.thinking }}">
+                <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--fg-3);font-size:13px"><span style="display:flex;gap:4px"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:sift-pulse 1s ease-in-out infinite"></span><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:sift-pulse 1s ease-in-out .2s infinite"></span><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:sift-pulse 1s ease-in-out .4s infinite"></span></span>Thinking…</div>
+              </sc-if>
+            </div>
+
+            <div style="flex:none;padding-top:12px">
+              <sc-if value="{{ ask.empty }}"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px"><sc-for list="{{ ask.suggestions }}" as="sg"><button onClick="{{ sg.onClick }}" style="padding:8px 13px;border-radius:var(--r-pill);border:1px solid var(--line-2);color:var(--fg-2);font-size:12.5px;font-weight:600;text-align:left" style-hover="border-color:var(--accent);color:var(--accent)">{{ sg.q }}</button></sc-for></div></sc-if>
+              <div style="display:flex;align-items:flex-end;gap:10px;padding:8px 8px 8px 16px;border-radius:16px;background:var(--bg-1);border:1px solid var(--line-2)">
+                <textarea value="{{ ask.input }}" onInput="{{ ask.onInput }}" onKeyDown="{{ ask.onKey }}" rows="1" placeholder="Ask about your library — cleanup, gaps, recommendations…" style="flex:1;background:none;border:none;outline:none;resize:none;color:var(--fg);font-size:14px;line-height:1.5;max-height:120px;padding:6px 0"></textarea>
+                <button onClick="{{ ask.send }}" style="width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:11px;background:var(--grad);color:var(--accent-fg);box-shadow:var(--glow)" style-hover="filter:brightness(1.08)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16-7-7 16-2.5-6.5L4 12z"/></svg></button>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <!-- ===== TASTE PROFILE ===== -->
+        <sc-if value="{{ isTaste }}">
+          <section data-screen-label="Taste Profile">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px">
+              <div><h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Taste Profile</h1><p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Built from what you own, watch, and rate. Recommendations follow this.</p></div>
+              <button onClick="{{ taste.recompute }}" style="display:flex;align-items:center;gap:9px;padding:10px 16px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg);font-weight:700;font-size:13px" style-hover="background:var(--bg-3)">
+                <sc-if value="{{ taste.recomputing }}"><span style="width:16px;height:16px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:sift-spin .8s linear infinite"></span>Recomputing {{ taste.recomputePct }}%</sc-if>
+                <sc-if value="{{ taste.idleRecompute }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v3.6h-3.6"/></svg>Recompute profile</sc-if>
+              </button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:var(--gap);align-items:start">
+              <div style="display:flex;flex-direction:column;gap:var(--gap)">
+                <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                  <h2 style="margin:0 0 15px;font-size:15px;font-weight:700">Top genres</h2>
+                  <div style="display:flex;flex-direction:column;gap:11px">
+                    <sc-for list="{{ taste.genres }}" as="g">
+                      <div style="display:flex;align-items:center;gap:12px"><span style="width:88px;flex:none;font-size:13px;font-weight:600;color:var(--fg-2)">{{ g.k }}</span><div style="flex:1;height:9px;border-radius:99px;background:var(--bg-2);overflow:hidden"><div style="height:100%;width:{{ g.pct }};background:{{ g.color }};border-radius:99px;transition:width var(--dur-slow)"></div></div><span style="width:30px;text-align:right;font-size:12.5px;font-weight:700;color:var(--fg-3)">{{ g.v }}</span></div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                  <h2 style="margin:0 0 14px;font-size:15px;font-weight:700">Keywords &amp; themes</h2>
+                  <div style="display:flex;flex-wrap:wrap;gap:9px 14px;align-items:center">
+                    <sc-for list="{{ taste.keywords }}" as="k"><span style="font-size:{{ k.size }};font-weight:{{ k.weight }};color:{{ k.color }};opacity:{{ k.opacity }};line-height:1">{{ k.k }}</span></sc-for>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                    <h2 style="margin:0 0 13px;font-size:15px;font-weight:700">Directors</h2>
+                    <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ taste.directors }}" as="d"><div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="font-weight:600;color:var(--fg-2)">{{ d.k }}</span><span style="font-weight:700;color:var(--fg-3)">{{ d.v }}</span></div><div style="height:7px;border-radius:99px;background:var(--bg-2);overflow:hidden"><div style="height:100%;width:{{ d.pct }};background:{{ d.color }};border-radius:99px;transition:width var(--dur-slow)"></div></div></div></sc-for></div>
+                  </div>
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                    <h2 style="margin:0 0 13px;font-size:15px;font-weight:700">Actors</h2>
+                    <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ taste.actors }}" as="a"><div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="font-weight:600;color:var(--fg-2)">{{ a.k }}</span><span style="font-weight:700;color:var(--fg-3)">{{ a.v }}</span></div><div style="height:7px;border-radius:99px;background:var(--bg-2);overflow:hidden"><div style="height:100%;width:{{ a.pct }};background:{{ a.color }};border-radius:99px;transition:width var(--dur-slow)"></div></div></div></sc-for></div>
+                  </div>
+                </div>
+                <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad)">
+                  <h2 style="margin:0 0 14px;font-size:15px;font-weight:700">Eras</h2>
+                  <div style="display:flex;gap:10px">
+                    <sc-for list="{{ taste.eras }}" as="e"><div style="flex:1;text-align:center"><div style="height:80px;display:flex;align-items:flex-end;justify-content:center"><div style="width:80%;background:{{ e.color }};border-radius:6px 6px 0 0;height:{{ e.pct }};min-height:6px;opacity:.85;transition:height var(--dur-slow)"></div></div><div style="font-size:12px;font-weight:700;margin-top:8px">{{ e.k }}</div><div style="font-size:11px;color:var(--fg-3)">{{ e.v }}</div></div></sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad);position:sticky;top:0">
+                <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">Emphasis</h2>
+                <p style="margin:0 0 18px;font-size:12.5px;color:var(--fg-3);line-height:1.5">Nudge what matters most. Recommendations reweight on your next recompute.</p>
+                <div style="display:flex;flex-direction:column;gap:17px">
+                  <sc-for list="{{ taste.weights }}" as="w">
+                    <div>
+                      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:13px;font-weight:700">{{ w.label }}</span><span style="font-size:12.5px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums">{{ w.value }}</span></div>
+                      <input type="range" min="0" max="100" value="{{ w.value }}" onInput="{{ w.onInput }}" style="width:100%;accent-color:var(--accent);height:5px;cursor:pointer" />
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:20px;padding:12px;border-radius:var(--r-md);background:var(--bg-2);font-size:12px;color:var(--fg-3);line-height:1.5">Higher weight means that signal pulls harder on fit scores. Currently you favor <strong style="color:var(--fg-2)">{{ taste.topEmphasis }}</strong>.</div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+        <!-- ===== ACTIVITY ===== -->
+        <sc-if value="{{ isActivity }}">
+          <section data-screen-label="Activity">
+            <div style="margin-bottom:18px"><h1 style="margin:0;font-size:28px;font-weight:700">Activity</h1><p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Everything Sift did or staged — the trust surface. Each entry shows a dry-run diff.</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"><sc-for list="{{ act.filters }}" as="f"><button onClick="{{ f.onClick }}" style="{{ f.style }}">{{ f.label }}<span style="opacity:.7">{{ f.count }}</span></button></sc-for></div>
+            <div style="position:relative">
+              <div style="position:absolute;left:19px;top:8px;bottom:8px;width:2px;background:linear-gradient(var(--accent-line),transparent)"></div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ act.entries }}" as="e" hint-placeholder-count="6">
+                  <div style="display:flex;gap:16px;position:relative;padding-bottom:14px">
+                    <span style="width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--bg-1s);border:1px solid var(--line);color:{{ e.iconColor }};z-index:1;box-shadow:var(--shadow-1)">{{ e.icon }}</span>
+                    <div style="flex:1;padding-top:2px">
+                      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px">{{ e.text }}</span><span style="font-size:11px;font-weight:700;color:{{ e.tierColor }};background:var(--bg-2);padding:2px 9px;border-radius:var(--r-pill)">{{ e.tier }}</span><div style="flex:1"></div><span style="font-size:12px;color:var(--fg-3)">{{ e.time }}</span></div>
+                      <div style="margin-top:11px;padding:11px 13px;border-radius:var(--r-md);background:var(--bg-1);border:1px solid var(--line);font-family:var(--mono);font-size:11.5px;line-height:1.7;box-shadow:var(--shadow-1)"><sc-for list="{{ e.diff }}" as="d"><div style="color:{{ d.color }}">{{ d.line }}</div></sc-for></div>
+                      <div style="margin-top:9px;font-size:11px;color:var(--fg-3)">via {{ e.src }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <!-- ===== SETTINGS ===== -->
+        <sc-if value="{{ isSettings }}">
+          <section data-screen-label="Settings">
+            <div style="margin-bottom:22px"><h1 style="margin:0;font-size:28px;font-weight:700">Settings</h1><p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">Connections, models, scoring, autonomy, and appearance.</p></div>
+            <div style="display:grid;grid-template-columns:220px 1fr;gap:26px;align-items:start">
+              <div style="display:flex;flex-direction:column;gap:3px;position:sticky;top:0"><sc-for list="{{ set.tabs }}" as="t"><button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+              <div>
+                <sc-if value="{{ set.isConnections }}">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden">
+                    <sc-for list="{{ set.connections }}" as="c">
+                      <div style="{{ c.rowStyle }}">
+                        <div style="display:flex;align-items:center;gap:11px;margin-bottom:16px"><span style="width:9px;height:9px;border-radius:50%;background:{{ c.dot }};box-shadow:0 0 8px {{ c.dot }}"></span><h3 style="margin:0;font-size:15px;font-weight:700">{{ c.name }}</h3><span style="font-size:12px;font-weight:700;color:{{ c.dot }}">{{ c.statusLabel }}</span><div style="flex:1"></div>
+                          <button onClick="{{ c.test }}" style="display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg);font-size:12.5px;font-weight:700" style-hover="background:var(--bg-3)"><sc-if value="{{ c.testing }}"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:sift-spin .8s linear infinite"></span>Testing…</sc-if><sc-if value="{{ c.notTesting }}">Test connection</sc-if></button>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+                          <div><label style="display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);margin-bottom:6px">Server URL</label><input value="{{ c.url }}" style="width:100%;height:38px;padding:0 12px;border-radius:var(--r-md);background:var(--bg-1s);border:1px solid var(--line);color:var(--fg);font-size:13px;font-family:var(--mono)" /></div>
+                          <div><label style="display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3);margin-bottom:6px">API key / token</label><input type="password" value="sk-plex-a1b2c3d4e5" style="width:100%;height:38px;padding:0 12px;border-radius:var(--r-md);background:var(--bg-1s);border:1px solid var(--line);color:var(--fg);font-size:13px;font-family:var(--mono)" /></div>
+                        </div>
+                        <sc-if value="{{ c.hasError }}"><div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:9px 12px;border-radius:var(--r-md);background:{{ c.errSoft }};color:{{ c.errColor }};font-size:12px;font-weight:600"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v5M12 18v.4"/></svg>{{ c.detail }}</div></sc-if>
+                        <sc-if value="{{ c.noError }}"><div style="margin-top:11px;font-size:12px;color:var(--fg-3)">{{ c.detail }}</div></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ set.isModels }}">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden">
+                    <div style="padding:var(--card-pad)">
+                      <h3 style="margin:0 0 14px;font-size:15px;font-weight:700">Providers</h3>
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><div style="font-weight:700;font-size:13.5px">Local · Llama 3.1 8B</div><div style="font-size:12px;color:var(--fg-3);margin-top:2px;font-family:var(--mono)">http://localhost:11434</div></div><span style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--keep)"><span style="width:7px;height:7px;border-radius:50%;background:var(--keep)"></span>Online</span><button onClick="{{ set.toggleLocal }}" style="{{ set.localSw.track }}"><span style="{{ set.localSw.knob }}"></span></button></div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:12px 0"><div style="flex:1"><div style="font-weight:700;font-size:13.5px">Anthropic · Claude</div><div style="font-size:12px;color:var(--fg-3);margin-top:2px;font-family:var(--mono)">api.anthropic.com · sk-ant-•••••</div></div><span style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--keep)"><span style="width:7px;height:7px;border-radius:50%;background:var(--keep)"></span>Online</span><button onClick="{{ set.toggleAnthropic }}" style="{{ set.anthropicSw.track }}"><span style="{{ set.anthropicSw.knob }}"></span></button></div>
+                    </div>
+                    <div style="padding:var(--card-pad);border-top:1px solid var(--line)">
+                      <h3 style="margin:0 0 5px;font-size:15px;font-weight:700">Routing mode</h3><p style="margin:0 0 13px;font-size:12.5px;color:var(--fg-3)">How Sift decides which model answers a question.</p>
+                      <div style="display:flex;gap:3px;padding:3px;border-radius:10px;background:var(--bg-2)"><sc-for list="{{ set.modes }}" as="m"><button onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button></sc-for></div>
+                    </div>
+                    <div style="padding:var(--card-pad);border-top:1px solid var(--line)">
+                      <h3 style="margin:0 0 5px;font-size:15px;font-weight:700">Embedding provider</h3><p style="margin:0 0 13px;font-size:12.5px;color:var(--fg-3)">Used for semantic search and taste matching — set separately from chat.</p>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ set.embeds }}" as="em"><button onClick="{{ em.onClick }}" style="{{ em.style }}">{{ em.label }}</button></sc-for></div>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ set.isScoring }}">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad);box-shadow:var(--elev);display:flex;flex-direction:column;gap:24px">
+                    <div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><label style="font-size:14px;font-weight:700">Minimum vote count</label><span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--accent)">{{ set.thMinVotes }}</span></div><p style="margin:0 0 10px;font-size:12px;color:var(--fg-3)">Ignore ratings backed by fewer votes than this.</p><input type="range" min="0" max="2000" step="50" value="{{ set.thMinVotes }}" onInput="{{ set.setMinVotes }}" style="width:100%;accent-color:var(--accent);cursor:pointer" /><div style="margin-top:8px;font-size:12px;color:var(--borderline);font-weight:600">Would set aside ~{{ set.lowVotes }} low-vote titles</div></div>
+                    <div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><label style="font-size:14px;font-weight:700">Rating floor</label><span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--accent)">{{ set.thRating }}</span></div><p style="margin:0 0 10px;font-size:12px;color:var(--fg-3)">Titles rated below this become removal candidates.</p><input type="range" min="0" max="10" step="0.1" value="{{ set.thRating }}" onInput="{{ set.setRating }}" style="width:100%;accent-color:var(--accent);cursor:pointer" /><div style="margin-top:8px;font-size:12px;color:var(--junk);font-weight:600">Would flag {{ set.belowFloor }} titles right now</div></div>
+                    <div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><label style="font-size:14px;font-weight:700">Not watched in (years)</label><span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--accent)">{{ set.thYears }}</span></div><p style="margin:0 0 10px;font-size:12px;color:var(--fg-3)">Consider titles cold after this long without a play.</p><input type="range" min="0" max="5" step="1" value="{{ set.thYears }}" onInput="{{ set.setYears }}" style="width:100%;accent-color:var(--accent);cursor:pointer" /><div style="margin-top:8px;font-size:12px;color:var(--fg-3);font-weight:600">{{ set.neverPlayed }} titles have never been played</div></div>
+                    <div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><label style="font-size:14px;font-weight:700">Recommendation fit cutoff</label><span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--accent)">{{ set.thFit }}</span></div><p style="margin:0 0 10px;font-size:12px;color:var(--fg-3)">Only surface recommendations at or above this fit score.</p><input type="range" min="0" max="100" step="1" value="{{ set.thFit }}" onInput="{{ set.setFit }}" style="width:100%;accent-color:var(--accent);cursor:pointer" /><div style="margin-top:8px;font-size:12px;color:var(--keep);font-weight:600">{{ set.aboveFit }} recommendations above cutoff</div></div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ set.isAutonomy }}">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--card-pad);box-shadow:var(--elev)">
+                    <p style="margin:0 0 18px;font-size:13px;color:var(--fg-2);line-height:1.55">Sift acts at three tiers of autonomy. Deletes are permanently locked to approval — this policy cannot be turned off.</p>
+                    <div style="display:flex;flex-direction:column;gap:11px">
+                      <sc-for list="{{ set.tiers }}" as="t">
+                        <div style="display:flex;align-items:flex-start;gap:14px;padding:15px;border-radius:var(--r-md);background:var(--bg-2)">
+                          <span style="width:10px;height:10px;border-radius:50%;flex:none;margin-top:4px;background:{{ t.color }}"></span>
+                          <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px">{{ t.name }}</span><span style="font-size:11px;font-weight:700;color:{{ t.color }};background:var(--bg-0);padding:2px 9px;border-radius:var(--r-pill)">{{ t.tier }}</span></div><div style="font-size:12.5px;color:var(--fg-3);margin-top:4px">{{ t.desc }}</div></div>
+                          <sc-if value="{{ t.locked }}"><span style="color:var(--fg-3);flex:none" title="Locked policy"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ set.isAppearance }}">
+                  <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--elev);overflow:hidden">
+                    <div style="padding:var(--card-pad)">
+                      <h3 style="margin:0 0 14px;font-size:15px;font-weight:700">Theme</h3>
+                      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px"><sc-for list="{{ set.themes }}" as="th"><button onClick="{{ th.onClick }}" style="border-radius:var(--r-md);border:2px solid {{ th.borderColor }};padding:5px;background:none;text-align:left;transition:border-color var(--dur-fast)"><div style="height:64px;border-radius:10px;background:{{ th.bg }};position:relative;overflow:hidden;border:1px solid var(--line)"><span style="position:absolute;left:11px;top:11px;width:26px;height:8px;border-radius:99px;background:{{ th.ring }}"></span><span style="position:absolute;left:11px;top:25px;width:44px;height:6px;border-radius:99px;background:var(--line-2)"></span><span style="position:absolute;left:11px;top:37px;width:34px;height:6px;border-radius:99px;background:var(--line-2)"></span></div><div style="display:flex;align-items:center;gap:6px;padding:9px 6px 3px"><span style="font-size:12.5px;font-weight:700;color:{{ th.labelColor }}">{{ th.name }}</span><sc-if value="{{ th.active }}"><span style="margin-left:auto;color:var(--accent)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span></sc-if></div></button></sc-for></div>
+                    </div>
+                    <div style="padding:var(--card-pad);border-top:1px solid var(--line)">
+                      <h3 style="margin:0 0 5px;font-size:15px;font-weight:700">Accent color</h3><p style="margin:0 0 13px;font-size:12.5px;color:var(--fg-3)">Sift derives a matching duotone from your pick.</p>
+                      <div style="display:flex;gap:12px;flex-wrap:wrap"><sc-for list="{{ set.accents }}" as="ac"><button onClick="{{ ac.onClick }}" style="width:38px;height:38px;border-radius:50%;background:{{ ac.hex }};border:2px solid {{ ac.ring }};box-shadow:{{ ac.glow }};transition:transform var(--dur-fast)" style-hover="transform:scale(1.12)"></button></sc-for></div>
+                    </div>
+                    <div style="padding:var(--card-pad);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:24px">
+                      <div style="flex:1;min-width:180px"><h3 style="margin:0 0 13px;font-size:15px;font-weight:700">Density</h3><div style="display:flex;gap:3px;padding:3px;border-radius:10px;background:var(--bg-2)"><button onClick="{{ set.setComfortable }}" style="{{ set.compBtn }}">Comfortable</button><button onClick="{{ set.setCompact }}" style="{{ set.cmpBtn }}">Compact</button></div></div>
+                      <div style="flex:1;min-width:180px"><h3 style="margin:0 0 13px;font-size:15px;font-weight:700">Reduce motion</h3><div style="display:flex;align-items:center;gap:12px"><span style="flex:1;font-size:12.5px;color:var(--fg-3);line-height:1.4">Pause the aurora, tilt, and 3D animations.</span><button onClick="{{ set.toggleReduceMotion }}" style="{{ set.rmSw.track }}"><span style="{{ set.rmSw.knob }}"></span></button></div></div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <!-- ===== DESIGN SYSTEM ===== -->
+        <sc-if value="{{ isDs }}">
+          <section data-screen-label="Design System">
+            <div style="margin-bottom:22px"><h1 style="margin:0;font-size:28px;font-weight:700">Design System</h1><p style="margin:5px 0 0;color:var(--fg-3);font-size:14px">The tokens, type, and components that make up Sift — across all three themes.</p></div>
+
+            <h2 style="margin:0 0 13px;font-size:16px;font-weight:700">Color tokens</h2>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap);margin-bottom:32px">
+              <sc-for list="{{ dsheet.themes }}" as="th">
+                <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px;box-shadow:var(--elev)">
+                  <div style="font-weight:700;font-size:14px;margin-bottom:14px">{{ th.name }}</div>
+                  <div style="display:flex;flex-direction:column;gap:9px">
+                    <sc-for list="{{ th.swatches }}" as="sw">
+                      <div style="display:flex;align-items:center;gap:11px"><span style="width:30px;height:30px;border-radius:8px;flex:none;background:{{ sw.color }};border:{{ sw.border }}"></span><span style="font-family:var(--mono);font-size:12px;color:var(--fg-2)">{{ sw.name }}</span></div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <h2 style="margin:0 0 13px;font-size:16px;font-weight:700">Type scale</h2>
+            <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;box-shadow:var(--elev);margin-bottom:32px;display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">Display</span><span style="font-family:var(--display);font-size:40px;font-weight:700;letter-spacing:-.02em">Sift 29</span></div>
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">H1 / 28</span><h1 style="margin:0;font-size:28px;font-weight:700">Removal queue</h1></div>
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">H2 / 16</span><h2 style="margin:0;font-size:16px;font-weight:700">Collection gaps</h2></div>
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">Body / 14</span><span style="font-size:14px;color:var(--fg-2)">Calm by default, powerful on demand.</span></div>
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">Caption</span><span style="font-size:12px;color:var(--fg-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase">Owned movies</span></div>
+              <div style="display:flex;align-items:baseline;gap:16px"><span style="width:90px;font-size:11px;color:var(--fg-3);font-family:var(--mono)">Mono</span><span style="font-family:var(--mono);font-size:13px;color:var(--fg-2)">removal_score: 88</span></div>
+            </div>
+
+            <h2 style="margin:0 0 13px;font-size:16px;font-weight:700">Components &amp; states</h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--gap)">
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Buttons</div>
+                <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center"><button style="padding:9px 16px;border-radius:var(--r-md);background:var(--grad);color:var(--accent-fg);font-weight:700;font-size:13px;box-shadow:var(--glow)">Primary</button><button style="padding:9px 16px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg);font-weight:700;font-size:13px">Secondary</button><button style="padding:9px 16px;border-radius:var(--r-md);color:var(--fg-2);font-weight:700;font-size:13px" style-hover="background:var(--bg-2)">Ghost</button></div>
+              </div>
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Score badges</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--keep);background:var(--keep-soft);padding:4px 11px;border-radius:var(--r-pill)"><span style="width:7px;height:7px;border-radius:50%;background:var(--keep)"></span>Keep</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--borderline);background:var(--borderline-soft);padding:4px 11px;border-radius:var(--r-pill)"><span style="width:7px;height:7px;border-radius:50%;background:var(--borderline)"></span>Borderline</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--junk);background:var(--junk-soft);padding:4px 11px;border-radius:var(--r-pill)"><span style="width:7px;height:7px;border-radius:50%;background:var(--junk)"></span>Junk</span></div>
+              </div>
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Toggle · Segmented</div>
+                <div style="display:flex;align-items:center;gap:14px"><span style="width:42px;height:24px;border-radius:999px;background:var(--accent);position:relative;box-shadow:var(--glow-soft)"><span style="position:absolute;top:3px;left:21px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span><div style="display:flex;gap:3px;padding:3px;border-radius:9px;background:var(--bg-2)"><span style="padding:6px 12px;border-radius:6px;background:var(--bg-1);font-size:12px;font-weight:700;box-shadow:var(--shadow-1)">Grid</span><span style="padding:6px 12px;font-size:12px;font-weight:700;color:var(--fg-3)">Table</span></div></div>
+              </div>
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Loading skeleton</div>
+                <div style="display:flex;flex-direction:column;gap:9px"><div style="height:12px;border-radius:6px;background:linear-gradient(90deg,var(--bg-2),var(--bg-3),var(--bg-2));background-size:460px 100%;animation:sift-shimmer 1.4s infinite;animation-play-state:var(--anim)"></div><div style="height:12px;width:70%;border-radius:6px;background:linear-gradient(90deg,var(--bg-2),var(--bg-3),var(--bg-2));background-size:460px 100%;animation:sift-shimmer 1.4s infinite;animation-play-state:var(--anim)"></div></div>
+              </div>
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Filter chips</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px"><span style="display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line);font-size:12.5px;font-weight:700">Kids</span><span style="height:32px;padding:0 13px;border-radius:var(--r-pill);border:1px solid var(--line-2);color:var(--fg-2);font-size:12.5px;font-weight:600;display:flex;align-items:center">Genre</span></div>
+              </div>
+              <div style="background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--elev)">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Health orb</div>
+                <div style="display:flex;align-items:center;gap:14px"><div style="position:relative;width:54px;height:54px;flex:none"><div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 32% 26%,#eafcff,var(--accent) 36%,var(--accent2) 96%);box-shadow:0 8px 20px -6px var(--accent-line),inset -4px -6px 14px rgba(0,0,0,.4)"></div><div style="position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:16px;color:#06121e">78</div></div><span style="font-size:12.5px;color:var(--fg-3)">Library health</span></div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+        <!--PAGES-->
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ DRAWER ============ -->
+  <sc-if value="{{ drawer.open }}">
+    <div onClick="{{ drawer.close }}" style="position:fixed;inset:0;background:var(--backdrop);z-index:90;animation:sift-backdrop var(--dur) ease-out"></div>
+    <aside style="position:fixed;top:0;right:0;bottom:0;width:min(560px,94vw);background:var(--bg-1);z-index:95;display:flex;flex-direction:column;box-shadow:var(--shadow-2);animation:sift-drawer var(--dur-slow) cubic-bezier(.2,.8,.2,1)">
+      <div style="position:relative;height:172px;flex:none;background:{{ drawer.m.backdrop }};overflow:hidden">
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,var(--bg-1),transparent 55%)"></div>
+        <button onClick="{{ drawer.close }}" style="position:absolute;top:14px;right:14px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:rgba(0,0,0,.4);color:#fff;backdrop-filter:blur(6px)" style-hover="background:rgba(0,0,0,.65)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:0 24px 24px;margin-top:-56px;position:relative">
+        <div style="display:flex;gap:16px;align-items:flex-end">
+          <div data-tilt="strong" style="width:108px;flex:none;aspect-ratio:2/3;border-radius:var(--r-md);background:{{ drawer.m.poster }};box-shadow:var(--shadow-2);position:relative;overflow:hidden;transform-style:preserve-3d;transition:transform var(--dur-fast)"><image-slot id="{{ drawer.m.slotId }}" shape="rounded" radius="12" placeholder="Drop poster" style="position:absolute;inset:0"></image-slot><div style="position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 70% at 50% 0%,rgba(255,255,255,.16),transparent 55%)"></div><div data-sheen style="position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;background:transparent"></div></div>
+          <div style="flex:1;padding-bottom:6px">
+            <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.15">{{ drawer.m.title }}</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;font-size:12.5px;color:var(--fg-2)">
+              <span>{{ drawer.m.year }}</span><span style="color:var(--fg-3)">·</span><span>{{ drawer.m.runtime }}</span><span style="color:var(--fg-3)">·</span><span>{{ drawer.m.genres }}</span>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:10px">
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);background:{{ drawer.m.secSoft }};color:{{ drawer.m.secColor }}">{{ drawer.m.section }}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);background:var(--bg-2);color:var(--fg-2)">{{ drawer.m.quality }}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);background:{{ drawer.m.monSoft }};color:{{ drawer.m.monColor }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ drawer.m.monColor }}"></span>{{ drawer.m.monLabel }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:20px">
+          <sc-for list="{{ drawer.m.ratings }}" as="r">
+            <div style="background:var(--bg-2);border-radius:var(--r-md);padding:12px;text-align:center">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3)">{{ r.src }}</div>
+              <div style="font-size:20px;font-weight:800;margin-top:4px;color:{{ r.color }}">{{ r.val }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:20px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:9px">Sift score</div>
+          <div style="background:var(--bg-2);border-radius:var(--r-md);padding:15px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:{{ drawer.m.scoreColor }};background:{{ drawer.m.scoreSoft }};border-radius:var(--r-pill);padding:5px 13px"><span style="width:8px;height:8px;border-radius:50%;background:{{ drawer.m.scoreColor }}"></span>{{ drawer.m.scoreLabel }}</span>
+              <span style="font-size:12.5px;color:var(--fg-3)">{{ drawer.m.scoreNote }}</span>
+            </div>
+            <p style="margin:0;font-size:13px;line-height:1.55;color:var(--fg-2)">{{ drawer.m.rationale }}</p>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px">
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:9px">Watch history</div>
+            <div style="font-size:13px;color:var(--fg-2);line-height:1.7">{{ drawer.m.watchLines }}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:9px">File</div>
+            <div style="font-size:13px;color:var(--fg-2);line-height:1.7">{{ drawer.m.fileLines }}</div>
+          </div>
+        </div>
+
+        <sc-if value="{{ drawer.m.hasCollection }}">
+          <div style="margin-top:20px">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:9px">{{ drawer.m.collectionName }}</div>
+            <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:4px">
+              <sc-for list="{{ drawer.m.sibs }}" as="s">
+                <div style="width:64px;flex:none">
+                  <div style="aspect-ratio:2/3;border-radius:7px;background:{{ s.poster }};position:relative;opacity:{{ s.opacity }};border:{{ s.border }}"><sc-if value="{{ s.missing }}"><div style="position:absolute;inset:0;display:grid;place-items:center;color:var(--fg-3)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></sc-if></div>
+                  <div style="font-size:10.5px;color:var(--fg-3);margin-top:4px;text-align:center;line-height:1.2">{{ s.year }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <button onClick="{{ drawer.toggleRaw }}" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:22px;padding:11px 13px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg-2);font-size:12.5px;font-weight:700" style-hover="background:var(--bg-3)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 3H6a2 2 0 0 0-2 2v2M16 3h2a2 2 0 0 1 2 2v2M8 21H6a2 2 0 0 1-2-2v-2M16 21h2a2 2 0 0 0 2-2v-2"/></svg>
+          Advanced / raw metadata
+          <span style="margin-left:auto;transition:transform var(--dur);transform:{{ drawer.rawChev }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </button>
+        <sc-if value="{{ drawer.raw }}">
+          <pre style="margin:9px 0 0;padding:15px;border-radius:var(--r-md);background:var(--bg-0);border:1px solid var(--line);font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--fg-2);overflow-x:auto;white-space:pre;animation:sift-fadeup var(--dur) ease-out">{{ drawer.rawJson }}</pre>
+        </sc-if>
+      </div>
+
+      <div style="flex:none;display:flex;gap:9px;padding:15px 24px;background:var(--bg-1);border-top:1px solid var(--line)">
+        <button onClick="{{ drawer.m.monitor }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;height:42px;border-radius:var(--r-md);background:var(--bg-2);color:var(--fg);font-weight:700;font-size:13px" style-hover="background:var(--bg-3)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16l-6-4-6 4z"/></svg>{{ drawer.m.monBtn }}</button>
+        <button onClick="{{ drawer.m.sendJunk }}" style="flex:none;display:flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 16px;border-radius:var(--r-md);background:var(--junk-soft);color:var(--junk);font-weight:700;font-size:13px" style-hover="filter:brightness(1.1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 12.5h10L18 7"/></svg>Removal queue</button>
+      </div>
+    </aside>
+  </sc-if>
+
+  <!-- ============ MODAL ============ -->
+  <sc-if value="{{ modal.open }}">
+    <div onClick="{{ modal.cancel }}" style="position:fixed;inset:0;background:var(--backdrop);z-index:100;display:grid;place-items:center;padding:24px;animation:sift-backdrop var(--dur-slow) ease-out">
+      <div onClick="{{ modal.stop }}" style="width:min(460px,100%);background:var(--bg-1);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--shadow-2);overflow:hidden;animation:sift-modal var(--dur-slow) cubic-bezier(.2,.8,.2,1)">
+        <div style="padding:24px 24px 20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <span style="display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:12px;background:var(--junk-soft);color:var(--junk)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 12.5h10L18 7M10 11v6M14 11v6"/></svg></span>
+            <div><h2 style="margin:0;font-size:18px;font-weight:800">{{ modal.title }}</h2><div style="font-size:12.5px;color:var(--fg-3);margin-top:2px">{{ modal.subtitle }}</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px;margin:16px 0;max-height:180px;overflow-y:auto">
+            <sc-for list="{{ modal.items }}" as="i">
+              <div style="display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:var(--r-md);background:var(--bg-2)">
+                <span style="width:26px;height:37px;border-radius:5px;flex:none;background:{{ i.poster }}"></span>
+                <span style="flex:1;font-weight:700;font-size:13px">{{ i.title }}</span>
+                <span style="font-size:12px;color:var(--fg-3)">{{ i.size }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:9px;padding:11px 13px;border-radius:var(--r-md);background:var(--junk-soft);color:var(--junk);font-size:12.5px;font-weight:600;line-height:1.45">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v5M12 18v.4"/></svg>
+            {{ modal.warning }}
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;padding:16px 24px;background:var(--bg-2);border-top:1px solid var(--line)">
+          <button onClick="{{ modal.cancel }}" style="flex:1;height:42px;border-radius:var(--r-md);background:var(--bg-3);color:var(--fg);font-weight:700;font-size:13.5px" style-hover="filter:brightness(1.1)">Cancel</button>
+          <button onClick="{{ modal.confirm }}" style="flex:1;height:42px;border-radius:var(--r-md);background:var(--junk);color:#fff;font-weight:700;font-size:13.5px" style-hover="filter:brightness(1.08)">{{ modal.confirmLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TOASTS ============ -->
+  <div style="position:fixed;right:20px;bottom:20px;z-index:110;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+    <sc-for list="{{ toasts }}" as="t">
+      <div style="display:flex;align-items:center;gap:11px;min-width:230px;max-width:340px;padding:13px 15px;border-radius:var(--r-md);background:var(--bg-1);border:1px solid var(--line);box-shadow:var(--shadow-2);animation:sift-toast var(--dur) cubic-bezier(.2,.8,.2,1)">
+        <span style="display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:50%;background:{{ t.soft }};color:{{ t.color }}">{{ t.icon }}</span>
+        <span style="flex:1;font-size:13px;font-weight:600;line-height:1.35">{{ t.msg }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;,&quot;neon&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;defaultDensity&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2ee6e6&quot;,&quot;options&quot;:[&quot;#2ee6e6&quot;,&quot;#e85cf5&quot;,&quot;#8b7bf6&quot;,&quot;#4be6a4&quot;,&quot;#ffc24a&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.rootRef = React.createRef();
+    this.searchRef = React.createRef();
+    this._raf = null; this._scanRaf = null;
+
+    this.MOVIES = [
+      {id:'dune',t:'Dune',y:2021,g:['Sci-Fi','Adventure'],rt:155,hue:28,sec:'4K',q:'4K Remux',tm:8.0,im:8.0,us:9,last:'May 12, 2026',pl:3,cmp:100,mon:true,sz:61.2,col:'Dune',dir:'Denis Villeneuve'},
+      {id:'br2049',t:'Blade Runner 2049',y:2017,g:['Sci-Fi','Thriller'],rt:164,hue:210,sec:'4K',q:'4K Remux',tm:8.0,im:8.0,us:10,last:'Feb 2, 2026',pl:2,cmp:100,mon:true,sz:58.4,col:null,dir:'Denis Villeneuve'},
+      {id:'madmax',t:'Mad Max: Fury Road',y:2015,g:['Action','Sci-Fi'],rt:120,hue:22,sec:'Movies',q:'1080p Bluray',tm:8.1,im:8.1,us:9,last:'Nov 20, 2025',pl:4,cmp:100,mon:true,sz:18.9,col:'Mad Max',dir:'George Miller'},
+      {id:'darkknight',t:'The Dark Knight',y:2008,g:['Action','Crime'],rt:152,hue:205,sec:'Movies',q:'1080p Bluray',tm:8.5,im:9.0,us:10,last:'Jan 15, 2026',pl:6,cmp:100,mon:true,sz:20.1,col:'The Dark Knight Trilogy',dir:'Christopher Nolan'},
+      {id:'inception',t:'Inception',y:2010,g:['Sci-Fi','Thriller'],rt:148,hue:200,sec:'Movies',q:'1080p Bluray',tm:8.4,im:8.8,us:9,last:'Sep 10, 2025',pl:3,cmp:100,mon:true,sz:19.5,col:null,dir:'Christopher Nolan'},
+      {id:'interstellar',t:'Interstellar',y:2014,g:['Sci-Fi','Drama'],rt:169,hue:220,sec:'4K',q:'4K Remux',tm:8.4,im:8.7,us:9,last:'Mar 1, 2026',pl:2,cmp:100,mon:true,sz:64.0,col:null,dir:'Christopher Nolan'},
+      {id:'arrival',t:'Arrival',y:2016,g:['Sci-Fi','Drama'],rt:116,hue:175,sec:'Movies',q:'1080p Bluray',tm:7.6,im:7.9,us:8,last:'Aug 14, 2025',pl:1,cmp:100,mon:true,sz:15.2,col:null,dir:'Denis Villeneuve'},
+      {id:'sicario',t:'Sicario',y:2015,g:['Crime','Thriller'],rt:121,hue:30,sec:'Movies',q:'1080p Bluray',tm:7.6,im:7.6,us:9,last:'Dec 5, 2025',pl:2,cmp:100,mon:true,sz:16.8,col:'Sicario',dir:'Denis Villeneuve'},
+      {id:'parasite',t:'Parasite',y:2019,g:['Thriller','Drama'],rt:132,hue:140,sec:'Movies',q:'1080p Bluray',tm:8.5,im:8.5,us:10,last:'Oct 2, 2025',pl:2,cmp:100,mon:true,sz:17.9,col:null,dir:'Bong Joon-ho'},
+      {id:'eeaao',t:'Everything Everywhere All at Once',y:2022,g:['Sci-Fi','Comedy'],rt:139,hue:300,sec:'Movies',q:'1080p WEB-DL',tm:7.8,im:7.8,us:8,last:'Jul 19, 2025',pl:1,cmp:100,mon:true,sz:12.4,col:null,dir:'Daniels'},
+      {id:'whiplash',t:'Whiplash',y:2014,g:['Drama','Music'],rt:106,hue:18,sec:'Movies',q:'1080p Bluray',tm:8.4,im:8.5,us:9,last:'Dec 11, 2024',pl:1,cmp:100,mon:false,sz:13.1,col:null,dir:'Damien Chazelle'},
+      {id:'topgun',t:'Top Gun: Maverick',y:2022,g:['Action','Drama'],rt:130,hue:195,sec:'4K',q:'4K Remux',tm:8.2,im:8.2,us:9,last:'Apr 8, 2026',pl:2,cmp:100,mon:true,sz:55.7,col:'Top Gun',dir:'Joseph Kosinski'},
+      {id:'thebatman',t:'The Batman',y:2022,g:['Action','Crime'],rt:176,hue:250,sec:'4K',q:'4K Remux',tm:7.8,im:7.8,us:8,last:'Jun 30, 2025',pl:1,cmp:100,mon:true,sz:66.3,col:null,dir:'Matt Reeves'},
+      {id:'prisoners',t:'Prisoners',y:2013,g:['Crime','Thriller'],rt:153,hue:15,sec:'Movies',q:'1080p Bluray',tm:8.2,im:8.2,us:9,last:'May 22, 2025',pl:1,cmp:100,mon:true,sz:17.0,col:null,dir:'Denis Villeneuve'},
+      {id:'socialnet',t:'The Social Network',y:2010,g:['Drama'],rt:120,hue:160,sec:'Movies',q:'1080p WEB-DL',tm:7.8,im:7.8,us:8,last:'Oct 5, 2024',pl:1,cmp:100,mon:false,sz:11.2,col:null,dir:'David Fincher'},
+      {id:'toystory',t:'Toy Story',y:1995,g:['Animation','Family'],rt:81,hue:205,sec:'Kids',q:'1080p Bluray',tm:8.3,im:8.3,us:null,last:'Apr 30, 2026',pl:5,cmp:100,mon:true,sz:9.8,col:'Toy Story',dir:'John Lasseter'},
+      {id:'toystory2',t:'Toy Story 2',y:1999,g:['Animation','Family'],rt:92,hue:40,sec:'Kids',q:'1080p Bluray',tm:7.9,im:7.9,us:null,last:'Mar 18, 2026',pl:3,cmp:100,mon:true,sz:10.3,col:'Toy Story',dir:'John Lasseter'},
+      {id:'coco',t:'Coco',y:2017,g:['Animation','Family'],rt:105,hue:320,sec:'Kids',q:'1080p Bluray',tm:8.4,im:8.4,us:null,last:'May 1, 2026',pl:4,cmp:100,mon:true,sz:12.7,col:null,dir:'Lee Unkrich'},
+      {id:'moana',t:'Moana',y:2016,g:['Animation','Family'],rt:107,hue:190,sec:'Kids',q:'1080p Bluray',tm:7.6,im:7.6,us:null,last:'Feb 20, 2026',pl:6,cmp:100,mon:true,sz:12.1,col:null,dir:'Ron Clements'},
+      {id:'encanto',t:'Encanto',y:2021,g:['Animation','Family'],rt:102,hue:275,sec:'Kids',q:'1080p WEB-DL',tm:7.2,im:7.2,us:null,last:'May 9, 2026',pl:7,cmp:100,mon:true,sz:9.4,col:null,dir:'Byron Howard'},
+      {id:'httyd',t:'How to Train Your Dragon',y:2010,g:['Animation','Family'],rt:98,hue:150,sec:'Kids',q:'1080p Bluray',tm:8.1,im:8.1,us:null,last:'Jan 28, 2026',pl:4,cmp:100,mon:true,sz:11.6,col:'How to Train Your Dragon',dir:'Dean DeBlois'},
+      {id:'paddington2',t:'Paddington 2',y:2017,g:['Comedy','Family'],rt:103,hue:25,sec:'Kids',q:'1080p Bluray',tm:7.8,im:7.8,us:null,last:'Dec 24, 2025',pl:2,cmp:100,mon:true,sz:10.9,col:'Paddington',dir:'Paul King'},
+      {id:'spirited',t:'Spirited Away',y:2001,g:['Animation','Fantasy'],rt:125,hue:180,sec:'Kids',q:'1080p Bluray',tm:8.6,im:8.6,us:null,last:'Nov 11, 2025',pl:2,cmp:100,mon:false,sz:13.5,col:null,dir:'Hayao Miyazaki'},
+      {id:'geostorm',t:'Geostorm',y:2017,g:['Action','Sci-Fi'],rt:109,hue:210,sec:'Movies',q:'720p WEB-DL',tm:5.3,im:5.3,us:null,last:null,pl:0,cmp:0,mon:true,sz:4.2,col:null,dir:'Dean Devlin'},
+      {id:'bright',t:'Bright',y:2017,g:['Action','Fantasy'],rt:117,hue:90,sec:'Movies',q:'1080p WEB-DL',tm:6.3,im:6.3,us:4,last:'Mar 14, 2023',pl:1,cmp:40,mon:true,sz:7.8,col:null,dir:'David Ayer'},
+      {id:'clover',t:'The Cloverfield Paradox',y:2018,g:['Sci-Fi','Horror'],rt:102,hue:260,sec:'Movies',q:'1080p WEB-DL',tm:5.5,im:5.5,us:null,last:'Jan 20, 2023',pl:1,cmp:60,mon:false,sz:6.9,col:'Cloverfield',dir:'Julius Onah'},
+      {id:'inception720',t:'Inception',y:2010,g:['Sci-Fi','Thriller'],rt:148,hue:200,sec:'Movies',q:'720p WEB-DL',tm:8.4,im:8.8,us:null,last:null,pl:0,cmp:0,mon:false,sz:3.1,col:null,dir:'Christopher Nolan',dup:true},
+      {id:'emoji',t:'The Emoji Movie',y:2017,g:['Animation','Family'],rt:86,hue:55,sec:'Kids',q:'1080p WEB-DL',tm:3.4,im:3.4,us:null,last:'Jun 2, 2023',pl:1,cmp:25,mon:true,sz:5.6,col:null,dir:'Tony Leondis'},
+      {id:'cats',t:'Cats',y:2019,g:['Musical','Fantasy'],rt:110,hue:35,sec:'Movies',q:'1080p WEB-DL',tm:2.8,im:2.8,us:null,last:null,pl:0,cmp:0,mon:true,sz:6.1,col:null,dir:'Tom Hooper'}
+    ];
+    // Procedurally expand to real scale so pagination + "showing X of Y" are genuine
+    (()=>{
+      const A=['Silent','Crimson','Hollow','Northern','Broken','Golden','Last','Midnight','Pale','Distant','Iron','Velvet','Second','Frozen','Electric','Quiet','Savage','Lonely','Crooked','Bright','Hidden','Restless','Feral','Gilded','Nameless'];
+      const B=['Harbor','Signal','Empire','Frontier','Machine','Garden','Verdict','Horizon','Circuit','Requiem','Passage','Cathedral','Undertow','Mirage','Reckoning','Lantern','Meridian','Threshold','Aviary','Foundry','Cascade','Sequence','Hollow','Ascent','Divide'];
+      const GEN=[['Sci-Fi','Thriller'],['Drama'],['Action','Adventure'],['Crime','Thriller'],['Comedy'],['Animation','Family'],['Horror'],['Mystery','Drama'],['Romance','Drama'],['Documentary'],['Fantasy','Adventure'],['Thriller']];
+      const DIRS=['Ava Marchetti','Julian Reyes','Nadia Okonkwo','Sam Delacroix','Priya Nair','Thomas Vale','Greta Lindqvist','Marcus Bell','Yuki Tanaka','Leo Fontaine','Sofia Herrera','Dane Whitlock'];
+      const QUAL=[['4K','4K Remux',48],['4K','4K Remux',54],['Movies','1080p Bluray',16],['Movies','1080p WEB-DL',9],['Movies','1080p Bluray',19],['Kids','1080p Bluray',11],['Kids','1080p WEB-DL',8],['Movies','720p WEB-DL',3.5]];
+      let seed=1337; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+      const pick=(a)=>a[Math.floor(rnd()*a.length)];
+      const used={}; this.MOVIES.forEach(m=>used[m.t]=1);
+      const extra=[];
+      for(let i=0;i<132;i++){
+        let t; let tries=0; do{ t=pick(A)+' '+pick(B); tries++; }while(used[t]&&tries<12); used[t]=1;
+        const q=pick(QUAL); const y=1980+Math.floor(rnd()*46); const tm=+(3+rnd()*6).toFixed(1);
+        const played=rnd()>0.32; const pl=played?1+Math.floor(rnd()*6):0;
+        const yrs=['Apr 2, 2026','Jan 18, 2026','Nov 9, 2025','Aug 22, 2025','Mar 30, 2025','Dec 12, 2024','Jun 5, 2024','Feb 14, 2023'];
+        extra.push({id:'gen'+i,t,y,g:pick(GEN),rt:82+Math.floor(rnd()*84),hue:Math.floor(rnd()*360),sec:q[0],q:q[1],tm,im:tm,us:(played&&rnd()>0.5)?6+Math.floor(rnd()*5):null,last:played?pick(yrs):null,pl,cmp:played?60+Math.floor(rnd()*41):0,mon:rnd()>0.2,sz:+(q[2]*(0.8+rnd()*0.5)).toFixed(1),col:null,dir:pick(DIRS)});
+      }
+      this.MOVIES=this.MOVIES.concat(extra);
+    })();
+    this.M = {}; this.MOVIES.forEach(m=>{ this.M[m.id]=m; });
+    this.PLEX_TOTAL=1284;
+
+    this.RECS = [
+      {id:'r_prestige',t:'The Prestige',y:2006,g:['Drama','Mystery'],hue:235,fit:94,why:'A Nolan mystery with the same twist structure you loved in Inception.'},
+      {id:'r_soldado',t:'Sicario: Day of the Soldado',y:2018,g:['Crime','Action'],hue:32,fit:91,why:'Direct follow-up to Sicario, one of your top-rated films.'},
+      {id:'r_edge',t:'Edge of Tomorrow',y:2014,g:['Sci-Fi','Action'],hue:205,fit:88,why:'Time-loop sci-fi action, close to Mad Max and Interstellar.'},
+      {id:'r_blade',t:'Blade Runner',y:1982,g:['Sci-Fi'],hue:215,fit:87,why:'The original — you rated Blade Runner 2049 a perfect 10.'},
+      {id:'r_klaus',t:'Klaus',y:2019,g:['Animation','Family'],hue:10,fit:84,why:'A warm hand-drawn family film in the vein of Coco and Paddington 2.'},
+      {id:'r_night',t:'Nightcrawler',y:2014,g:['Thriller','Crime'],hue:45,fit:83,why:'Neo-noir character study, close to Prisoners and The Batman.'},
+      {id:'r_walle',t:'WALL·E',y:2008,g:['Animation','Family'],hue:195,fit:81,why:'Pixar sci-fi that lines up with your animation + space taste.'}
+    ];
+
+    this.COLLECTIONS = [
+      {name:'Toy Story', owned:['toystory','toystory2'], missing:[{t:'Toy Story 3',y:2010,hue:120,state:'auto'},{t:'Toy Story 4',y:2019,hue:200,state:'add'}]},
+      {name:'The Dark Knight Trilogy', owned:['darkknight'], missing:[{t:'Batman Begins',y:2005,hue:210,state:'add'},{t:'The Dark Knight Rises',y:2012,hue:215,state:'auto'}]},
+      {name:'How to Train Your Dragon', owned:['httyd'], missing:[{t:'How to Train Your Dragon 2',y:2014,hue:160,state:'add'},{t:'The Hidden World',y:2019,hue:190,state:'add'}]},
+      {name:'Dune', owned:['dune'], missing:[{t:'Dune: Part Two',y:2024,hue:34,state:'auto'}]}
+    ];
+    this.MISSMAP = {'Toy Story':[{t:'Toy Story 3',y:2010},{t:'Toy Story 4',y:2019}],'The Dark Knight Trilogy':[{t:'Batman Begins',y:2005},{t:'The Dark Knight Rises',y:2012}],'How to Train Your Dragon':[{t:'HTTYD 2',y:2014},{t:'The Hidden World',y:2019}],'Dune':[{t:'Part Two',y:2024}],'Top Gun':[{t:'Top Gun',y:1986}],'Sicario':[{t:'Soldado',y:2018}],'Mad Max':[{t:'Mad Max',y:1979},{t:'Road Warrior',y:1981}],'Paddington':[{t:'Paddington',y:2014}],'Cloverfield':[{t:'Cloverfield',y:2008},{t:'10 CL',y:2016}]};
+
+    this.JUNK = [
+      {id:'cats',score:88,sig:[{k:'External rating',v:'2.8 / 10 · 41k votes',w:34},{k:'Watch history',v:'Never played',w:30},{k:'Redundancy',v:'No duplicate found',w:0}],why:'Critically panned and never played since it was added 14 months ago. No watch history from anyone on the server, and it sits below your rating floor of 5.5.'},
+      {id:'emoji',score:84,kids:true,sig:[{k:'External rating',v:'3.4 / 10 · 98k votes',w:32},{k:'Watch history',v:'Played once, 25% watched, 3y ago',w:26},{k:'Redundancy',v:'No duplicate found',w:0}],why:'Very low rating and effectively unwatched. It lives in the Kids library, so Sift will not flag it on rating grounds alone — check with the family before removing.'},
+      {id:'geostorm',score:79,sig:[{k:'External rating',v:'5.3 / 10 · 62k votes',w:26},{k:'Watch history',v:'Never played · added 2y ago',w:30},{k:'Redundancy',v:'No duplicate found',w:0}],why:'Below your rating floor and never played in the 2 years it has been in the library. A safe candidate for removal.'},
+      {id:'inception720',score:74,sig:[{k:'External rating',v:'8.8 / 10 · strong',w:0},{k:'Watch history',v:'Never played (this copy)',w:18},{k:'Redundancy',v:'Superseded by 1080p Bluray',w:56}],why:'This is a duplicate — you already own a higher-quality 1080p Bluray copy of Inception. Safe to remove the 720p file and reclaim space.'},
+      {id:'clover',score:61,sig:[{k:'External rating',v:'5.5 / 10 · 28k votes',w:24},{k:'Watch history',v:'Played once, 60% watched, 3y ago',w:22},{k:'Redundancy',v:'No duplicate found',w:0}],why:'Marginal rating and only half-watched once. Borderline — keep it if you want the Cloverfield set complete.'},
+      {id:'bright',score:52,sig:[{k:'External rating',v:'6.3 / 10 · 210k votes',w:16},{k:'Watch history',v:'Played once, 40% watched, 3y ago',w:22},{k:'Your rating',v:'You rated it 4 / 10',w:14}],why:'You rated this 4 out of 10 and have not returned to it. Borderline — no strong signal either way.'}
+    ];
+
+    this.ACTIVITY = [
+      {id:'a1',type:'add',tier:'Auto',text:'Added Dune: Part Two to Radarr',time:'2m ago',diff:['+ Monitored','+ Quality profile: 4K Remux','+ Root: /movies/4k'],src:'Radarr'},
+      {id:'a2',type:'add',tier:'Auto',text:'Added Toy Story 3 to Radarr',time:'18m ago',diff:['+ Monitored','+ Quality profile: 1080p Bluray','+ Root: /movies/kids'],src:'Radarr'},
+      {id:'a3',type:'unmonitor',tier:'Auto + Audit',text:'Unmonitored Geostorm',time:'1h ago',diff:['~ Monitored → Unmonitored','Reason: 5.3/10 below rating floor 5.5'],src:'Radarr'},
+      {id:'a4',type:'delete',dec:'approved',tier:'Approval',text:'Deleted Cats (2019) via Radarr',time:'3h ago',diff:['- Cats.2019.1080p.WEB-DL.mkv','- 6.1 GB reclaimed'],src:'Radarr',by:'You'},
+      {id:'a5',type:'delete',dec:'rejected',tier:'Approval',text:'Kept The Emoji Movie (removal rejected)',time:'3h ago',diff:['Removal rejected','Kids-library guard respected'],src:'You',by:'You'},
+      {id:'a6',type:'scan',tier:'System',text:'Full scan completed',time:'Yesterday',diff:['Indexed 1,284 files','Taste profile rebuilt','9 new junk candidates'],src:'Sift'},
+      {id:'a7',type:'unmonitor',tier:'Auto + Audit',text:'Unmonitored 3 low-rated titles',time:'2 days ago',diff:['~ Bright, The Cloverfield Paradox, +1','Reason: below thresholds'],src:'Radarr'},
+      {id:'a8',type:'add',tier:'Auto',text:'Added The Dark Knight Rises to Radarr',time:'2 days ago',diff:['+ Monitored','+ Collection gap filled'],src:'Radarr'}
+    ];
+
+    this.GENRES=[{k:'Sci-Fi',v:92},{k:'Thriller',v:81},{k:'Drama',v:68},{k:'Animation',v:64},{k:'Action',v:61},{k:'Crime',v:54},{k:'Adventure',v:47},{k:'Family',v:44},{k:'Comedy',v:33},{k:'Mystery',v:28}];
+    this.KEYWORDS=[{k:'dystopia',v:90},{k:'neo-noir',v:78},{k:'space',v:74},{k:'heist',v:66},{k:'father-daughter',v:60},{k:'time-loop',v:55},{k:'practical-effects',v:52},{k:'coming-of-age',v:48},{k:'family',v:44},{k:'first-contact',v:36},{k:'class-conflict',v:33},{k:'mentor',v:29}];
+    this.DIRECTORS=[{k:'Denis Villeneuve',v:96},{k:'Christopher Nolan',v:88},{k:'David Fincher',v:54},{k:'Bong Joon-ho',v:48},{k:'George Miller',v:41}];
+    this.ACTORS=[{k:'Ryan Gosling',v:62},{k:'Tom Hardy',v:58},{k:'Jake Gyllenhaal',v:51},{k:'Cillian Murphy',v:44}];
+    this.ERAS=[{k:'2010s',v:74},{k:'2020s',v:58},{k:'2000s',v:42},{k:'1990s',v:30},{k:'1980s',v:18}];
+
+    this.CONN=[{name:'Plex',url:'http://192.168.1.20:32400',status:'ok',detail:'1,284 items · v1.40.2'},{name:'Radarr',url:'http://192.168.1.20:7878',status:'ok',detail:'412 movies monitored'},{name:'Tautulli',url:'http://192.168.1.20:8181',status:'warn',detail:'Watch history is 6h stale'},{name:'TMDB',url:'api.themoviedb.org/3',status:'ok',detail:'API v3 · key valid'}];
+
+    this.state = {
+      page:'dashboard', navCollapsed:false, navHover:null, narrow:false,
+      theme: props.defaultTheme||'dark', density: props.defaultDensity||'comfortable', accent: props.accentColor||'#38cfd9', reduceMotion:false,
+      scanning:false, scanPct:0, scanPhase:-1, scanPanelOpen:false,
+      drawerId:null, drawerRaw:false,
+      modal:null, toasts:[],
+      search:'', searchOpen:false, searchIndex:-1, hoveredHealth:null,
+      dashOrder:['owned','monitored','missing','junk','health'], dashHidden:[], customizing:false, dragId:null, expanded:{}, counts:{owned:0,monitored:0,missing:0,junk:0,health:0},
+      libView:'grid', libGenre:null, libDecade:null, libRating:null, libWatched:null, libSection:null, libSort:'title', libDir:1, libSelected:[], savedView:'all', colMenu:false, viewMenu:false, libPage:1,
+      libCols:{year:true,section:true,quality:true,rating:true,plays:true,size:true,monitored:true},
+      junkExpanded:{}, junkDecisions:{},
+      askModel:'compare', askInput:'', askThread:[], askThinking:false, askStreaming:false, askReveal:0, askCiteHover:null,
+      weights:{genre:70,director:62,cast:45,keywords:55,era:40}, recomputing:false, recomputePct:0,
+      settingsTab:'connections', thMinVotes:300, thRating:5.5, thYears:2, thFit:70, tested:{},
+      modelMode:'compare', localOn:true, anthropicOn:true, embedProvider:'local',
+      libMenu:null, recDismissed:[], recSort:'fit',
+      activityFilter:'all'
+    };
+    this.PHASES=['Reading Plex library','Fetching Radarr catalog','Pulling Tautulli history','Enriching TMDB metadata','Rebuilding taste profile','Scoring library'];
+    this.ICONS={
+      dashboard:[['rect',{x:3,y:3,width:7.5,height:7.5,rx:1.8}],['rect',{x:13.5,y:3,width:7.5,height:7.5,rx:1.8}],['rect',{x:13.5,y:13.5,width:7.5,height:7.5,rx:1.8}],['rect',{x:3,y:13.5,width:7.5,height:7.5,rx:1.8}]],
+      library:[['rect',{x:3,y:6,width:18,height:14,rx:2}],['path',{d:'M3 10.5h18'}],['path',{d:'M7.5 6L6 10.5'}],['path',{d:'M12.5 6L11 10.5'}],['path',{d:'M17.5 6L16 10.5'}]],
+      missing:[['circle',{cx:12,cy:12,r:9}],['path',{d:'M15.5 8.5l-2.1 5-5 2.1 2.1-5 5-2.1z'}]],
+      junk:[['path',{d:'M4 7h16'}],['path',{d:'M9 7V4.5h6V7'}],['path',{d:'M6 7l1 12.5h10L18 7'}],['path',{d:'M10 11v6M14 11v6'}]],
+      ask:[['path',{d:'M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.3-4.2A7.5 7.5 0 1 1 20 11.5z'}]],
+      taste:[['path',{d:'M6 20V4M12 20v-7M18 20v-4'}],['circle',{cx:6,cy:13,r:2}],['circle',{cx:12,cy:8,r:2}],['circle',{cx:18,cy:15,r:2}]],
+      activity:[['path',{d:'M3 12h3.5l2.5 7 4-15 2.5 8H21'}]],
+      settings:[['circle',{cx:12,cy:12,r:3.2}],['path',{d:'M19.4 13.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z'}]],
+      ds:[['rect',{x:3,y:3,width:7.5,height:7.5,rx:1.6}],['rect',{x:13.5,y:3,width:7.5,height:7.5,rx:1.6}],['rect',{x:3,y:13.5,width:7.5,height:7.5,rx:1.6}],['circle',{cx:17.2,cy:17.2,r:4}]]
+    };
+
+    ['runScan','finishScan','tickCounts','openDrawer','closeDrawer','toast','go','toggleNav','cycleTheme','cycleDensity','applyTheme','onTilt','handleKey'].forEach(m=>{ this[m]=this[m].bind(this); });
+  }
+
+  componentDidMount(){
+    this.applyTheme();
+    this.tickCounts();
+    const root=this.rootRef.current;
+    if(root){ root.addEventListener('pointermove',this.onTilt,{passive:true}); root.addEventListener('pointerleave',()=>{ if(this._tiltEl){this.resetTilt(this._tiltEl);this._tiltEl=null;} }); }
+    this._onResize=()=>{ const n=window.innerWidth<1024; if(n!==this.state.narrow) this.setState({narrow:n}); }; this._onResize(); window.addEventListener('resize',this._onResize);
+    window.addEventListener('keydown',this.handleKey);
+    this.setState({askThread:[
+      {role:'user',text:"Which kids movies haven't been watched in the last 6 months?"},
+      {role:'assistant',compare:true,sources:['Plex','Tautulli'],panes:[
+        {model:'Local · Llama 3.1 8B',latency:'1.9s',cost:null,text:'Looking at the Kids library, everything has been played fairly recently. The least-recently watched are Paddington 2 and Spirited Away, both last played in late 2025. Nothing in Kids has gone fully unwatched in 6 months.',movies:['paddington2','spirited']},
+        {model:'Anthropic · Claude',latency:'1.2s',cost:'$0.004 · 1,240 tok',text:'No Kids titles are fully cold. The two closest to your 6-month mark are Paddington 2 (last played Dec 24, 2025) and Spirited Away (Nov 11, 2025). The Emoji Movie is a separate case — last played 3 years ago — and is already in your removal queue.',movies:['paddington2','spirited','emoji']}
+      ]}
+    ]});
+  }
+  componentDidUpdate(prev){
+    if(prev.theme!==this.state.theme||prev.density!==this.state.density||prev.accent!==this.state.accent||prev.navCollapsed!==this.state.navCollapsed||prev.reduceMotion!==this.state.reduceMotion) this.applyTheme();
+  }
+  componentWillUnmount(){ cancelAnimationFrame(this._raf); cancelAnimationFrame(this._scanRaf); clearInterval(this._askTimer); if(this._onResize) window.removeEventListener('resize',this._onResize); window.removeEventListener('keydown',this.handleKey); }
+
+  THEMES(){
+    return {
+      dark:{'--bg-0':'#070812','--bg-1':'linear-gradient(158deg,#191c33,#0f1124)','--bg-1s':'#141731','--bg-2':'#1b1f3c','--bg-3':'#272c4e','--line':'rgba(150,165,255,.11)','--line-2':'rgba(150,165,255,.22)','--fg':'#eef0ff','--fg-2':'#9ea6d4','--fg-3':'#6a7099','--accent-fg':'#04141a','--keep':'#4be6a4','--keep-soft':'rgba(75,230,164,.14)','--borderline':'#ffc24a','--borderline-soft':'rgba(255,194,74,.15)','--junk':'#ff6b8a','--junk-soft':'rgba(255,107,138,.15)','--elev':'inset 0 1px 0 rgba(255,255,255,.04),0 16px 38px -30px rgba(0,0,0,.65)','--shadow-1':'0 2px 8px -4px rgba(0,0,0,.4)','--shadow-2':'0 26px 60px -34px rgba(0,0,0,.78),0 6px 18px -14px rgba(0,0,0,.5)','--backdrop':'rgba(5,6,16,.6)','--chrome':'rgba(11,13,30,.66)','--aura-a':'rgba(46,230,230,.42)','--aura-b':'rgba(232,92,245,.34)','--aura-c':'rgba(126,110,246,.34)'},
+      light:{'--bg-0':'#eceef7','--bg-1':'linear-gradient(158deg,#ffffff,#f2f4fc)','--bg-1s':'#ffffff','--bg-2':'#e9edf7','--bg-3':'#dce1ef','--line':'rgba(40,50,90,.10)','--line-2':'rgba(40,50,90,.18)','--fg':'#161a2e','--fg-2':'#565f7e','--fg-3':'#8b93ad','--accent-fg':'#ffffff','--keep':'#12a15e','--keep-soft':'rgba(18,161,94,.12)','--borderline':'#c9820a','--borderline-soft':'rgba(201,130,10,.13)','--junk':'#e0455e','--junk-soft':'rgba(224,69,94,.1)','--elev':'inset 0 1px 0 rgba(255,255,255,.7),0 24px 44px -26px rgba(30,40,80,.26)','--shadow-1':'0 2px 10px -3px rgba(30,40,80,.13)','--shadow-2':'0 34px 70px -30px rgba(30,40,80,.3),0 8px 24px -14px rgba(30,40,80,.18)','--backdrop':'rgba(40,48,80,.32)','--chrome':'rgba(255,255,255,.76)','--aura-a':'rgba(46,200,210,.32)','--aura-b':'rgba(220,90,235,.24)','--aura-c':'rgba(120,110,240,.24)'},
+      neon:{'--bg-0':'#04030c','--bg-1':'linear-gradient(158deg,#141034,#0a0820)','--bg-1s':'#0d0a24','--bg-2':'#171040','--bg-3':'#221654','--line':'rgba(160,120,255,.16)','--line-2':'rgba(160,120,255,.3)','--fg':'#f2ecff','--fg-2':'#b0a6e0','--fg-3':'#6f64a8','--accent-fg':'#04141a','--keep':'#4dffb0','--keep-soft':'rgba(77,255,176,.15)','--borderline':'#ffd24a','--borderline-soft':'rgba(255,210,74,.16)','--junk':'#ff5c8f','--junk-soft':'rgba(255,92,143,.17)','--elev':'inset 0 1px 0 rgba(255,255,255,.09),0 24px 54px -24px rgba(0,0,0,.95),0 0 34px -14px var(--accent-line)','--shadow-1':'0 2px 12px -3px rgba(0,0,0,.6)','--shadow-2':'0 34px 84px -26px rgba(0,0,0,.95),0 0 44px -18px var(--accent-line)','--backdrop':'rgba(3,2,12,.7)','--chrome':'rgba(9,7,26,.74)','--aura-a':'rgba(46,230,255,.6)','--aura-b':'rgba(255,80,240,.52)','--aura-c':'rgba(150,90,255,.5)'}
+    };
+  }
+  hexToRgba(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+  h2h(hex){ let h=(hex||'#2ee6e6').replace('#',''); if(h.length===3) h=h.split('').map(x=>x+x).join(''); const n=parseInt(h,16); let r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b); let hue=0,s=0,l=(mx+mn)/2; if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(mx===r) hue=(g-b)/d+(g<b?6:0); else if(mx===g) hue=(b-r)/d+2; else hue=(r-g)/d+4; hue*=60; } return [hue,s,l]; }
+  hslStr(h,s,l){ return `hsl(${((h%360)+360)%360} ${Math.round(s*100)}% ${Math.round(l*100)}%)`; }
+  onTilt(e){ if(this.state.reduceMotion||this.state.customizing) return; const t=e.target; const card=t&&t.closest?t.closest('[data-tilt]'):null; if(this._tiltEl&&this._tiltEl!==card){ this.resetTilt(this._tiltEl); this._tiltEl=null; } if(!card) return; this._tiltEl=card; const cx=e.clientX,cy=e.clientY; if(this._tiltRaf) return; this._tiltRaf=requestAnimationFrame(()=>{ this._tiltRaf=null; const el=this._tiltEl; if(!el) return; const r=el.getBoundingClientRect(); const px=(cx-r.left)/r.width-0.5, py=(cy-r.top)/r.height-0.5; const max=el.getAttribute('data-tilt')==='strong'?11:6; el.style.transform=`perspective(900px) rotateY(${(px*max).toFixed(2)}deg) rotateX(${(-py*max).toFixed(2)}deg) translateZ(8px)`; const sh=el.querySelector('[data-sheen]'); if(sh) sh.style.background=`radial-gradient(circle at ${((px+0.5)*100).toFixed(0)}% ${((py+0.5)*100).toFixed(0)}%, rgba(255,255,255,.18), transparent 56%)`; const ps=el.querySelectorAll('[data-parallax]'); for(let i=0;i<ps.length;i++){ const d=+ps[i].getAttribute('data-parallax')||10; ps[i].style.transform=`translate(${(-px*d).toFixed(1)}px,${(-py*d).toFixed(1)}px)`; } }); }
+  resetTilt(el){ el.style.transform=''; const sh=el.querySelector('[data-sheen]'); if(sh) sh.style.background='transparent'; const ps=el.querySelectorAll('[data-parallax]'); for(let i=0;i<ps.length;i++) ps[i].style.transform=''; }
+  applyTheme(){
+    const el=this.rootRef.current; if(!el) return;
+    const t=this.THEMES()[this.state.theme]; Object.entries(t).forEach(([k,v])=>el.style.setProperty(k,v));
+    const a=this.state.accent, hsl=this.h2h(a);
+    const a2=this.hslStr(hsl[0]+58,Math.min(1,hsl[1]+0.05),Math.min(0.72,hsl[2]+0.03));
+    const mid=this.hslStr(hsl[0]+30,hsl[1],hsl[2]);
+    el.style.setProperty('--accent',a);
+    el.style.setProperty('--accent2',a2);
+    el.style.setProperty('--grad',`linear-gradient(120deg,${a},${mid} 52%,${a2})`);
+    el.style.setProperty('--accent-soft',this.hexToRgba(a,this.state.theme==='light'?0.12:0.16));
+    el.style.setProperty('--accent-line',this.hexToRgba(a,0.44));
+    el.style.setProperty('--glow',`0 0 20px -6px ${this.hexToRgba(a,this.state.theme==='neon'?0.5:0.32)}`);
+    el.style.setProperty('--glow-soft',`0 0 14px -7px ${this.hexToRgba(a,0.24)}`);
+    const d=this.state.density==='compact';
+    el.style.setProperty('--card-pad',d?'15px':'22px');
+    el.style.setProperty('--gap',d?'12px':'18px');
+    el.style.setProperty('--row-h',d?'38px':'50px');
+    el.style.setProperty('--fs-body',d?'13px':'14px');
+    el.style.setProperty('--nav-w',this.state.navCollapsed?'64px':'246px');
+    const rm=this.state.reduceMotion;
+    el.style.setProperty('--anim',rm?'paused':'running');
+    el.style.setProperty('--dur-fast',rm?'0s':'.16s');
+    el.style.setProperty('--dur',rm?'0s':'.28s');
+    el.style.setProperty('--dur-slow',rm?'0s':'.44s');
+  }
+
+  poster(hue){ return `linear-gradient(155deg,hsl(${hue} 44% 32%),hsl(${(hue+38)%360} 40% 15%))`; }
+  backdrop(hue){ return `linear-gradient(150deg,hsl(${hue} 46% 34%),hsl(${(hue+40)%360} 42% 14%))`; }
+  ic(name,size){ size=size||18; const s=this.ICONS[name]||[]; return React.createElement('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6,strokeLinecap:'round',strokeLinejoin:'round'},s.map((e,i)=>React.createElement(e[0],Object.assign({key:i},e[1])))); }
+  ring(pct,size,sw){ const r=(size-sw)/2,c=2*Math.PI*r,off=c*(1-pct/100); return React.createElement('svg',{width:size,height:size,viewBox:`0 0 ${size} ${size}`,style:{transform:'rotate(-90deg)'}},React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:'var(--line-2)',strokeWidth:sw}),React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:'var(--accent)',strokeWidth:sw,strokeDasharray:c,strokeDashoffset:off,strokeLinecap:'round',style:{transition:'stroke-dashoffset var(--dur-slow)'}})); }
+  ringc(pct,size,sw,color){ const r=(size-sw)/2,c=2*Math.PI*r,off=c*(1-pct/100); return React.createElement('svg',{width:size,height:size,viewBox:`0 0 ${size} ${size}`,style:{transform:'rotate(-90deg)'}},React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:'var(--line-2)',strokeWidth:sw}),React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:color,strokeWidth:sw,strokeDasharray:c,strokeDashoffset:off,strokeLinecap:'round',style:{transition:'stroke-dashoffset var(--dur-slow)'}})); }
+
+  band(score){ if(score>=75) return {key:'junk',label:'Junk',color:'var(--junk)',soft:'var(--junk-soft)'}; if(score>=45) return {key:'borderline',label:'Borderline',color:'var(--borderline)',soft:'var(--borderline-soft)'}; return {key:'keep',label:'Keep',color:'var(--keep)',soft:'var(--keep-soft)'}; }
+
+  tickCounts(){
+    const targets={owned:this.MOVIES.length, monitored:this.MOVIES.filter(m=>m.mon).length, missing:this.COLLECTIONS.reduce((a,c)=>a+c.missing.length,0), junk:this.JUNK.filter(j=>j.score>=75).length, health:78};
+    if(this.state.reduceMotion){ this.setState({counts:targets}); return; }
+    const start=performance.now(),dur=850;
+    const step=(now)=>{ const p=Math.min(1,(now-start)/dur), e=1-Math.pow(1-p,3), c={}; for(const k in targets) c[k]=Math.round(targets[k]*e); this.setState({counts:c}); if(p<1) this._raf=requestAnimationFrame(step); };
+    this._raf=requestAnimationFrame(step);
+  }
+
+  runScan(){
+    if(this.state.scanning) return;
+    this.setState({scanning:true,scanPct:0,scanPhase:0,scanPanelOpen:true});
+    if(this.state.reduceMotion){ this.setState({scanPct:100,scanPhase:this.PHASES.length}); setTimeout(this.finishScan,250); return; }
+    const total=6200,start=performance.now();
+    const step=(now)=>{ const p=Math.min(1,(now-start)/total),pct=Math.round(p*100),phase=Math.min(this.PHASES.length-1,Math.floor(p*this.PHASES.length)); this.setState({scanPct:pct,scanPhase:phase}); if(p<1){ this._scanRaf=requestAnimationFrame(step);} else { this.finishScan(); } };
+    this._scanRaf=requestAnimationFrame(step);
+  }
+  finishScan(){ this.setState({scanning:false,scanPct:100,scanPhase:99}); this.tickCounts(); this.toast('Scan complete — library up to date','keep'); setTimeout(()=>this.setState({scanPanelOpen:false}),1700); }
+
+  toast(msg,tone){ tone=tone||'accent'; const id=Date.now()+Math.random(); this.setState(s=>({toasts:[...s.toasts,{id,msg,tone}]})); setTimeout(()=>this.setState(s=>({toasts:s.toasts.filter(x=>x.id!==id)})),3200); }
+  go(page){ this.setState({page,searchOpen:false,search:''}); }
+  toggleNav(){ this.setState(s=>({navCollapsed:!s.navCollapsed})); }
+  cycleTheme(){ const seq=['dark','light','neon']; this.setState(s=>({theme:seq[(seq.indexOf(s.theme)+1)%3]})); }
+  cycleDensity(){ this.setState(s=>({density:s.density==='comfortable'?'compact':'comfortable'})); }
+  openDrawer(id){ this.setState({drawerId:id,drawerRaw:false}); }
+  closeDrawer(){ this.setState({drawerId:null}); }
+
+  reorderCards(targetId){ this.setState(s=>{ const arr=[...s.dashOrder]; const from=arr.indexOf(s.dragId), to=arr.indexOf(targetId); if(from<0||to<0||from===to) return {}; const [x]=arr.splice(from,1); arr.splice(to,0,x); return {dashOrder:arr}; }); }
+
+  approveJunk(ids){ this.setState({modal:{type:'delete',ids}}); }
+  rejectJunk(id){ this.setState(s=>({junkDecisions:{...s.junkDecisions,[id]:'rejected'}})); const m=this.M[id]; this.toast(`Kept ${m?m.t:'title'} — removal rejected`,'keep'); }
+  confirmModal(){ const md=this.state.modal; if(!md) return; if(md.type==='delete'){ const dec={}; let gb=0; md.ids.forEach(id=>{ dec[id]='approved'; const m=this.M[id]; if(m) gb+=m.sz; }); this.setState(s=>({junkDecisions:{...s.junkDecisions,...dec},modal:null})); this.toast(`Deleted ${md.ids.length} file${md.ids.length>1?'s':''} · ${gb.toFixed(1)} GB reclaimed`,'junk'); } }
+  cancelModal(){ this.setState({modal:null}); }
+
+  // ---------- data builders ----------
+  searchMatches(){ const q=this.state.search.trim().toLowerCase(); return q?this.MOVIES.filter(m=>m.t.toLowerCase().includes(q)).slice(0,6):[]; }
+  handleKey(e){
+    const t=e.target, tag=(t.tagName||'').toLowerCase(), typing=tag==='input'||tag==='textarea'||t.isContentEditable;
+    if(e.key==='Escape'){ if(this.state.modal){this.cancelModal();} else if(this.state.drawerId){this.closeDrawer();} else if(this.state.scanPanelOpen){this.setState({scanPanelOpen:false});} else if(this.state.libMenu||this.state.colMenu){this.setState({libMenu:null,colMenu:false});} else if(this.state.searchOpen){this.setState({searchOpen:false,searchIndex:-1}); if(this.searchRef.current)this.searchRef.current.blur();} return; }
+    if(e.key==='/'&&!typing){ e.preventDefault(); if(this.searchRef.current) this.searchRef.current.focus(); this.setState({searchOpen:true}); return; }
+    if(this.state.searchOpen){ const res=this.searchMatches(); if(!res.length) return;
+      if(e.key==='ArrowDown'){ e.preventDefault(); this.setState(s=>({searchIndex:Math.min(res.length-1,s.searchIndex+1)})); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); this.setState(s=>({searchIndex:Math.max(0,s.searchIndex-1)})); }
+      else if(e.key==='Enter'&&this.state.searchIndex>=0){ e.preventDefault(); this.openDrawer(res[this.state.searchIndex].id); this.setState({searchOpen:false,search:'',searchIndex:-1}); }
+    }
+  }
+  navData(){
+    const s=this.state;
+    const pendingJunk=this.JUNK.filter(j=>j.score>=75 && !s.junkDecisions[j.id]).length;
+    const missingCount=this.COLLECTIONS.reduce((a,c)=>a+c.missing.length,0);
+    const base='display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:var(--r-pill);font-weight:700;font-size:13px;white-space:nowrap;transition:background var(--dur-fast),color var(--dur-fast)';
+    const mk=(id,label)=>{ const active=s.page===id; return {id,label,icon:this.ic(id,18),active,onClick:()=>this.go(id),style:active?`${base};background:var(--accent-soft);color:var(--accent)`:`${base};color:var(--fg-2)`,hover:active?'':'background:var(--bg-2);color:var(--fg)',badgeShow:(id==='junk'&&pendingJunk>0)||(id==='missing'&&missingCount>0),badge:id==='junk'?pendingJunk:missingCount,badgeBg:id==='junk'?'var(--junk)':'var(--accent)',badgeFg:id==='junk'?'#fff':'#06121e'}; };
+    const items=[['dashboard','Dashboard'],['library','Library'],['missing','Missing'],['junk','Junk'],['ask','Ask'],['taste','Taste Profile'],['activity','Activity'],['settings','Settings']].map(x=>mk(x[0],x[1]));
+    const dsA=s.page==='ds';
+    return {items, ds:{icon:this.ic('ds',18),active:dsA,onClick:()=>this.go('ds'),style:dsA?`${base};background:var(--accent-soft);color:var(--accent)`:`${base};color:var(--fg-2)`,hover:dsA?'':'background:var(--bg-2);color:var(--fg)'}};
+  }
+
+  barData(){
+    const s=this.state;
+    const q=s.search.trim().toLowerCase();
+    const results=q?this.MOVIES.filter(m=>m.t.toLowerCase().includes(q)).slice(0,6).map((m,i)=>({title:m.t,year:m.y,poster:this.poster(m.hue),active:i===s.searchIndex,rowBg:i===s.searchIndex?'var(--bg-2)':'transparent',open:()=>{this.openDrawer(m.id);this.setState({searchOpen:false,search:'',searchIndex:-1});}})):[];
+    const themeIcon={dark:this.ic_moon(),light:this.ic_sun(),neon:this.ic_bolt()}[s.theme];
+    const health=this.CONN.concat([{name:'Model',status:'ok',detail:'Local + Anthropic online'}]).map(h=>({name:h.name,color:h.status==='ok'?'var(--keep)':h.status==='warn'?'var(--borderline)':'var(--junk)',glow:h.status==='warn'?'0 0 8px var(--borderline)':'none',detail:h.detail,hovered:s.hoveredHealth===h.name,enter:()=>this.setState({hoveredHealth:h.name}),leave:()=>this.setState({hoveredHealth:null})}));
+    return {
+      searchRef:this.searchRef,
+      search:s.search, onSearch:(e)=>this.setState({search:e.target.value,searchOpen:true,searchIndex:-1}), onSearchFocus:()=>this.setState({searchOpen:true,searchIndex:-1}), onSearchBlur:()=>setTimeout(()=>this.setState({searchOpen:false}),160),
+      showResults:s.searchOpen&&q.length>0, searchResults:results, noResults:results.length===0,
+      health, toggleNav:this.toggleNav,
+      cycleTheme:this.cycleTheme, themeIcon, themeTitle:`Theme: ${s.theme[0].toUpperCase()+s.theme.slice(1)} (click to change)`,
+      cycleDensity:this.cycleDensity, densityDash:s.density==='compact'?'2 3':'0', densityTitle:`Density: ${s.density} (click to change)`,
+      scanning:s.scanning, idle:!s.scanning, scanPct:s.scanPct, ringMini:this.ring(s.scanPct,16,2.5), ringBig:this.ring(s.scanPct,76,6),
+      runScan:this.runScan, scanBtnLabel:s.scanning?'Scanning…':'Run scan',
+      toggleScanPanel:()=>this.setState(x=>({scanPanelOpen:!x.scanPanelOpen})), scanPanelOpen:s.scanPanelOpen,
+      scanTitle:s.scanning?'Scanning library':(s.scanPct===100?'Scan complete':'Ready to scan'),
+      scanSub:s.scanning?'Streaming progress over WebSocket':(s.scanPct===100?'Everything up to date':'Last scan: yesterday'),
+      phases:this.PHASES.map((label,i)=>{ const done=s.scanPhase>i||s.scanPct===100||s.scanPhase===99, active=s.scanPhase===i&&s.scanning; return {label,dotBg:done?'var(--keep)':active?'var(--accent)':'var(--bg-3)',dotFg:done||active?'#04140f':'var(--fg-3)',mark:done?React.createElement('svg',{width:11,height:11,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:3,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M5 12.5l4.5 4.5L19 7'})):active?React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:'#04140f'}}):'',color:done||active?'var(--fg)':'var(--fg-3)',weight:active?'700':'500'}; })
+    };
+  }
+  ic_moon(){ return React.createElement('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z'})); }
+  ic_sun(){ return React.createElement('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('circle',{cx:12,cy:12,r:4}),React.createElement('path',{d:'M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8L6 18M18 6l1.8-1.8'})); }
+  ic_bolt(){ return React.createElement('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M13 3L4 14h6l-1 7 9-11h-6l1-7z'})); }
+
+  dashData(){
+    const s=this.state, c=s.counts;
+    const bySec=(sec)=>this.MOVIES.filter(m=>m.sec===sec).length;
+    const unmon=this.MOVIES.filter(m=>!m.mon).length;
+    const total=this.MOVIES.length;
+    const pending=this.JUNK.filter(j=>j.score>=75&&!s.junkDecisions[j.id]);
+    const kindOf={health:'hero',owned:'big',monitored:'gauge',missing:'gauge',junk:'gauge'};
+    const spanOf={health:'grid-column:1 / -1',owned:'grid-column:span 3',monitored:'grid-column:span 1',missing:'grid-column:span 1',junk:'grid-column:span 1'};
+    const meta={
+      health:{label:'Library health',value:c.health,badge:'Good',factors:[{label:'Duplicates',val:'1',pct:'22%',color:'var(--borderline)'},{label:'Below rating floor',val:'3',pct:'42%',color:'var(--junk)'},{label:'Unwatched > 2y',val:'2',pct:'28%',color:'var(--fg-2)'},{label:'Collection gaps',val:c.missing,pct:'62%',color:'var(--accent)'}]},
+      owned:{label:'Owned movies',value:c.owned,sub:total+' titles across 3 libraries',rows:[{label:'Movies',val:bySec('Movies'),pct:bySec('Movies')/total*100+'%',barColor:'var(--accent)'},{label:'Kids',val:bySec('Kids'),pct:bySec('Kids')/total*100+'%',barColor:'var(--keep)'},{label:'4K',val:bySec('4K'),pct:bySec('4K')/total*100+'%',barColor:'var(--borderline)'}]},
+      monitored:{label:'Monitored',value:c.monitored,sub:unmon+' unmonitored',color:'var(--accent)',pct:total?Math.round(c.monitored/total*100):0,rows:[{label:'Monitored',val:c.monitored,pct:c.monitored/total*100+'%',barColor:'var(--accent)'},{label:'Unmonitored',val:unmon,pct:unmon/total*100+'%',barColor:'var(--fg-3)'}]},
+      missing:{label:'Missing',value:c.missing,sub:this.COLLECTIONS.length+' collections',color:'var(--borderline)',pct:Math.min(100,Math.round(c.missing/12*100)),rows:this.COLLECTIONS.map(col=>({label:col.name,val:col.missing.length,pct:col.missing.length/4*100+'%',barColor:'var(--borderline)'}))},
+      junk:{label:'Junk',value:c.junk,sub:'awaiting approval',color:'var(--junk)',pct:Math.min(100,Math.round(c.junk/9*100)),rows:this.JUNK.filter(j=>j.score>=75).slice(0,4).map(j=>{const m=this.M[j.id];return {label:m.t,val:j.score,pct:j.score+'%',barColor:'var(--junk)'};})}
+    };
+    const gseg=(id)=>{ const m=meta[id]; return {id,label:m.label,value:m.value,sub:m.sub,color:m.color,ring:this.ringc(m.pct,80,7,m.color)}; };
+    const health={value:meta.health.value,badge:meta.health.badge,factors:meta.health.factors};
+    const owned={value:meta.owned.value,sub:meta.owned.sub,sections:meta.owned.rows.map(r=>({label:r.label,val:r.val,pct:r.pct,color:r.barColor}))};
+    const gauges=[gseg('monitored'),gseg('missing'),gseg('junk')];
+    return {
+      health, owned, gauges,
+      needsCount:pending.length, needsEmpty:pending.length===0,
+      needs:pending.slice(0,3).map(j=>{ const m=this.M[j.id],b=this.band(j.score); return {title:m.t,poster:this.poster(m.hue),reason:j.kids?'In Kids library · flagged with guard':(m.dup?'Duplicate of a higher-quality copy':'Low rating · rarely watched'),bandColor:b.color,bandSoft:b.soft,bandLabel:b.label,score:j.score,review:()=>{this.go('junk');this.setState(x=>({junkExpanded:{...x.junkExpanded,[j.id]:true}}));}}; }),
+      activity:this.ACTIVITY.slice(0,4).map(e=>({text:e.text,tier:e.tier,time:e.time,color:e.type==='delete'?(e.dec==='approved'?'var(--junk)':'var(--fg-3)'):e.type==='add'?'var(--keep)':e.type==='scan'?'var(--accent)':'var(--borderline)'})),
+      goActivity:()=>this.go('activity'),
+      quick:[
+        {title:'Run a library scan',sub:'Refresh Plex + Radarr',icon:this.ic_bolt(),onClick:this.runScan},
+        {title:'Review removal queue',sub:pending.length+' awaiting approval',icon:this.ic('junk',19),onClick:()=>this.go('junk')},
+        {title:'Ask about your library',sub:'Natural-language search',icon:this.ic('ask',19),onClick:()=>this.go('ask')},
+        {title:'Find missing movies',sub:'Gaps + recommendations',icon:this.ic('missing',19),onClick:()=>this.go('missing')}
+      ]
+    };
+  }
+
+  drawerData(){
+    const id=this.state.drawerId; if(!id) return {open:false,m:{ratings:[],sibs:[]}};
+    const m=this.M[id]; const jr=this.JUNK.find(j=>j.id===id); const b=jr?this.band(jr.score):{label:'Keep',color:'var(--keep)',soft:'var(--keep-soft)'};
+    const sibsOwned=m.col?this.MOVIES.filter(x=>x.col===m.col):[]; const sibsMiss=m.col?(this.MISSMAP[m.col]||[]):[];
+    const sibs=sibsOwned.map(x=>({poster:this.poster(x.hue),year:x.y,opacity:'1',border:x.id===m.id?'2px solid var(--accent)':'1px solid var(--line)',missing:false})).concat(sibsMiss.map(x=>({poster:'var(--bg-2)',year:x.y,opacity:'.5',border:'1px dashed var(--line-2)',missing:true})));
+    const clean={id:m.id,title:m.t,year:m.y,section:m.sec,quality:m.q,runtime_min:m.rt,genres:m.g,monitored:m.mon,size_gb:m.sz,ratings:{tmdb:m.tm,imdb:m.im,user:m.us},watch:{last_played:m.last,plays:m.pl,completion_pct:m.cmp},collection:m.col,director:m.dir,sift:{removal_score:jr?jr.score:null,band:b.label.toLowerCase()}};
+    return {
+      open:true, raw:this.state.drawerRaw, rawChev:this.state.drawerRaw?'rotate(180deg)':'none', rawJson:JSON.stringify(clean,null,2),
+      toggleRaw:()=>this.setState(s=>({drawerRaw:!s.drawerRaw})), close:this.closeDrawer,
+      m:{ id:m.id, slotId:'poster-'+m.id, title:m.t, year:m.y, runtime:m.rt+' min', genres:m.g.join(' · '), poster:this.poster(m.hue), backdrop:this.backdrop(m.hue),
+        section:m.sec, secColor:m.sec==='Kids'?'var(--keep)':m.sec==='4K'?'var(--borderline)':'var(--fg-2)', secSoft:m.sec==='Kids'?'var(--keep-soft)':m.sec==='4K'?'var(--borderline-soft)':'var(--bg-2)',
+        quality:m.q, monLabel:m.mon?'Monitored':'Unmonitored', monColor:m.mon?'var(--accent)':'var(--fg-3)', monSoft:m.mon?'var(--accent-soft)':'var(--bg-2)', monBtn:m.mon?'Unmonitor':'Monitor',
+        ratings:[{src:'TMDB',val:m.tm.toFixed(1),color:'var(--fg)'},{src:'IMDb',val:m.im.toFixed(1),color:'var(--fg)'},{src:'Your rating',val:m.us?m.us+'/10':'—',color:m.us?'var(--accent)':'var(--fg-3)'}],
+        scoreLabel:b.label, scoreColor:b.color, scoreSoft:b.soft, scoreNote:jr?('Removal score '+jr.score+'/100'):'Not flagged for removal',
+        rationale:jr?jr.why:'This title is comfortably above your thresholds — well rated and watched. Sift is keeping it.',
+        watchLines:m.last?`Last played ${m.last}\n${m.pl} play${m.pl===1?'':'s'} · ${m.cmp}% completion`:'Never played\nAdded to library, no watch history',
+        fileLines:`${m.q}\n${m.sz.toFixed(1)} GB · ${m.sec} library`,
+        hasCollection:!!m.col, collectionName:m.col?m.col+' collection':'', sibs,
+        monitor:()=>{ this.toast(m.mon?`Unmonitored ${m.t}`:`Monitoring ${m.t}`, m.mon?'borderline':'accent'); },
+        sendJunk:()=>{ this.toast(`Sent ${m.t} to removal queue`,'junk'); this.closeDrawer(); this.go('junk'); }
+      }
+    };
+  }
+  modalData(){ const md=this.state.modal; if(!md) return {open:false,items:[]}; if(md.type==='delete'){ const items=md.ids.map(id=>{const m=this.M[id];return {title:m.t+' ('+m.y+')',poster:this.poster(m.hue),size:m.sz.toFixed(1)+' GB'};}); const gb=md.ids.reduce((a,id)=>a+this.M[id].sz,0); return {open:true,title:`Delete ${md.ids.length} file${md.ids.length>1?'s':''}?`,subtitle:`${gb.toFixed(1)} GB will be reclaimed`,items,warning:'This deletes the file via Radarr and cannot be undone.',confirmLabel:'Delete permanently',confirm:()=>this.confirmModal(),cancel:()=>this.cancelModal(),stop:(e)=>e.stopPropagation()}; } return {open:false,items:[]}; }
+  toastData(){ return this.state.toasts.map(t=>{ const color=t.tone==='keep'?'var(--keep)':t.tone==='junk'?'var(--junk)':t.tone==='borderline'?'var(--borderline)':'var(--accent)'; const soft=t.tone==='keep'?'var(--keep-soft)':t.tone==='junk'?'var(--junk-soft)':t.tone==='borderline'?'var(--borderline-soft)':'var(--accent-soft)'; const icon=t.tone==='junk'?this.ic('junk',14):React.createElement('svg',{width:14,height:14,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2.4,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M5 12.5l4.5 4.5L19 7'})); return {msg:t.msg,color,soft,icon}; }); }
+
+  getLib(){
+    const s=this.state; let list=this.MOVIES.slice();
+    if(s.libSection) list=list.filter(m=>m.sec===s.libSection);
+    if(s.libGenre) list=list.filter(m=>m.g.includes(s.libGenre));
+    if(s.libDecade) list=list.filter(m=>(Math.floor(m.y/10)*10)+'s'===s.libDecade);
+    if(s.libRating){ if(s.libRating==='8.0+') list=list.filter(m=>m.tm>=8); else if(s.libRating==='7.0–7.9') list=list.filter(m=>m.tm>=7&&m.tm<8); else list=list.filter(m=>m.tm<7); }
+    if(s.libWatched) list=list.filter(m=> s.libWatched==='Watched'?m.pl>0:m.pl===0);
+    const dir=s.libDir;
+    list.sort((a,b)=>{ let av,bv; if(s.libSort==='year'){av=a.y;bv=b.y;} else if(s.libSort==='rating'){av=a.tm;bv=b.tm;} else if(s.libSort==='plays'){av=a.pl;bv=b.pl;} else if(s.libSort==='size'){av=a.sz;bv=b.sz;} else {av=a.t.toLowerCase();bv=b.t.toLowerCase();} return av<bv?-dir:av>bv?dir:0; });
+    return list;
+  }
+  libData(){
+    const s=this.state; const list=this.getLib();
+    const pageSize=s.libView==='grid'?24:50;
+    const totalPages=Math.max(1,Math.ceil(list.length/pageSize));
+    const page=Math.min(Math.max(1,s.libPage),totalPages);
+    const start=(page-1)*pageSize;
+    const pageItems=list.slice(start,start+pageSize);
+    const check=React.createElement('svg',{width:11,height:11,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:3.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M5 12.5l4.5 4.5L19 7'}));
+    const secColor=(sec)=>sec==='Kids'?'var(--keep)':sec==='4K'?'var(--borderline)':'var(--fg-2)';
+    const secSoft=(sec)=>sec==='Kids'?'var(--keep-soft)':sec==='4K'?'var(--borderline-soft)':'var(--bg-2)';
+    const genres=Array.from(new Set(this.MOVIES.reduce((a,m)=>a.concat(m.g),[]))).sort();
+    const mkf=(k,opts)=>{ const cur=s['lib'+k]; const sel=(v)=>this.setState(()=>{const o={libMenu:null,savedView:'',libPage:1};o['lib'+k]=v;return o;});
+      const options=[{label:'All '+k.toLowerCase(),color:'var(--fg-3)',select:()=>sel(null)}].concat(opts.map(v=>({label:v,color:cur===v?'var(--accent)':'var(--fg)',select:()=>sel(v)})));
+      return {key:k,label:k,cur,display:cur||k,active:!!cur,notActive:!cur,open:s.libMenu===k,options,style:`display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:var(--r-pill);border:1px solid ${cur?'var(--accent-line)':'var(--line-2)'};background:${cur?'var(--accent-soft)':'transparent'};color:${cur?'var(--accent)':'var(--fg-2)'};font-size:12.5px;font-weight:600;white-space:nowrap`,toggle:()=>this.setState(x=>({libMenu:x.libMenu===k?null:k})),clear:(e)=>{e.stopPropagation();sel(null);}}; };
+    const filters=[mkf('Genre',genres),mkf('Decade',['1990s','2000s','2010s','2020s']),mkf('Rating',['8.0+','7.0–7.9','Below 7.0']),mkf('Watched',['Watched','Unwatched'])];
+    const setView=(id,f)=>()=>this.setState(Object.assign({savedView:id,libMenu:null,libGenre:null,libDecade:null,libRating:null,libWatched:null,libSection:null,libPage:1},f));
+    const views=[{id:'all',name:'All movies',apply:setView('all',{})},{id:'kids',name:'Kids only',apply:setView('kids',{libSection:'Kids'})},{id:'4k',name:'4K library',apply:setView('4k',{libSection:'4K'})},{id:'unwatched',name:'Unwatched',apply:setView('unwatched',{libWatched:'Unwatched'})},{id:'toprated',name:'Top rated',apply:setView('toprated',{libRating:'8.0+'})}].map(v=>Object.assign(v,{active:s.savedView===v.id,style:`display:flex;align-items:center;gap:6px;height:32px;padding:0 13px;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;background:${s.savedView===v.id?'var(--accent)':'var(--bg-2)'};color:${s.savedView===v.id?'var(--accent-fg)':'var(--fg-2)'}`}));
+    const cols=[['year','Year'],['section','Library'],['quality','Quality'],['rating','Rating'],['plays','Plays'],['size','Size'],['monitored','Monitored']];
+    const sortHead=(key,label)=>({key,label,active:s.libSort===key,color:s.libSort===key?'var(--fg)':'var(--fg-3)',arrow:s.libSort===key?(s.libDir>0?'↑':'↓'):'',onClick:()=>this.setState(x=>({libSort:key,libDir:x.libSort===key?-x.libDir:1}))});
+    const vm=(m)=>({id:m.id,title:m.t,year:m.y,poster:this.poster(m.hue),section:m.sec,secColor:secColor(m.sec),secSoft:secSoft(m.sec),quality:m.q,rating:m.tm.toFixed(1),ratingColor:m.tm>=8?'var(--keep)':m.tm<6?'var(--junk)':'var(--fg)',plays:m.pl===0?'—':(''+m.pl),size:m.sz.toFixed(1),mon:m.mon,monColor:m.mon?'var(--accent)':'var(--fg-3)',monLabel:m.mon?'Monitored':'Off',open:()=>this.openDrawer(m.id),selected:s.libSelected.includes(m.id),rowBg:s.libSelected.includes(m.id)?'var(--accent-soft)':'transparent',boxBg:s.libSelected.includes(m.id)?'var(--accent)':'transparent',boxBorder:s.libSelected.includes(m.id)?'var(--accent)':'var(--line-2)',check:s.libSelected.includes(m.id)?check:'',toggleSel:(e)=>{e.stopPropagation();this.setState(x=>({libSelected:x.libSelected.includes(m.id)?x.libSelected.filter(i=>i!==m.id):[...x.libSelected,m.id]}));}});
+    return {
+      grid:s.libView==='grid', table:s.libView==='table', loading:s.scanning,
+      gridReady:s.libView==='grid'&&!s.scanning, tableReady:s.libView==='table'&&!s.scanning,
+      skeletons:[0,1,2,3,4,5,6,7,8,9,10,11].map(i=>({i})),
+      setGrid:()=>this.setState({libView:'grid'}), setTable:()=>this.setState({libView:'table'}),
+      gridBtn:`display:flex;align-items:center;justify-content:center;width:36px;height:30px;border-radius:7px;background:${s.libView==='grid'?'var(--bg-1)':'transparent'};color:${s.libView==='grid'?'var(--fg)':'var(--fg-3)'};box-shadow:${s.libView==='grid'?'var(--shadow-1)':'none'}`,
+      tableBtn:`display:flex;align-items:center;justify-content:center;width:36px;height:30px;border-radius:7px;background:${s.libView==='table'?'var(--bg-1)':'transparent'};color:${s.libView==='table'?'var(--fg)':'var(--fg-3)'};box-shadow:${s.libView==='table'?'var(--shadow-1)':'none'}`,
+      sections:[{label:'All',active:!s.libSection,onClick:()=>this.setState({libSection:null,savedView:'',libPage:1})}].concat(['Movies','Kids','4K'].map(sec=>({label:sec,active:s.libSection===sec,onClick:()=>this.setState({libSection:sec,savedView:'',libPage:1})}))).map(x=>Object.assign(x,{style:`padding:6px 14px;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;background:${x.active?'var(--bg-1)':'transparent'};color:${x.active?'var(--fg)':'var(--fg-3)'};box-shadow:${x.active?'var(--shadow-1)':'none'}`})),
+      filters, views,
+      count:list.length, total:this.PLEX_TOTAL, scored:this.MOVIES.length,
+      page, totalPages, showPager:totalPages>1, rangeFrom:list.length?start+1:0, rangeTo:Math.min(start+pageSize,list.length),
+      canPrev:page>1, canNext:page<totalPages, prevDisabled:page<=1, nextDisabled:page>=totalPages,
+      prevStyle:`display:flex;align-items:center;gap:6px;height:36px;padding:0 15px;border-radius:var(--r-md);background:var(--bg-1);border:1px solid var(--line);color:${page>1?'var(--fg)':'var(--fg-3)'};font-weight:700;font-size:13px;box-shadow:var(--shadow-1);opacity:${page>1?'1':'.5'};cursor:${page>1?'pointer':'default'}`,
+      nextStyle:`display:flex;align-items:center;gap:6px;height:36px;padding:0 15px;border-radius:var(--r-md);background:var(--bg-1);border:1px solid var(--line);color:${page<totalPages?'var(--fg)':'var(--fg-3)'};font-weight:700;font-size:13px;box-shadow:var(--shadow-1);opacity:${page<totalPages?'1':'.5'};cursor:${page<totalPages?'pointer':'default'}`,
+      prevPage:()=>this.setState(x=>({libPage:Math.max(1,x.libPage-1)})),
+      nextPage:()=>this.setState(x=>({libPage:Math.min(totalPages,x.libPage+1)})),
+      colMenuOpen:s.colMenu, toggleColMenu:()=>this.setState(x=>({colMenu:!x.colMenu})),
+      colToggles:cols.map(c=>({key:c[0],label:c[1],on:s.libCols[c[0]],boxBg:s.libCols[c[0]]?'var(--accent)':'transparent',boxBorder:s.libCols[c[0]]?'var(--accent)':'var(--line-2)',check:s.libCols[c[0]]?check:'',toggle:()=>this.setState(x=>({libCols:Object.assign({},x.libCols,{[c[0]]:!x.libCols[c[0]]})}))})),
+      allBoxBg:(list.length>0&&list.every(m=>s.libSelected.includes(m.id)))?'var(--accent)':'transparent', allCheck:(list.length>0&&list.every(m=>s.libSelected.includes(m.id)))?check:'',
+      showYear:s.libCols.year&&!s.narrow,showSection:s.libCols.section,showQuality:s.libCols.quality&&!s.narrow,showRating:s.libCols.rating,showPlays:s.libCols.plays&&!s.narrow,showSize:s.libCols.size&&!s.narrow,showMon:s.libCols.monitored&&!s.narrow,
+      hTitle:sortHead('title','Title'),hYear:sortHead('year','Year'),hRating:sortHead('rating','Rating'),hPlays:sortHead('plays','Plays'),hSize:sortHead('size','Size'),
+      movies:pageItems.map(vm),
+      selectedCount:s.libSelected.length, hasSelection:s.libSelected.length>0,
+      clearSel:()=>this.setState({libSelected:[]}),
+      bulkMonitor:()=>{ this.toast(`Monitoring ${s.libSelected.length} titles`,'accent'); this.setState({libSelected:[]}); },
+      bulkReview:()=>{ this.toast(`Added ${s.libSelected.length} to review queue`,'borderline'); this.setState({libSelected:[]}); },
+      allSelected:list.length>0&&list.every(m=>s.libSelected.includes(m.id)),
+      toggleAll:()=>this.setState(x=>{ const ids=list.map(m=>m.id); const all=ids.every(i=>x.libSelected.includes(i)); return {libSelected:all?[]:ids}; }),
+      empty:list.length===0, resetFilters:setView('all',{}),
+      anyMenuOpen:!!(s.libMenu||s.colMenu), closeMenus:()=>this.setState({libMenu:null,colMenu:false})
+    };
+  }
+
+  missingData(){
+    const s=this.state;
+    const collections=this.COLLECTIONS.map((col,i)=>({rowStyle:`padding:var(--card-pad);${i>0?'border-top:1px solid var(--line);':''}`,name:col.name,ownedCount:col.owned.length,missingCount:col.missing.length,owned:col.owned.map(id=>({poster:this.poster(this.M[id].hue),year:this.M[id].y,title:this.M[id].t,open:()=>this.openDrawer(id)})),missing:col.missing.map((mm,i)=>({key:col.name+i,t:mm.t,y:mm.y,poster:'linear-gradient(155deg,var(--bg-2),var(--bg-3))',auto:mm.state==='auto',notAuto:mm.state!=='auto',label:mm.state==='auto'?'Added automatically':'Add to Radarr',add:()=>this.toast(`Adding ${mm.t} to Radarr`,'accent')}))}));
+    let recs=this.RECS.filter(r=>!s.recDismissed.includes(r.id)).slice();
+    if(s.recSort==='year') recs.sort((a,b)=>b.y-a.y); else recs.sort((a,b)=>b.fit-a.fit);
+    return {
+      collections, gapTotal:this.COLLECTIONS.reduce((a,c)=>a+c.missing.length,0), collCount:this.COLLECTIONS.length,
+      recSort:s.recSort, sortFit:()=>this.setState({recSort:'fit'}), sortYear:()=>this.setState({recSort:'year'}),
+      sortFitStyle:`padding:5px 12px;border-radius:var(--r-pill);font-size:12px;font-weight:700;background:${s.recSort==='fit'?'var(--bg-3)':'transparent'};color:${s.recSort==='fit'?'var(--fg)':'var(--fg-3)'}`,
+      sortYearStyle:`padding:5px 12px;border-radius:var(--r-pill);font-size:12px;font-weight:700;background:${s.recSort==='year'?'var(--bg-3)':'transparent'};color:${s.recSort==='year'?'var(--fg)':'var(--fg-3)'}`,
+      recs:recs.map((r,i)=>({rowStyle:`display:flex;align-items:center;gap:16px;padding:16px var(--card-pad);${i>0?'border-top:1px solid var(--line);':''}`,id:r.id,title:r.t,year:r.y,genres:r.g.join(' · '),poster:this.poster(r.hue),fit:r.fit,fitColor:r.fit>=90?'var(--keep)':r.fit>=80?'var(--accent)':'var(--borderline)',fitRing:this.ringc(r.fit,46,4,r.fit>=90?'var(--keep)':r.fit>=80?'var(--accent)':'var(--borderline)'),why:r.why,add:()=>{this.toast(`Adding ${r.t} to Radarr`,'accent');this.setState(x=>({recDismissed:[...x.recDismissed,r.id]}));},dismiss:()=>{this.toast(`Dismissed ${r.t}`,'borderline');this.setState(x=>({recDismissed:[...x.recDismissed,r.id]}));}})),
+      recCount:recs.length, recEmpty:recs.length===0
+    };
+  }
+
+  junkData(){
+    const s=this.state;
+    const pending=this.JUNK.filter(j=>j.score>=75&&!s.junkDecisions[j.id]).map(j=>j.id);
+    const items=this.JUNK.map((j,idx)=>{ const m=this.M[j.id],b=this.band(j.score),dec=s.junkDecisions[j.id],exp=!!s.junkExpanded[j.id];
+      return {id:j.id,rowStyle:`padding:${idx===0?'20px':'20px'} var(--card-pad);${idx>0?'border-top:1px solid var(--line);':''}`,title:m.t,year:m.y,poster:this.poster(m.hue),section:m.sec,quality:m.q,size:m.sz.toFixed(1)+' GB',
+        band:b.label,bandColor:b.color,bandSoft:b.soft,score:j.score,kids:!!j.kids,ring:this.ringc(j.score,52,5,b.color),
+        signals:j.sig.map(x=>({k:x.k,v:x.v,pct:Math.min(100,(x.w/60*100))+'%',has:x.w>0,barColor:b.color,w:x.w})),
+        rationale:j.why, expanded:exp, chevT:exp?'rotate(180deg)':'none',
+        toggle:()=>this.setState(x=>({junkExpanded:Object.assign({},x.junkExpanded,{[j.id]:!x.junkExpanded[j.id]})})),
+        decided:!!dec, decApproved:dec==='approved', decRejected:dec==='rejected', pending:!dec,
+        approve:()=>this.approveJunk([j.id]), reject:()=>this.rejectJunk(j.id),
+        change:()=>this.setState(x=>{const d=Object.assign({},x.junkDecisions);delete d[j.id];return {junkDecisions:d};}),
+        statusLabel:dec==='approved'?'Removed':'Kept', statusColor:dec==='approved'?'var(--junk)':'var(--keep)', statusSoft:dec==='approved'?'var(--junk-soft)':'var(--keep-soft)'};
+    });
+    return {items, pendingCount:pending.length, hasPending:pending.length>0, allClear:pending.length===0, approveAll:()=>this.approveJunk(pending)};
+  }
+
+  askData(){
+    const s=this.state;
+    const words=(t)=>t?t.split(' '):[];
+    const rev=(t)=>{ return s.askStreaming?words(t).slice(0,s.askReveal).join(' '):t; };
+    const chip=(id)=>{ const m=this.M[id]; return {title:m?m.t:id,open:()=>this.openDrawer(id)}; };
+    const sc=(arr)=>(arr||[]).map(x=>({name:x,color:({Plex:'#e5a00d',Radarr:'#ffc230',Tautulli:'#c9a227',TMDB:'#01b4e4',Model:'var(--accent)'})[x]||'var(--fg-3)'}));
+    const fus=(arr)=>(arr||[]).map(q=>({q,onClick:()=>this.sendAsk(q)}));
+    const n=s.askThread.length;
+    const thread=s.askThread.map((e,idx)=>{
+      const last=idx===n-1, streaming=s.askStreaming&&last;
+      if(e.role==='user') return {user:true,assistant:false,text:e.text};
+      const followups=(streaming||!last)?[]:fus(e.followups);
+      if(e.compare) return {user:false,assistant:true,compare:true,single:false,sources:sc(e.sources),cursor:streaming,followups,hasFollowups:followups.length>0,panes:e.panes.map(p=>({model:p.model,latency:p.latency,cost:p.cost,hasCost:!!p.cost&&!streaming,text:rev(p.text),movies:streaming?[]:(p.movies||[]).map(chip),use:()=>this.toast(`Using ${p.model.split(' · ')[0]}'s answer`,'accent')}))};
+      return {user:false,assistant:true,compare:false,single:true,text:rev(e.text),cursor:streaming,model:e.model,latency:e.latency,sources:sc(e.sources),movies:streaming?[]:(e.movies||[]).map(chip),followups,hasFollowups:followups.length>0};
+    });
+    return {
+      thread, thinking:s.askThinking, compareMode:s.askModel==='compare', empty:thread.length===0,
+      models:[['local','Local'],['anthropic','Anthropic'],['compare','Compare']].map(x=>({id:x[0],label:x[1],active:s.askModel===x[0],onClick:()=>this.setState({askModel:x[0]}),style:`padding:7px 15px;border-radius:8px;font-size:12.5px;font-weight:700;background:${s.askModel===x[0]?'var(--bg-1)':'transparent'};color:${s.askModel===x[0]?'var(--fg)':'var(--fg-3)'};box-shadow:${s.askModel===x[0]?'var(--shadow-1)':'none'}`})),
+      input:s.askInput, onInput:(e)=>this.setState({askInput:e.target.value}),
+      onKey:(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); this.sendAsk(); } },
+      send:()=>this.sendAsk(), canSend:s.askInput.trim().length>0,
+      suggestions:['What can I safely delete to free up space?','Which movies am I missing from collections I own?','Show my highest-rated films I haven\u2019t watched lately'].map(q=>({q,onClick:()=>this.setState({askInput:q})}))
+    };
+  }
+  sendAsk(forced){
+    const q=(typeof forced==='string'?forced:this.state.askInput).trim(); if(!q||this.state.askStreaming) return; const model=this.state.askModel;
+    this.setState(s=>({askThread:[...s.askThread,{role:'user',text:q}],askInput:'',askThinking:true}));
+    const delay=this.state.reduceMotion?150:850;
+    setTimeout(()=>{ const ans=this.answer(q); let msg;
+      if(model==='compare') msg={role:'assistant',compare:true,sources:ans.sources,followups:ans.followups,panes:[{model:'Local · Llama 3.1 8B',latency:'2.1s',cost:null,text:ans.local,movies:ans.movies},{model:'Anthropic · Claude',latency:'1.3s',cost:'$0.005 · 1,410 tok',text:ans.anthropic,movies:ans.movies}]};
+      else msg={role:'assistant',compare:false,model:model==='local'?'Local · Llama 3.1 8B':'Anthropic · Claude',latency:model==='local'?'2.1s':'1.3s',text:model==='local'?ans.local:ans.anthropic,movies:ans.movies,sources:ans.sources,followups:ans.followups};
+      const maxWords=model==='compare'?Math.max(ans.local.split(' ').length,ans.anthropic.split(' ').length):(model==='local'?ans.local:ans.anthropic).split(' ').length;
+      this.setState(s=>({askThread:[...s.askThread,msg],askThinking:false,askStreaming:!s.reduceMotion,askReveal:0}));
+      if(this.state.reduceMotion) return;
+      clearInterval(this._askTimer);
+      this._askTimer=setInterval(()=>{ this.setState(s=>{ const r=s.askReveal+2; if(r>=maxWords){ clearInterval(this._askTimer); return {askReveal:maxWords,askStreaming:false}; } return {askReveal:r}; }); },42);
+    },delay);
+  }
+  answer(q){ const l=q.toLowerCase();
+    if(l.includes('delete')||l.includes('space')||l.includes('junk')||l.includes('remove')||l.includes('free')) return {sources:['Radarr','Tautulli'],movies:['cats','geostorm','inception720'],followups:['How much space would that reclaim?','What about titles in the Kids library?'],local:'You can safely remove Cats (2019) and Geostorm \u2014 both are low-rated and never played. There is also a duplicate 720p copy of Inception; you own it at 1080p.',anthropic:'Three clear wins: Cats (2.8/10, never played, 6.1 GB), Geostorm (5.3/10, unwatched 2 years, 4.2 GB), and the redundant 720p Inception (you own a 1080p Bluray). Together that reclaims about 13.4 GB. All three are already in your removal queue awaiting approval.'};
+    if(l.includes('missing')||l.includes('collection')||l.includes('complete')) return {sources:['Plex','Radarr'],movies:['toystory','darkknight','httyd'],followups:['Which of these can you add automatically?','Show only 4K collections with gaps'],local:'You have gaps in Toy Story, the Dark Knight trilogy, and How to Train Your Dragon.',anthropic:'You are missing 7 films across 4 collections you already own: Toy Story (2), The Dark Knight Trilogy (2), How to Train Your Dragon (2), and Dune (1). Dune: Part Two and two others are already being added automatically.'};
+    if(l.includes('rated')||l.includes('best')||l.includes('highest')||l.includes('watch')) return {sources:['Plex','TMDB'],movies:['spirited','whiplash'],followups:['Re-monitor both of those','What else have I not watched in a year?'],local:'Your highest-rated films not played lately are Spirited Away (8.6) and Whiplash (8.4).',anthropic:'Your top-rated films not played recently are Spirited Away (8.6, last played Nov 2025) and Whiplash (8.4, Dec 2024). Both are currently unmonitored \u2014 want me to re-monitor them?'};
+    return {sources:['Plex','Tautulli','TMDB'],movies:['dune','br2049'],followups:['What can I safely delete to free up space?','Recommend films like Blade Runner 2049'],local:'Your library leans heavily sci-fi and thriller, with Denis Villeneuve as your most-watched director.',anthropic:'Your library skews sci-fi and thriller, anchored by Denis Villeneuve \u2014 you own 4 of his films, all rated 9 or higher. Dune and Blade Runner 2049 are your most-replayed titles. Ask me about cleanup, missing films, or recommendations to go deeper.'};
+  }
+
+  tasteData(){
+    const s=this.state, w=s.weights;
+    const bars=(arr,color)=>arr.map(x=>({k:x.k,v:x.v,pct:x.v+'%',color}));
+    const kwMax=Math.max.apply(null,this.KEYWORDS.map(x=>x.v));
+    return {
+      genres:bars(this.GENRES,'var(--accent)'),
+      keywords:this.KEYWORDS.map(x=>({k:x.k,size:(13+x.v/kwMax*12)+'px',opacity:''+(0.5+x.v/kwMax*0.5),weight:x.v>60?'700':'500',color:x.v>75?'var(--accent)':'var(--fg-2)'})),
+      directors:bars(this.DIRECTORS,'var(--keep)'), actors:bars(this.ACTORS,'var(--borderline)'), eras:bars(this.ERAS,'var(--accent)'),
+      weights:[['genre','Genre'],['director','Director'],['cast','Cast'],['keywords','Keywords'],['era','Era']].map(x=>({key:x[0],label:x[1],value:w[x[0]],onInput:(e)=>this.setState(st=>({weights:Object.assign({},st.weights,{[x[0]]:+e.target.value})}))})),
+      recomputing:s.recomputing, idleRecompute:!s.recomputing, recomputePct:s.recomputePct, recompute:()=>this.recompute(),
+      topEmphasis:[['genre','genre'],['director','director'],['cast','cast'],['keywords','keywords'],['era','era']].reduce((best,x)=>w[x[0]]>w[best[0]]?x:best,['genre','genre'])[1]
+    };
+  }
+  recompute(){ if(this.state.recomputing) return; this.setState({recomputing:true,recomputePct:0});
+    if(this.state.reduceMotion){ this.setState({recomputing:false,recomputePct:100}); this.toast('Taste profile recomputed','keep'); return; }
+    const start=performance.now(),dur=2200; const step=(now)=>{ const p=Math.min(1,(now-start)/dur); this.setState({recomputePct:Math.round(p*100)}); if(p<1) requestAnimationFrame(step); else { this.setState({recomputing:false}); this.toast('Taste profile recomputed \u00b7 recommendations updated','keep'); } }; requestAnimationFrame(step);
+  }
+
+  activityData(){
+    const s=this.state;
+    const types=[['all','All'],['add','Adds'],['unmonitor','Unmonitors'],['delete','Deletes'],['scan','Scans']];
+    const list=this.ACTIVITY.filter(e=>s.activityFilter==='all'||e.type===s.activityFilter);
+    const tierColor=(t)=>t==='Approval'?'var(--junk)':t==='Auto + Audit'?'var(--borderline)':t==='System'?'var(--accent)':'var(--keep)';
+    return {
+      filters:types.map(t=>({id:t[0],label:t[1],count:t[0]==='all'?this.ACTIVITY.length:this.ACTIVITY.filter(e=>e.type===t[0]).length,onClick:()=>this.setState({activityFilter:t[0]}),style:`display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;background:${s.activityFilter===t[0]?'var(--accent)':'var(--bg-2)'};color:${s.activityFilter===t[0]?'var(--accent-fg)':'var(--fg-2)'}`})),
+      entries:list.map(e=>({text:e.text,time:e.time,tier:e.tier,tierColor:tierColor(e.tier),icon:e.type==='add'?this.ic('missing',15):e.type==='delete'?this.ic('junk',15):e.type==='scan'?this.ic_bolt():this.ic('library',15),iconColor:e.type==='delete'&&e.dec!=='rejected'?'var(--junk)':e.type==='add'?'var(--keep)':e.type==='scan'?'var(--accent)':'var(--borderline)',diff:e.diff.map(d=>({line:d,color:d.charAt(0)==='+'?'var(--keep)':d.charAt(0)==='-'?'var(--junk)':d.charAt(0)==='~'?'var(--borderline)':'var(--fg-3)'})),src:e.src})),
+      empty:list.length===0
+    };
+  }
+
+  settingsData(){
+    const s=this.state;
+    const sw=(on)=>({track:`width:42px;height:24px;border-radius:999px;background:${on?'var(--accent)':'var(--bg-3)'};position:relative;transition:background var(--dur-fast);flex:none;box-shadow:${on?'var(--glow-soft)':'none'}`,knob:`position:absolute;top:3px;left:${on?'21px':'3px'};width:18px;height:18px;border-radius:50%;background:#fff;transition:left var(--dur-fast);box-shadow:0 1px 3px rgba(0,0,0,.4)`});
+    const tabs=[['connections','Connections'],['models','Models'],['scoring','Scoring & thresholds'],['autonomy','Autonomy'],['appearance','Appearance']];
+    return {
+      tabs:tabs.map(t=>({id:t[0],label:t[1],onClick:()=>this.setState({settingsTab:t[0]}),style:`display:block;width:100%;text-align:left;padding:10px 13px;border-radius:var(--r-md);font-size:13.5px;font-weight:${s.settingsTab===t[0]?'700':'600'};background:${s.settingsTab===t[0]?'var(--accent-soft)':'transparent'};color:${s.settingsTab===t[0]?'var(--accent)':'var(--fg-2)'}`})),
+      isConnections:s.settingsTab==='connections',isModels:s.settingsTab==='models',isScoring:s.settingsTab==='scoring',isAutonomy:s.settingsTab==='autonomy',isAppearance:s.settingsTab==='appearance',
+      connections:this.CONN.map((c,i)=>{ const tst=s.tested[c.name]; const eff=tst==='pass'?'ok':tst==='warn'?'warn':c.status; const bad=eff!=='ok'; return {name:c.name,url:c.url,detail:c.detail,rowStyle:`padding:var(--card-pad);${i>0?'border-top:1px solid var(--line);':''}`,dot:eff==='ok'?'var(--keep)':eff==='warn'?'var(--borderline)':'var(--junk)',statusLabel:eff==='ok'?'Connected':eff==='warn'?'Degraded':'Offline',hasError:bad,noError:!bad,errColor:eff==='warn'?'var(--borderline)':'var(--junk)',errSoft:eff==='warn'?'var(--borderline-soft)':'var(--junk-soft)',testing:tst==='testing',notTesting:tst!=='testing',tested:tst==='pass'||tst==='warn',test:()=>{ this.setState(x=>({tested:Object.assign({},x.tested,{[c.name]:'testing'})})); setTimeout(()=>this.setState(x=>({tested:Object.assign({},x.tested,{[c.name]:c.status==='ok'?'pass':'warn'})})),950); }}; }),
+      localOn:s.localOn, anthropicOn:s.anthropicOn, toggleLocal:()=>this.setState(x=>({localOn:!x.localOn})), toggleAnthropic:()=>this.setState(x=>({anthropicOn:!x.anthropicOn})),
+      localSw:sw(s.localOn), anthropicSw:sw(s.anthropicOn), rmSw:sw(s.reduceMotion),
+      modes:[['route','Route by task'],['compare','Compare'],['race','Race-fallback']].map(x=>({id:x[0],label:x[1],active:s.modelMode===x[0],onClick:()=>this.setState({modelMode:x[0]}),style:`flex:1;padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;text-align:center;background:${s.modelMode===x[0]?'var(--bg-1)':'transparent'};color:${s.modelMode===x[0]?'var(--fg)':'var(--fg-3)'};box-shadow:${s.modelMode===x[0]?'var(--shadow-1)':'none'}`})),
+      embeds:[['local','Local · bge-large'],['anthropic','Anthropic'],['openai','OpenAI']].map(x=>({id:x[0],label:x[1],active:s.embedProvider===x[0],onClick:()=>this.setState({embedProvider:x[0]}),style:`padding:8px 13px;border-radius:var(--r-pill);font-size:12.5px;font-weight:700;border:1px solid ${s.embedProvider===x[0]?'var(--accent-line)':'var(--line-2)'};background:${s.embedProvider===x[0]?'var(--accent-soft)':'transparent'};color:${s.embedProvider===x[0]?'var(--accent)':'var(--fg-2)'}`})),
+      thMinVotes:s.thMinVotes, thRating:s.thRating.toFixed(1), thYears:s.thYears, thFit:s.thFit,
+      setMinVotes:(e)=>this.setState({thMinVotes:+e.target.value}), setRating:(e)=>this.setState({thRating:+e.target.value}), setYears:(e)=>this.setState({thYears:+e.target.value}), setFit:(e)=>this.setState({thFit:+e.target.value}),
+      belowFloor:this.MOVIES.filter(m=>m.tm<s.thRating).length, neverPlayed:this.MOVIES.filter(m=>m.pl===0).length, aboveFit:this.RECS.filter(r=>r.fit>=s.thFit).length, lowVotes:Math.max(0,Math.round(s.thMinVotes/2000*11)),
+      tiers:[{name:'Add missing / recommended',tier:'Automatic',desc:'Sift adds monitored movies to Radarr on its own.',color:'var(--keep)'},{name:'Unmonitor low-value titles',tier:'Automatic + Audit',desc:'Runs automatically, but every change is written to the audit log.',color:'var(--borderline)'},{name:'Delete files',tier:'Approval required',desc:'Never automatic. Each deletion needs your explicit confirmation.',color:'var(--junk)',locked:true}],
+      themes:[['dark','Spatial Dark','#12142a','linear-gradient(120deg,#2ee6e6,#e85cf5)'],['light','Spatial Light','#ffffff','linear-gradient(120deg,#0ea5b0,#c23ad0)'],['neon','Neon','#0a0820','linear-gradient(120deg,#2ee6ff,#ff50f0)']].map(t=>({id:t[0],name:t[1],active:s.theme===t[0],onClick:()=>this.setState({theme:t[0]}),bg:t[2],ring:t[3],borderColor:s.theme===t[0]?'var(--accent)':'var(--line-2)',labelColor:s.theme===t[0]?'var(--fg)':'var(--fg-2)'})),
+      accents:['#2ee6e6','#e85cf5','#8b7bf6','#4be6a4','#ffc24a','#ff6b8a'].map(hex=>({hex,active:s.accent===hex,ring:s.accent===hex?'#ffffff':'transparent',glow:s.accent===hex?('0 0 16px -2px '+hex):'none',onClick:()=>this.setState({accent:hex})})),
+      density:s.density, setComfortable:()=>this.setState({density:'comfortable'}), setCompact:()=>this.setState({density:'compact'}),
+      compBtn:`flex:1;padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;text-align:center;background:${s.density==='comfortable'?'var(--bg-1)':'transparent'};color:${s.density==='comfortable'?'var(--fg)':'var(--fg-3)'};box-shadow:${s.density==='comfortable'?'var(--shadow-1)':'none'}`,
+      cmpBtn:`flex:1;padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;text-align:center;background:${s.density==='compact'?'var(--bg-1)':'transparent'};color:${s.density==='compact'?'var(--fg)':'var(--fg-3)'};box-shadow:${s.density==='compact'?'var(--shadow-1)':'none'}`,
+      reduceMotion:s.reduceMotion, toggleReduceMotion:()=>this.setState(x=>({reduceMotion:!x.reduceMotion}))
+    };
+  }
+
+  dsData(){
+    const T=this.THEMES(); const pick=[['--bg-0','bg-0'],['--bg-1','bg-1'],['--bg-2','bg-2'],['--fg','fg'],['--fg-2','fg-2'],['--keep','keep'],['--borderline','borderline'],['--junk','junk']];
+    return {themes:[['dark','Minimal Dark','#38cfd9'],['light','Minimal Light','#0d9aa6'],['neon','Neon','#26e6ff']].map(t=>({name:t[1],swatches:pick.map(k=>({name:k[1],color:T[t[0]][k[0]],border:T[t[0]][k[0]]==='#ffffff'?'1px solid rgba(0,0,0,.12)':'1px solid rgba(255,255,255,.08)'})).concat([{name:'accent',color:t[2],border:'none'}])}))};
+  }
+
+  renderVals(){
+    const p=this.state.page;
+    return {
+      rootRef:this.rootRef,
+      isDashboard:p==='dashboard', isLibrary:p==='library', isMissing:p==='missing', isJunk:p==='junk', isAsk:p==='ask', isTaste:p==='taste', isActivity:p==='activity', isSettings:p==='settings', isDs:p==='ds',
+      nav:this.navData(), bar:this.barData(), db:this.dashData(),
+      lib:this.libData(), miss:this.missingData(), junk:this.junkData(), ask:this.askData(), taste:this.tasteData(), act:this.activityData(), set:this.settingsData(), dsheet:this.dsData(),
+      drawer:this.drawerData(), modal:this.modalData(), toasts:this.toastData()
+    };
+  }
+}
+</script>
+</body>
+</html>

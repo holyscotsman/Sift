@@ -32,3 +32,21 @@ Initial backend skeleton for the read-only ingestion MVP.
 - `cli.py` — `sift serve|scan|init`.
 - Test suite with mocked clients and negative controls, including the
   delete-safety invariant test.
+
+### Added — frontend foundation
+- React + Vite + TypeScript + Tailwind app in `frontend/`, built to static assets
+  and served by FastAPI at `/` (with an SPA fallback so client routes deep-link).
+- Design system from `docs/design/HANDOFF.md`: CSS-variable tokens for all three
+  themes (Spatial Dark / Light / Neon), density + reduce-motion, the cyan→magenta
+  identity, and Bricolage / Hanken / JetBrains Mono type.
+- Global shell — floating frosted header (wordmark, `/`-focus global search,
+  connection-health dots, density/theme toggles, scan pill, gradient Run-scan CTA),
+  floating top-nav, drifting aurora backdrop, and a live scan panel over `/ws/scan`.
+- Typed API client + hooks wired to the real backend; **Dashboard** (instrument
+  cluster + health orb) and **Library** (grid/table, filters, pagination) read live
+  data; **Activity** renders the audit feed; **Design System** is a live token sheet.
+- Missing / Junk / Ask / Taste Profile / Settings ship as on-brand placeholders
+  pending the Phase 1–2 analysis + AI backends.
+- Verified end-to-end: `npm run build` clean, served by FastAPI, and rendered in a
+  real browser across routes and themes. **Visual polish pending human sign-off.**
+- CI gains a `frontend` job (npm ci + typecheck + build).

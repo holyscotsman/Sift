@@ -41,6 +41,24 @@ The delete-safety test is mutation-verified: disabling the guard in
 
 ---
 
+## Frontend (walking skeleton — code-complete, visual-pending)
+
+Built from `docs/design/HANDOFF.md` in `frontend/` (React + Vite + TS + Tailwind).
+`npm run build` is clean; FastAPI serves `frontend/dist` at `/` with an SPA fallback;
+verified rendering in a real browser across routes + themes.
+
+- Design tokens for all 3 themes, density + reduce-motion, global shell (header /
+  top-nav / aurora / scan panel), routing for all 8 screens.
+- **Dashboard** + **Library** wired to the real API; **Activity** + **Design System**
+  live. Missing / Junk / Ask / Taste Profile / Settings are on-brand placeholders.
+- **Visual sign-off pending** (per DoD): the screens are code-complete but need a
+  human look, and light/neon token values want a fidelity pass. `dist/` is gitignored
+  — run `npm --prefix frontend run build` before serving.
+
+Next frontend slices: Junk queue + confirm modal (needs Phase-1 scores), Missing
+(collection gaps + recs), Ask (streaming + compare), Taste Profile sliders, Settings
+(editable), the Movie drawer, and the pointer-tilt hook.
+
 ## Next up
 
 1. **Finish the Phase 0 gate**: point `sift.toml`/`.env` at the real Plex+Radarr,

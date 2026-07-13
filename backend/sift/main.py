@@ -12,8 +12,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -82,7 +83,21 @@ def create_app(
         return {"name": "sift", "version": __version__}
 
     if _FRONTEND_DIST.is_dir():
-        app.mount("/", StaticFiles(directory=str(_FRONTEND_DIST), html=True), name="ui")
+        # Serve hashed build assets, then fall back to index.html for any other
+        # path so client-side (SPA) routes like /library deep-link on refresh.
+        assets_dir = _FRONTEND_DIST / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+        index_file = _FRONTEND_DIST / "index.html"
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def spa(full_path: str) -> FileResponse:
+            if full_path.startswith(("api/", "ws/")):
+                raise HTTPException(status_code=404, detail="not found")
+            candidate = _FRONTEND_DIST / full_path
+            if full_path and candidate.is_file() and candidate.is_relative_to(_FRONTEND_DIST):
+                return FileResponse(candidate)
+            return FileResponse(index_file)
     else:
 
         @app.get("/")
