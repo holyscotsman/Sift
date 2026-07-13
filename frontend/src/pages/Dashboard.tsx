@@ -100,7 +100,20 @@ export function Dashboard() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="panel p-5 lg:col-span-2">
           <span className="eyebrow">Needs your attention</span>
-          {pending.length === 0 ? (
+          {(c?.upgrades ?? 0) > 0 && (
+            <Link
+              to="/library?filter=upgrades"
+              className="mt-3 flex items-center gap-3 rounded-md border border-line bg-bg2 px-3 py-2.5 hover:bg-bg3"
+            >
+              <Pill tone="borderline">↑ upgrade</Pill>
+              <span className="text-sm text-fg2">
+                {c!.upgrades.toLocaleString()} title{c!.upgrades === 1 ? "" : "s"} below the quality
+                cutoff
+              </span>
+              <span className="ml-auto text-xs font-semibold text-accent">Review</span>
+            </Link>
+          )}
+          {pending.length === 0 && (c?.upgrades ?? 0) === 0 ? (
             <EmptyState title="All caught up" hint="No removals or actions are waiting for approval." />
           ) : (
             <ul className="mt-3 divide-y divide-line">

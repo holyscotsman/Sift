@@ -16,9 +16,11 @@ export function PageTitle({ title, subhead }: { title: string; subhead?: ReactNo
 export function Pill({
   children,
   tone = "neutral",
+  title,
 }: {
   children: ReactNode;
   tone?: "neutral" | "keep" | "borderline" | "junk" | "accent";
+  title?: string;
 }) {
   const map: Record<string, { bg: string; fg: string }> = {
     neutral: { bg: "var(--bg-3)", fg: "var(--fg-2)" },
@@ -35,6 +37,7 @@ export function Pill({
     <span
       className="inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold"
       style={{ background: c.bg, color: c.fg }}
+      title={title}
     >
       {children}
     </span>

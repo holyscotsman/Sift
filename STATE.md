@@ -15,14 +15,23 @@ Green gates (run from `backend/` in the venv at `../.venv`):
 ```bash
 ruff check .            # clean
 ../.venv/bin/mypy sift  # strict, clean (48 files)
-../.venv/bin/pytest -q  # 62 passed
+../.venv/bin/pytest -q  # 65 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
 ```
 
 The delete-safety test is mutation-verified: disabling the guard in
 `actions/engine.py` fails `test_actions_safety.py` (negative control has teeth).
 
-### Live action execution (Phase 3) — latest slice
+### Upgrade detector (cutoff-unmet) — latest slice
+- `Movie.cutoff_unmet` (migration `0002`, indexed) captures Radarr's "below profile
+  cutoff" verdict, read free from the movie payload during the radarr phase.
+- `analysis/upgrades.py` + `GET /api/upgrades` + `/api/status` `upgrades` count +
+  `/api/movies?cutoff_unmet=` filter. Surfaced in-design: Library "Below cutoff"
+  quick filter (`?filter=upgrades`), a table badge, and a Dashboard callout.
+- `alembic upgrade head`/`downgrade base` verified; 0002 is idempotent so it applies
+  cleanly over the create_all baseline.
+
+### Live action execution (Phase 3) — earlier slice
 - `POST /api/actions/{id}/execute` completes the lifecycle over HTTP; the golden
   guard maps to **403** for an unapproved delete (409 already-done, 404 unknown).
 - `RadarrWriter(RadarrConfig)` builds a short-lived `RadarrClient` per live write
@@ -76,10 +85,12 @@ verified rendering in a real browser across routes + themes.
 
 1. **Operator verification** on the real server: run a live scan, then exercise the
    Junk queue in staged mode; flip `SIFT_ACTIONS__DRY_RUN=false` only when confident.
-2. **Duplicates / quality-upgrade detection** in `analysis/` (own screen slice).
-3. **AI depth** once a key + embeddings land: LLM rationale on junk, grounded
+   Confirm the upgrade detector lights up (needs a Radarr library with cutoff-unmet
+   files) — it's structurally tested but unverified against real Radarr data.
+2. **AI depth** once a key + embeddings land: LLM rationale on junk, grounded
    recommendations, Ask streaming + compare.
-4. **Visual sign-off pass** across all 8 screens / 3 themes.
+3. **Visual sign-off pass** across all 8 screens / 3 themes (now incl. the Library
+   "Below cutoff" filter + Dashboard upgrade callout).
 
 ---
 

@@ -46,6 +46,13 @@ def _counts(session: Session) -> Counts:
             .where(Action.status == ActionStatus.PROPOSED)
         )
         or 0,
+        # Library titles Radarr says are below the quality cutoff (upgrade wanted).
+        upgrades=session.scalar(
+            select(func.count())
+            .select_from(Movie)
+            .where(Movie.in_plex.is_(True), Movie.has_file.is_(True), Movie.cutoff_unmet.is_(True))
+        )
+        or 0,
     )
 
 

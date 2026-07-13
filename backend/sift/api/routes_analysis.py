@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..analysis import collections as coll_analysis
 from ..analysis import junk as junk_analysis
 from ..analysis import scoring
+from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
 from ..services import settings_store
 from .deps import AuthDep, get_session_factory, get_settings
@@ -23,6 +24,8 @@ from .schemas import (
     MissingCollectionsResponse,
     RecommendationsResponse,
     SignalOut,
+    UpgradeCandidateOut,
+    UpgradesResponse,
 )
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[AuthDep])
@@ -59,6 +62,32 @@ def junk(
                 )
             )
     return JunkResponse(items=items, total=len(items))
+
+
+@router.get("/upgrades", response_model=UpgradesResponse)
+def upgrades(
+    limit: int = 200,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> UpgradesResponse:
+    with factory() as session:
+        rows = upgrade_analysis.candidates(session, limit=limit)
+        total = upgrade_analysis.count(session)
+    return UpgradesResponse(
+        items=[
+            UpgradeCandidateOut(
+                tmdb_id=c.tmdb_id,
+                title=c.title,
+                year=c.year,
+                poster_url=c.poster_url,
+                library_section=c.library_section,
+                quality=c.quality,
+                file_size=c.file_size,
+                is_kids=c.is_kids,
+            )
+            for c in rows
+        ],
+        total=total,
+    )
 
 
 @router.get("/missing/collections", response_model=MissingCollectionsResponse)

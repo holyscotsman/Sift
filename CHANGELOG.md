@@ -4,6 +4,23 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — upgrade detector (cutoff-unmet)
+- Deterministic **upgrade detector**: library titles whose current file is below
+  Radarr's quality-profile cutoff. The verdict (`cutoff_unmet`) is read straight off
+  the Radarr movie payload during ingestion — **no extra request** — and stored on
+  the movie (migration `0002`, indexed). Kids items are included (an upgrade is never
+  a removal, so there's no safety reason to guard them).
+- `analysis/upgrades.py` (`candidates` ordered biggest-file-first, `count`), a new
+  `GET /api/upgrades`, an `upgrades` figure on `/api/status` counts, and a
+  `cutoff_unmet` filter on `/api/movies`.
+- Frontend surfaces it in-design (no new screen): a **"Below cutoff"** quick filter
+  on Library (deep-linkable via `?filter=upgrades`), an **"↑ upgrade"** badge in the
+  table, and an actionable **"N titles below the quality cutoff"** callout on the
+  Dashboard linking to the filtered library.
+- Tests with negative controls: normalize extracts the flag (and ignores it when
+  there's no file); the detector excludes meets-cutoff and non-Plex titles and orders
+  by size; endpoint + status-count + Library-filter coverage.
+
 ### Added — live action execution (Phase 3)
 - `POST /api/actions/{id}/execute` completes the action lifecycle over HTTP. The
   golden guard is preserved: an unapproved delete returns **403** and is never

@@ -34,6 +34,28 @@ def test_normalize_radarr_movie():
     assert out["collection"] == {"tmdb_collection_id": 8945, "name": "Nolan set"}
     assert {r["source"] for r in out["ratings"]} == {"imdb", "tmdb"}
     assert out["added_at"] is not None and out["added_at"].tzinfo is not None
+    # No cutoff flag in the payload → not an upgrade candidate.
+    assert out["cutoff_unmet"] is False
+
+
+def test_normalize_radarr_cutoff_unmet_variants():
+    # Flag on the movieFile, with a file present → upgrade wanted.
+    on_file = normalize.normalize_radarr_movie(
+        {"tmdbId": 1, "hasFile": True, "movieFile": {"qualityCutoffNotMet": True}}
+    )
+    assert on_file["cutoff_unmet"] is True
+
+    # Flag at the movie root (older Radarr shape) → still detected.
+    on_root = normalize.normalize_radarr_movie(
+        {"tmdbId": 2, "hasFile": True, "qualityCutoffNotMet": True}
+    )
+    assert on_root["cutoff_unmet"] is True
+
+    # NEGATIVE CONTROL: cutoff flag set but no file → not a candidate (nothing to upgrade).
+    no_file = normalize.normalize_radarr_movie(
+        {"tmdbId": 3, "hasFile": False, "qualityCutoffNotMet": True}
+    )
+    assert no_file["cutoff_unmet"] is False
 
 
 def test_extract_plex_ids_from_guid_list_and_legacy():

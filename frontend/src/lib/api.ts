@@ -19,6 +19,7 @@ import type {
   StatusResponse,
   ThresholdPreview,
   Thresholds,
+  UpgradesResponse,
 } from "./types";
 
 const TOKEN_KEY = "sift_token";
@@ -69,6 +70,7 @@ export interface MovieQuery {
   monitored?: boolean;
   in_plex?: boolean;
   has_file?: boolean;
+  cutoff_unmet?: boolean;
   sort?: string;
   order?: "asc" | "desc";
   page?: number;
@@ -98,6 +100,7 @@ export const api = {
   ask: (query: string, mode = "single") =>
     request<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, mode }) }),
   junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),
+  upgrades: (limit = 200) => request<UpgradesResponse>(`/api/upgrades?limit=${limit}`),
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),

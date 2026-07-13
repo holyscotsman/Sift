@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from sift.analysis import junk
+from sift.analysis import junk, upgrades
 from sift.config import JunkThresholds
 from sift.db.models import Collection, CollectionMember, Movie, Rating, RatingSource
 from sift.main import create_app
@@ -40,6 +40,45 @@ def test_candidates_exclude_good_kids_and_non_library(factory):
     assert ids == {603}  # junk only; good kept, kids guarded, wanted not in library
 
 
+def _seed_upgrades(factory):
+    with factory() as session:
+        session.add_all(
+            [
+                # In Plex, has a file below cutoff → an upgrade candidate.
+                Movie(
+                    tmdb_id=603, title="Below Cutoff", in_plex=True, has_file=True,
+                    cutoff_unmet=True, quality="WEBDL-720p", file_size=3_000_000_000,
+                ),
+                # Kids item below cutoff → still a candidate (upgrade isn't a removal).
+                Movie(
+                    tmdb_id=862, title="Kids Below Cutoff", in_plex=True, is_kids=True,
+                    has_file=True, cutoff_unmet=True, quality="SDTV", file_size=800_000_000,
+                ),
+                # NEGATIVE CONTROL: in Plex, meets cutoff → not a candidate.
+                Movie(
+                    tmdb_id=604, title="Meets Cutoff", in_plex=True, has_file=True,
+                    cutoff_unmet=False, quality="Bluray-1080p",
+                ),
+                # NEGATIVE CONTROL: below cutoff in Radarr but NOT in Plex → not a candidate.
+                Movie(
+                    tmdb_id=999, title="Wanted Below Cutoff", in_plex=False, monitored=True,
+                    has_file=True, cutoff_unmet=True,
+                ),
+            ]
+        )
+        session.commit()
+
+
+def test_upgrade_candidates_filter_and_order(factory):
+    _seed_upgrades(factory)
+    with factory() as session:
+        assert upgrades.count(session) == 2
+        cands = upgrades.candidates(session)
+    ids = [c.tmdb_id for c in cands]
+    assert set(ids) == {603, 862}  # meets-cutoff and non-Plex excluded
+    assert ids[0] == 603  # ordered by file size desc (biggest re-grab first)
+
+
 @pytest.fixture
 def client(settings, factory):
     for name in ("plex", "radarr", "tautulli", "tmdb"):
@@ -47,6 +86,22 @@ def client(settings, factory):
     app = create_app(settings, session_factory=factory)
     with TestClient(app) as c:
         yield c, factory
+
+
+def test_upgrades_endpoint_and_status_count(client):
+    c, factory = client
+    _seed_upgrades(factory)
+
+    body = c.get("/api/upgrades").json()
+    assert body["total"] == 2
+    assert {i["tmdb_id"] for i in body["items"]} == {603, 862}
+
+    # The same figure surfaces on the Dashboard status counts.
+    assert c.get("/api/status").json()["counts"]["upgrades"] == 2
+
+    # And the Library filter narrows to exactly the below-cutoff library titles.
+    filtered = c.get("/api/movies", params={"in_plex": True, "cutoff_unmet": True}).json()
+    assert {i["tmdb_id"] for i in filtered["items"]} == {603, 862}
 
 
 def test_junk_endpoint(client):

@@ -37,6 +37,7 @@ def list_movies(
     monitored: bool | None = None,
     in_plex: bool | None = None,
     has_file: bool | None = None,
+    cutoff_unmet: bool | None = None,
     sort: str = "title",
     order: str = "asc",
     page: int = Query(default=1, ge=1),
@@ -55,6 +56,8 @@ def list_movies(
         stmt = stmt.where(Movie.in_plex.is_(in_plex))
     if has_file is not None:
         stmt = stmt.where(Movie.has_file.is_(has_file))
+    if cutoff_unmet is not None:
+        stmt = stmt.where(Movie.cutoff_unmet.is_(cutoff_unmet))
 
     column = _SORTABLE.get(sort, Movie.title)
     stmt = stmt.order_by(column.desc() if order == "desc" else column.asc())

@@ -258,6 +258,7 @@ class ScanPipeline:
                 movie.monitored = data["monitored"]
                 movie.has_file = data["has_file"]
                 movie.quality = data["quality"]
+                movie.cutoff_unmet = data["cutoff_unmet"]
                 movie.file_size = data["file_size"]
                 movie.added_at = data["added_at"]
                 self._sync_ratings(session, tmdb_id, data["ratings"])

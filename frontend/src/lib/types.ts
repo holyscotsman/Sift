@@ -20,6 +20,7 @@ export interface Counts {
   collections: number;
   watch_records: number;
   actions_pending: number;
+  upgrades: number;
 }
 
 export interface StatusResponse {
@@ -46,6 +47,7 @@ export interface Movie {
   has_file: boolean;
   quality: string | null;
   file_size: number | null;
+  cutoff_unmet: boolean;
   poster_url: string | null;
   added_at: string | null;
 }
@@ -135,6 +137,22 @@ export interface CollectionGap {
 
 export interface MissingCollectionsResponse {
   collections: CollectionGap[];
+}
+
+export interface UpgradeCandidate {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  poster_url: string | null;
+  library_section: string | null;
+  quality: string | null;
+  file_size: number | null;
+  is_kids: boolean;
+}
+
+export interface UpgradesResponse {
+  items: UpgradeCandidate[];
+  total: number;
 }
 
 export interface ProfileBucket {

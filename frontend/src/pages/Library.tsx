@@ -13,13 +13,16 @@ import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
 
 type View = "grid" | "table";
-type Quick = "plex" | "all" | "monitored" | "kids";
+type Quick = "plex" | "all" | "monitored" | "kids" | "upgrades";
+
+const QUICK_ORDER: Quick[] = ["plex", "all", "monitored", "kids", "upgrades"];
 
 const QUICK_LABELS: Record<Quick, string> = {
   plex: "In Plex",
   all: "All",
   monitored: "Monitored",
   kids: "Kids",
+  upgrades: "Below cutoff",
 };
 
 function posterGradient(id: number): string {
@@ -31,7 +34,11 @@ export function Library() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [view, setView] = useState<View>("grid");
-  const [quick, setQuick] = useState<Quick>("plex");
+  // Seed the quick filter from a deep-link (e.g. Dashboard → ?filter=upgrades).
+  const seeded = params.get("filter") as Quick | null;
+  const [quick, setQuick] = useState<Quick>(
+    seeded && QUICK_ORDER.includes(seeded) ? seeded : "plex",
+  );
   const [sort, setSort] = useState("title");
   const pageSize = view === "grid" ? 36 : 60;
 
@@ -52,9 +59,12 @@ export function Library() {
   const buildQuery = useCallback(
     (page: number): MovieQuery => ({
       q: q || undefined,
-      in_plex: quick === "plex" ? true : undefined,
+      // "Below cutoff" is a library view (Plex is the source of truth) narrowed to
+      // titles Radarr says are under the quality cutoff.
+      in_plex: quick === "plex" || quick === "upgrades" ? true : undefined,
       monitored: quick === "monitored" ? true : undefined,
       is_kids: quick === "kids" ? true : undefined,
+      cutoff_unmet: quick === "upgrades" ? true : undefined,
       sort,
       order: sort === "title" ? "asc" : "desc",
       page,
@@ -135,7 +145,7 @@ export function Library() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(["plex", "all", "monitored", "kids"] as Quick[]).map((k) => (
+        {QUICK_ORDER.map((k) => (
           <button
             key={k}
             onClick={() => setQuick(k)}
@@ -286,7 +296,14 @@ function TableView({ items }: { items: Movie[] }) {
               <td className="hidden px-3 py-2.5 text-fg2 md:table-cell">{m.year ?? "—"}</td>
               <td className="px-3 py-2.5 text-fg2">{m.library_section ?? "—"}</td>
               <td className="hidden px-3 py-2.5 md:table-cell">
-                {m.quality ? <Pill>{m.quality}</Pill> : <span className="text-fg3">—</span>}
+                <span className="flex items-center gap-1.5">
+                  {m.quality ? <Pill>{m.quality}</Pill> : <span className="text-fg3">—</span>}
+                  {m.cutoff_unmet && (
+                    <Pill tone="borderline" title="Below Radarr quality cutoff — upgrade wanted">
+                      ↑ upgrade
+                    </Pill>
+                  )}
+                </span>
               </td>
               <td className="px-3 py-2.5">
                 {m.in_plex ? <Pill tone="keep">Yes</Pill> : <span className="text-fg3">—</span>}

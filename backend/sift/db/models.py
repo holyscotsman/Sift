@@ -101,6 +101,10 @@ class Movie(Base):
     has_file: Mapped[bool] = mapped_column(Boolean, default=False)
     quality: Mapped[str | None] = mapped_column(String(64))
     file_size: Mapped[int | None] = mapped_column(BigInteger)
+    # Radarr's own verdict: the current file's quality is below the profile cutoff,
+    # i.e. an upgrade is wanted. Sourced from the movie payload (no extra request);
+    # meaningful only when has_file. Drives the deterministic upgrade detector.
+    cutoff_unmet: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     added_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(

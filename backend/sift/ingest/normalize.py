@@ -58,6 +58,14 @@ def normalize_radarr_movie(raw: dict[str, Any]) -> dict[str, Any]:
     movie_file = raw.get("movieFile") or {}
     quality = (((movie_file.get("quality") or {}).get("quality")) or {}).get("name")
 
+    has_file = bool(raw.get("hasFile", False))
+    # Radarr surfaces "current quality is below the profile cutoff" as
+    # qualityCutoffNotMet. Its exact location moved across versions (movieFile vs the
+    # movie root), so read both. Only meaningful when a file actually exists.
+    cutoff_unmet = has_file and bool(
+        movie_file.get("qualityCutoffNotMet") or raw.get("qualityCutoffNotMet")
+    )
+
     ratings: list[dict[str, Any]] = []
     for source, block in (raw.get("ratings") or {}).items():
         if source not in ("tmdb", "imdb"):
@@ -90,8 +98,9 @@ def normalize_radarr_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "overview": raw.get("overview") or None,
         "poster_url": poster_url,
         "monitored": bool(raw.get("monitored", False)),
-        "has_file": bool(raw.get("hasFile", False)),
+        "has_file": has_file,
         "quality": quality,
+        "cutoff_unmet": cutoff_unmet,
         "file_size": _int_or_none(raw.get("sizeOnDisk")),
         "added_at": parse_dt(raw.get("added")),
         "ratings": ratings,

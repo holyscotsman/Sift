@@ -28,6 +28,7 @@ class Counts(BaseModel):
     collections: int
     watch_records: int
     actions_pending: int
+    upgrades: int
 
 
 class StatusResponse(BaseModel):
@@ -56,6 +57,7 @@ class MovieOut(BaseModel):
     has_file: bool
     quality: str | None
     file_size: int | None
+    cutoff_unmet: bool
     poster_url: str | None
     added_at: datetime | None
 
@@ -150,6 +152,22 @@ class JunkCandidate(BaseModel):
 
 class JunkResponse(BaseModel):
     items: list[JunkCandidate]
+    total: int
+
+
+class UpgradeCandidateOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    poster_url: str | None
+    library_section: str | None
+    quality: str | None
+    file_size: int | None
+    is_kids: bool
+
+
+class UpgradesResponse(BaseModel):
+    items: list[UpgradeCandidateOut]
     total: int
 
 
