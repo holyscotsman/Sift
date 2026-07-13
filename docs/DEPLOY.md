@@ -82,3 +82,22 @@ That's it — bookmark the URL on your phone and you're set.
   change that; putting Radarr behind HTTPS + a login later would harden the whole setup.
 - Only `add` / `monitor` / `unmonitor` can run autonomously; **a file delete is never
   issued without your explicit in-app approval.**
+
+## Removals: staged vs. live
+
+Sift ships **staged (dry-run) by default** — approving a removal records it in the
+audit log but **does not touch any files**. This is the safe default for a hosted
+instance: even someone with your token can't delete anything.
+
+When you're ready to let Sift actually issue deletes to Radarr, set one env var in
+Render:
+
+| Variable | Value |
+|---|---|
+| `SIFT_ACTIONS__DRY_RUN` | `false` |
+
+With it `false`, an **approved** removal is sent to Radarr (`deleteFiles=true`) — the
+Junk screen then says **"Removed"** instead of **"Removal staged"**, and warns you in
+the confirm dialog that the delete is real and irreversible. The approval gate still
+applies: nothing deletes without you clicking through. Leave it unset (or `true`) to
+stay in the audit-only staging mode.

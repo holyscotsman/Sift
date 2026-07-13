@@ -1,8 +1,13 @@
-"""Action proposal / approval endpoints + the activity feed.
+"""Action proposal / approval / execution endpoints + the activity feed.
 
-Phase 0 exposes the *safe* half of the action lifecycle over HTTP: propose,
-approve, reject, and the audit feed. The delete is never executed from this
-surface — execution is wired in Phase 3, still behind the ``ActionEngine`` guard.
+The full action lifecycle is exposed here: propose, approve, reject, execute, and
+the audit feed. Execution stays behind the ``ActionEngine`` golden guard — an
+irreversible delete is refused (HTTP 403) unless it has been explicitly approved.
+
+``dry_run`` is server-authoritative. The effective value is
+``settings.actions.dry_run OR body.dry_run``: a client may opt *into* staging but
+can never force a live write when the hosted instance is configured dry-run. Flip
+``SIFT_ACTIONS__DRY_RUN=false`` to let approved actions actually reach Radarr.
 """
 
 from __future__ import annotations
@@ -11,9 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..actions.engine import ActionEngine
+from ..actions.engine import ActionEngine, ApprovalRequiredError
+from ..config import Settings
 from ..db.models import Action
-from .deps import AuthDep, get_action_engine, get_session_factory
+from .deps import AuthDep, get_action_engine, get_session_factory, get_settings
 from .schemas import ActionOut, ProposeActionIn
 
 router = APIRouter(prefix="/api", tags=["actions"], dependencies=[AuthDep])
@@ -21,14 +27,19 @@ router = APIRouter(prefix="/api", tags=["actions"], dependencies=[AuthDep])
 
 @router.post("/actions", response_model=ActionOut, status_code=201)
 def propose_action(
-    body: ProposeActionIn, engine: ActionEngine = Depends(get_action_engine)
+    body: ProposeActionIn,
+    engine: ActionEngine = Depends(get_action_engine),
+    settings: Settings = Depends(get_settings),
 ) -> Action:
+    # The server's dry_run is a floor: a client can ask for staging but never for a
+    # live write the operator hasn't enabled.
+    dry_run = settings.actions.dry_run or body.dry_run
     return engine.propose(
         body.type,
         movie_tmdb_id=body.movie_tmdb_id,
         payload=body.payload,
         actor=body.actor,
-        dry_run=body.dry_run,
+        dry_run=dry_run,
     )
 
 
@@ -50,6 +61,22 @@ def reject_action(
         return engine.reject(action_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/actions/{action_id}/execute", response_model=ActionOut)
+async def execute_action(
+    action_id: int, engine: ActionEngine = Depends(get_action_engine)
+) -> Action:
+    try:
+        return await engine.execute(action_id)
+    except ApprovalRequiredError as exc:
+        # The golden guard: an unapproved delete is a policy refusal, not a crash.
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        # Unknown id or an illegal state transition (already executed/rejected).
+        detail = str(exc)
+        status = 404 if "not found" in detail else 409
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 @router.get("/activity", response_model=list[ActionOut])

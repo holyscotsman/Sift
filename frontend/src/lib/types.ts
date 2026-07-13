@@ -200,6 +200,7 @@ export interface SettingsResponse {
   connections: ServiceHealth[];
   thresholds: Thresholds;
   ai_configured: boolean;
+  actions_dry_run: boolean;
 }
 
 export interface ThresholdPreview {

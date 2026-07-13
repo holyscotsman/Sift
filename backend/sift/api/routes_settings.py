@@ -50,6 +50,7 @@ async def get_all(
         ],
         thresholds=_thresholds_out(thr),
         ai_configured=ai_configured(),
+        actions_dry_run=settings.actions.dry_run,
     )
 
 

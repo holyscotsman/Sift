@@ -122,3 +122,43 @@ def test_delete_action_is_proposed_not_executed_over_http(client):
 
     activity = c.get("/api/activity").json()
     assert any(a["id"] == action["id"] for a in activity)
+
+
+def test_execute_unapproved_delete_is_forbidden(client):
+    # The golden guard, surfaced over HTTP: an unapproved delete → 403, never issued.
+    c, _ = client
+    action = c.post(
+        "/api/actions",
+        json={"type": "delete", "movie_tmdb_id": 603, "payload": {"delete_files": True}},
+    ).json()
+    resp = c.post(f"/api/actions/{action['id']}/execute")
+    assert resp.status_code == 403
+    # And the action is now recorded failed, not executed.
+    assert c.get("/api/activity").json()[0]["status"] == "failed"
+
+
+def test_execute_approved_delete_is_staged_in_dry_run(client):
+    # Default (hosted) posture is dry-run: an approved delete "executes" but is staged
+    # — status executed, nothing sent. This is the safe default.
+    c, _ = client
+    action = c.post(
+        "/api/actions",
+        json={
+            "type": "delete",
+            "movie_tmdb_id": 603,
+            "payload": {"delete_files": True},
+            "dry_run": False,  # client asks to go live...
+        },
+    ).json()
+    # ...but the server floor keeps it staged because SIFT_ACTIONS__DRY_RUN defaults on.
+    assert action["dry_run"] is True
+    c.post(f"/api/actions/{action['id']}/approve")
+    done = c.post(f"/api/actions/{action['id']}/execute").json()
+    assert done["status"] == "executed"
+    assert done["dry_run"] is True
+    assert done["payload"]["result"]["sent"] is False
+
+
+def test_settings_reports_dry_run(client):
+    c, _ = client
+    assert c.get("/api/settings").json()["actions_dry_run"] is True

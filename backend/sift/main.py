@@ -70,9 +70,10 @@ def create_app(
         init_db(engine)
         session_factory = make_session_factory(engine)
     if action_engine is None:
-        # Phase 0 writer has no live client: proposals/approvals are DB-only and the
-        # execution path (Phase 3) is the only thing that ever needs a real client.
-        action_engine = ActionEngine(session_factory, RadarrWriter(None))
+        # The writer is built from the Radarr connection so an approved delete (or an
+        # autonomous add/monitor) can actually be issued. It stays safe by default:
+        # every proposal is staged with dry_run unless SIFT_ACTIONS__DRY_RUN=false.
+        action_engine = ActionEngine(session_factory, RadarrWriter(settings.radarr))
 
     app = FastAPI(title="Sift", version=__version__, lifespan=_lifespan)
     app.add_middleware(

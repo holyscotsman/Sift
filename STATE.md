@@ -6,18 +6,32 @@ Resume point + working decisions. Read after `CLAUDE.md`.
 
 ## Where we are
 
-**Phase 0 — Skeleton + read-only ingestion: code-complete.**
+**Phases 0–3 — ingestion, deterministic analysis, AI provider layer, and live
+action execution: code-complete.** Hosted on Render; repo pushed to
+`holyscotsman/wwtbane`, PR open on `claude/sift-webapp-setup-2qmxsn`.
 
-Green gates (run from repo root in the venv):
+Green gates (run from `backend/` in the venv at `../.venv`):
 
 ```bash
-ruff check backend     # clean
-mypy                   # strict, clean
-pytest                 # 39 passed
+ruff check .            # clean
+../.venv/bin/mypy sift  # strict, clean (48 files)
+../.venv/bin/pytest -q  # 62 passed
+npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
 ```
 
 The delete-safety test is mutation-verified: disabling the guard in
 `actions/engine.py` fails `test_actions_safety.py` (negative control has teeth).
+
+### Live action execution (Phase 3) — latest slice
+- `POST /api/actions/{id}/execute` completes the lifecycle over HTTP; the golden
+  guard maps to **403** for an unapproved delete (409 already-done, 404 unknown).
+- `RadarrWriter(RadarrConfig)` builds a short-lived `RadarrClient` per live write
+  and closes it. `SIFT_ACTIONS__DRY_RUN` (**default `true`**) is the master switch;
+  the propose endpoint treats it as a floor (a client can stage, never force live).
+- `/api/settings` exposes `actions_dry_run`; the **Junk** screen runs propose →
+  approve → execute and labels **"Removed"** vs **"Removal staged"**.
+- **Live deletes are OFF by default.** They only fire when the operator sets
+  `SIFT_ACTIONS__DRY_RUN=false` *and* clicks through the in-app approval.
 
 ### Built
 - Config (`config.py`): env > `.env` > `sift.toml` > defaults; secrets as `SecretStr`.
@@ -49,25 +63,23 @@ verified rendering in a real browser across routes + themes.
 
 - Design tokens for all 3 themes, density + reduce-motion, global shell (header /
   top-nav / aurora / scan panel), routing for all 8 screens.
-- **Dashboard** + **Library** wired to the real API; **Activity** + **Design System**
-  live. Missing / Junk / Ask / Taste Profile / Settings are on-brand placeholders.
+- **All 8 screens are now wired to the real API** — Dashboard, Library (infinite
+  scroll), Junk (propose→approve→execute), Missing (collection gaps), Ask (grounded
+  retrieval), Taste Profile (buckets + emphasis sliders), Settings (connections +
+  editable thresholds + AI/dry-run status), Activity feed, and the live Design System.
+  The Movie drawer is live.
 - **Visual sign-off pending** (per DoD): the screens are code-complete but need a
   human look, and light/neon token values want a fidelity pass. `dist/` is gitignored
   — run `npm --prefix frontend run build` before serving.
 
-Next frontend slices: Junk queue + confirm modal (needs Phase-1 scores), Missing
-(collection gaps + recs), Ask (streaming + compare), Taste Profile sliders, Settings
-(editable), the Movie drawer, and the pointer-tilt hook.
-
 ## Next up
 
-1. **Finish the Phase 0 gate**: point `sift.toml`/`.env` at the real Plex+Radarr,
-   run `sift scan`, confirm `movies/ratings/watch_history/collections` populate and
-   `/api/status` counts are accurate; confirm resume after a mid-scan drop.
-2. **Phase 1 — deterministic analysis** (`analysis/`): collection completeness,
-   duplicates, cutoff-unmet, vote-weighted junk score (Bayesian). Golden fixture
-   test; kids items excluded from junk. No LLM yet.
-3. **Frontend** waits on the design upload (React + Vite + TS, served at `/`).
+1. **Operator verification** on the real server: run a live scan, then exercise the
+   Junk queue in staged mode; flip `SIFT_ACTIONS__DRY_RUN=false` only when confident.
+2. **Duplicates / quality-upgrade detection** in `analysis/` (own screen slice).
+3. **AI depth** once a key + embeddings land: LLM rationale on junk, grounded
+   recommendations, Ask streaming + compare.
+4. **Visual sign-off pass** across all 8 screens / 3 themes.
 
 ---
 
@@ -87,9 +99,11 @@ Next frontend slices: Junk queue + confirm modal (needs Phase-1 scores), Missing
 
 ## Blockers / for the human
 
-- **GitHub repo creation is blocked in this session** — the Claude GitHub App is
-  scoped to `holyscotsman/wwtbane` and returned 403 on `create_repository`. The
-  code is committed locally on branch `claude/sift-webapp-setup-2qmxsn`. To host it:
-  either (a) create an empty `Sift` repo on github.com and it can be pushed/added,
-  or (b) grant the app repo-creation permission. See the session summary.
-- **Design** for the frontend is pending upload.
+- **Live scan against the real family server** still needs the operator to run it
+  with real Plex/Radarr credentials (the `Done when` gate for ingestion).
+- **Visual sign-off** on all 8 screens across the 3 themes (per DoD).
+- **To enable real deletes:** set `SIFT_ACTIONS__DRY_RUN=false` in Render when ready
+  — until then every approved removal is staged (audit-only).
+- Optional/gated features still deferred: real AI answers (needs `ANTHROPIC_API_KEY`),
+  recommendations + Ask compare panes (need the embeddings layer), watch-history
+  signals (need Tautulli).

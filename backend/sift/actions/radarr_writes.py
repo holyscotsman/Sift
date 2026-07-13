@@ -4,6 +4,13 @@ Every mutating call to Radarr goes through here. In ``dry_run`` mode the intende
 request is logged and returned but **never sent** — nothing changes on the server.
 The delete path is exposed but is only ever reached via ``ActionEngine`` after an
 approval (the golden safety rule); this wrapper additionally logs deletes loudly.
+
+A live write builds a short-lived :class:`RadarrClient` from the stored
+:class:`RadarrConfig`, sends the one request, and closes it. Deletes/monitors are
+rare and user-driven, so a per-write client (rather than a long-lived pooled one)
+keeps the lifecycle trivial — nothing to dispose at shutdown. Passing ``None`` for
+the config yields a writer that can *stage* (dry-run) but refuses any live write;
+that is the shape the test ``SpyWriter`` subclasses.
 """
 
 from __future__ import annotations
@@ -12,7 +19,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
+
 from ..clients.radarr import RadarrClient
+from ..config import RadarrConfig
 
 log = logging.getLogger("sift.actions")
 
@@ -28,8 +38,20 @@ class WriteResult:
 
 
 class RadarrWriter:
-    def __init__(self, client: RadarrClient | None) -> None:
-        self._client = client
+    def __init__(
+        self,
+        config: RadarrConfig | None,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._config = config
+        # Test seam: injected into the per-write RadarrClient so live writes can be
+        # exercised against a mock server without real network I/O.
+        self._transport = transport
+
+    def _live_capable(self) -> bool:
+        """True when a real request could actually be issued (config + base_url)."""
+        return self._config is not None and bool(self._config.base_url)
 
     async def _execute(
         self, method: str, path: str, *, params: dict[str, Any] | None = None,
@@ -39,9 +61,13 @@ class RadarrWriter:
         if dry_run:
             log.info("DRY-RUN %s %s payload=%s", method, path, payload)
             return WriteResult(method, path, payload, dry_run=True, sent=False)
-        if self._client is None:
-            raise RuntimeError("RadarrWriter has no client configured for a live write")
-        response = await self._client.request(method, path, params=params, json=json)
+        if not self._live_capable():
+            raise RuntimeError(
+                "RadarrWriter has no Radarr connection configured for a live write"
+            )
+        assert self._config is not None  # narrowed by _live_capable
+        async with RadarrClient(self._config, transport=self._transport) as client:
+            response = await client.request(method, path, params=params, json=json)
         return WriteResult(
             method, path, payload, dry_run=False, sent=True, response=response.status_code
         )

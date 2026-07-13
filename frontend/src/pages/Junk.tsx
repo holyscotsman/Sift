@@ -1,6 +1,7 @@
 // Junk — deterministic removal queue. Every removal is approval-gated; the score
-// and signals come from the backend (data decides, never AI). Removals are staged
-// (dry-run) for now — nothing is deleted until live actions are enabled.
+// and signals come from the backend (data decides, never AI). Whether an approved
+// removal is actually issued to Radarr or merely staged depends on the server's
+// dry-run switch (SIFT_ACTIONS__DRY_RUN) — the UI reflects whichever is in effect.
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -11,7 +12,7 @@ import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { JunkCandidate } from "@/lib/types";
 
-type Decision = "kept" | "removed";
+type Decision = "kept" | "removed_live" | "removed_staged";
 
 function bandColor(band: string): string {
   return band === "junk" ? "var(--junk)" : band === "borderline" ? "var(--borderline)" : "var(--keep)";
@@ -35,6 +36,7 @@ export function Junk() {
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [modal, setModal] = useState<{ candidates: JunkCandidate[] } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dryRun, setDryRun] = useState(true);
 
   useEffect(() => {
     api
@@ -42,11 +44,19 @@ export function Junk() {
       .then((r) => setItems(r.items))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
+    // Learn whether the server will actually issue deletes or only stage them, so
+    // the confirm copy and result labels tell the truth.
+    api
+      .getSettings()
+      .then((s) => setDryRun(s.actions_dry_run))
+      .catch(() => setDryRun(true));
   }, []);
 
   const pending = useMemo(() => items.filter((c) => !decisions[c.tmdb_id]), [items, decisions]);
 
-  async function stageRemovals(candidates: JunkCandidate[]) {
+  // Propose → approve → execute. The engine refuses an unapproved delete, and the
+  // server's dry-run switch (not the client) decides whether files are really removed.
+  async function removeMovies(candidates: JunkCandidate[]) {
     setBusy(true);
     try {
       for (const c of candidates) {
@@ -54,9 +64,14 @@ export function Junk() {
           type: "delete",
           movie_tmdb_id: c.tmdb_id,
           payload: { delete_files: true, title: c.title },
+          dry_run: false, // request a live write; the server floor may still stage it
         });
-        await api.approveAction(action.id); // records explicit approval (staged)
-        setDecisions((d) => ({ ...d, [c.tmdb_id]: "removed" }));
+        await api.approveAction(action.id); // records the explicit, required approval
+        const done = await api.executeAction(action.id);
+        setDecisions((d) => ({
+          ...d,
+          [c.tmdb_id]: done.dry_run ? "removed_staged" : "removed_live",
+        }));
       }
     } finally {
       setBusy(false);
@@ -131,10 +146,10 @@ export function Junk() {
       <ConfirmModal
         open={modal !== null}
         title={`Approve removal of ${modal?.candidates.length ?? 0} title(s)?`}
-        confirmLabel="Approve removal"
+        confirmLabel={dryRun ? "Approve (staged)" : "Approve & remove"}
         busy={busy}
         onCancel={() => setModal(null)}
-        onConfirm={() => modal && stageRemovals(modal.candidates)}
+        onConfirm={() => modal && removeMovies(modal.candidates)}
         body={
           <div>
             <ul className="mb-3 max-h-40 overflow-y-auto text-sm">
@@ -145,11 +160,22 @@ export function Junk() {
                 </li>
               ))}
             </ul>
-            <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
-              Removals are <strong>staged (dry-run)</strong> for now — this records your approval
-              in the audit log but does not delete any files yet. Live Radarr execution is the next
-              step.
-            </p>
+            {dryRun ? (
+              <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
+                Removals are <strong>staged (dry-run)</strong> — this records your approval in the
+                audit log but does not delete any files. To let Sift issue deletes to Radarr, set
+                <code className="mx-1 rounded bg-bg px-1">SIFT_ACTIONS__DRY_RUN=false</code> on the
+                server.
+              </p>
+            ) : (
+              <p
+                className="rounded-md border p-2.5 text-xs"
+                style={{ borderColor: "var(--junk)", color: "var(--junk)" }}
+              >
+                Live mode: this will tell Radarr to <strong>delete the file(s)</strong>. This cannot
+                be undone.
+              </p>
+            )}
           </div>
         }
       />
@@ -228,8 +254,12 @@ function Row({
         <div className="flex flex-col gap-1.5">
           {decision ? (
             <>
-              <Pill tone={decision === "removed" ? "junk" : "keep"}>
-                {decision === "removed" ? "Removal staged" : "Kept"}
+              <Pill tone={decision === "kept" ? "keep" : "junk"}>
+                {decision === "kept"
+                  ? "Kept"
+                  : decision === "removed_live"
+                    ? "Removed"
+                    : "Removal staged"}
               </Pill>
               <button onClick={onReset} className="text-xs text-fg3 hover:text-fg">
                 Change

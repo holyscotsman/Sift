@@ -189,6 +189,8 @@ class SettingsResponse(BaseModel):
     connections: list[ServiceHealth]
     thresholds: ThresholdsModel
     ai_configured: bool
+    # True when writes are staged only (nothing reaches Radarr). The hosted default.
+    actions_dry_run: bool
 
 
 class ThresholdPreview(BaseModel):

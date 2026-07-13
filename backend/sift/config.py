@@ -100,6 +100,13 @@ class JunkThresholds(BaseModel):
     borderline_cutoff: float = 40.0
 
 
+class ActionsConfig(BaseModel):
+    """Radarr write behaviour. dry_run stages actions (logged/audited, nothing sent)
+    until you explicitly turn it off — the safe default for a hosted instance."""
+
+    dry_run: bool = True
+
+
 class AIConfig(BaseModel):
     """Phase 2 provider layer. Never used to decide correctness."""
 
@@ -127,6 +134,7 @@ class Settings(BaseSettings):
     tautulli: TautulliConfig = Field(default_factory=TautulliConfig)
     tmdb: TmdbConfig = Field(default_factory=TmdbConfig)
     junk: JunkThresholds = Field(default_factory=JunkThresholds)
+    actions: ActionsConfig = Field(default_factory=ActionsConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
 
     @classmethod

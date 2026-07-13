@@ -121,11 +121,14 @@ export const api = {
     type: ActionType;
     movie_tmdb_id?: number | null;
     payload?: Record<string, unknown>;
+    dry_run?: boolean;
   }) => request<ActionRecord>("/api/actions", { method: "POST", body: JSON.stringify(body) }),
   approveAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/approve`, { method: "POST" }),
   rejectAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/reject`, { method: "POST" }),
+  executeAction: (id: number) =>
+    request<ActionRecord>(`/api/actions/${id}/execute`, { method: "POST" }),
 };
 
 // Build the WebSocket URL for live scan progress, carrying the API token.

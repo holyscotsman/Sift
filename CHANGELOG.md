@@ -2,6 +2,29 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## Unreleased
+
+### Added — live action execution (Phase 3)
+- `POST /api/actions/{id}/execute` completes the action lifecycle over HTTP. The
+  golden guard is preserved: an unapproved delete returns **403** and is never
+  issued; already-executed/rejected actions return 409; unknown ids 404.
+- `RadarrWriter` now builds a short-lived `RadarrClient` from `RadarrConfig` for
+  each live write (add / monitor / unmonitor / delete), then closes it — nothing to
+  dispose at shutdown. `ActionsConfig.dry_run` (env `SIFT_ACTIONS__DRY_RUN`,
+  **default `true`**) is the master safety switch; the propose endpoint treats it as
+  a floor, so a client can opt *into* staging but can never force a live write the
+  operator hasn't enabled.
+- `/api/settings` reports `actions_dry_run` so the UI can tell the truth. The **Junk**
+  screen now runs propose → approve → **execute**, labels the result **"Removed"**
+  (live) vs **"Removal staged"** (dry-run), and warns in the confirm dialog when a
+  removal is real and irreversible.
+- Tests: execute-endpoint approval guard + dry-run floor over HTTP; an end-to-end
+  live-delete integration test proving an approved delete reaches Radarr
+  (`DELETE /api/v3/movie/{id}?deleteFiles=true`) via a mock transport; and a
+  negative control that a writer with no connection refuses (not silently no-ops) a
+  live write.
+- `docs/DEPLOY.md` documents the staged-vs-live switch.
+
 ## 2607.0.1 — Phase 0 foundations
 
 Initial backend skeleton for the read-only ingestion MVP.

@@ -8,10 +8,12 @@ This test is load-bearing. It pins both directions:
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from sift.actions.engine import ActionEngine, ApprovalRequiredError
 from sift.actions.radarr_writes import RadarrWriter, WriteResult
+from sift.config import RadarrConfig
 from sift.db.models import ActionStatus, ActionType
 
 
@@ -93,3 +95,48 @@ async def test_monitor_is_autonomous_without_approval(engine):
     result = await engine.execute(action.id)
     assert result.status == ActionStatus.EXECUTED
     assert ("monitor", 603, True) in engine.writer.calls
+
+
+async def test_live_approved_delete_actually_issues_to_radarr(factory):
+    """End-to-end proof (not the SpyWriter): an approved live delete reaches Radarr
+    with the right verb, path, and deleteFiles flag — through a mock transport."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    config = RadarrConfig(base_url="http://radarr.test", api_key=None)
+    writer = RadarrWriter(config, transport=httpx.MockTransport(handler))
+    engine = ActionEngine(factory, writer)
+
+    action = engine.propose(
+        ActionType.DELETE, movie_tmdb_id=603, payload={"delete_files": True}, dry_run=False
+    )
+    engine.approve(action.id)
+    result = await engine.execute(action.id)
+
+    assert result.status == ActionStatus.EXECUTED
+    assert result.dry_run is False
+    assert len(seen) == 1
+    req = seen[0]
+    assert req.method == "DELETE"
+    assert req.url.path == "/api/v3/movie/603"
+    assert req.url.params.get("deleteFiles") == "true"
+
+
+async def test_live_writer_without_connection_refuses_live_write(factory):
+    """A writer with no Radarr connection can stage, but a live write raises rather
+    than silently no-op'ing — surfaced to the caller as a failed action."""
+    writer = RadarrWriter(RadarrConfig(base_url=None))
+    engine = ActionEngine(factory, writer)
+    action = engine.propose(
+        ActionType.DELETE, movie_tmdb_id=603, payload={"delete_files": True}, dry_run=False
+    )
+    engine.approve(action.id)
+    with pytest.raises(RuntimeError, match="no Radarr connection"):
+        await engine.execute(action.id)
+    with engine.factory() as session:
+        from sift.db.models import Action
+
+        assert session.get(Action, action.id).status == ActionStatus.FAILED
