@@ -8,6 +8,7 @@ settings / session factory; the CLI uses process settings.
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -28,7 +29,12 @@ from .db.session import init_db, make_engine, make_session_factory
 
 log = logging.getLogger("sift")
 
-_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+# Where the built UI lives. Defaults to the repo layout; overridable via
+# SIFT_FRONTEND_DIST so a container (where `sift` is pip-installed elsewhere) can
+# point at the copied `dist`.
+_FRONTEND_DIST = Path(
+    os.environ.get("SIFT_FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend" / "dist")
+)
 
 
 @asynccontextmanager
