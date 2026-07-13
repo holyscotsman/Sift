@@ -16,6 +16,9 @@ path = "sift.db"          # SQLite snapshot; travels with the laptop.
 enabled = true
 base_url = "http://plex.local:32400"
 # token -> .env  (SIFT_PLEX__TOKEN)
+# Plex library titles that belong to children — items in these are marked as
+# kids and are never auto-flagged for removal on adult-rating grounds.
+# kids_sections = ["Kids Movies", "Family"]
 
 [radarr]
 enabled = true
@@ -26,6 +29,9 @@ base_url = "http://radarr.local:7878"
 enabled = true
 base_url = "http://tautulli.local:8181"
 # api_key -> .env  (SIFT_TAUTULLI__API_KEY)
+# Plex usernames belonging to children; their watch history is tagged so it
+# never counts toward adult-library junk scoring.
+# kids_accounts = ["Kiddo"]
 
 [tmdb]
 enabled = true

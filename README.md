@@ -26,6 +26,8 @@ npm --prefix frontend ci && npm --prefix frontend run build   # build the UI
 sift serve                                                # then open the link above
 ```
 
+- **📖 Full setup** (credentials, first scan, running on a server, remote access):
+  **[docs/SETUP.md](docs/SETUP.md)**
 - **Source / repo:** <https://github.com/holyscotsman/Sift>
 - To reach it from another device on your network, front it with **Tailscale** or a
   reverse proxy rather than exposing it publicly (see [Remote access](#remote-access)).

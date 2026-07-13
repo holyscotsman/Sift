@@ -50,15 +50,24 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
 def _cmd_init(args: argparse.Namespace) -> int:
     target = Path(args.config)
+    repo_root = Path(__file__).resolve().parents[2]
     if target.exists() and not args.force:
         print(f"{target} already exists (use --force to overwrite)")
         return 1
-    example = Path(__file__).resolve().parents[2] / "sift.toml.example"
+    example = repo_root / "sift.toml.example"
     if not example.is_file():
         print("sift.toml.example not found next to the package")
         return 1
     shutil.copyfile(example, target)
-    print(f"wrote {target} — edit connections, then put secrets in .env")
+    print(f"wrote {target} — edit connection URLs here")
+
+    # Scaffold the secrets file next to the config if it isn't there yet.
+    env_target = target.parent / ".env"
+    env_example = repo_root / ".env.example"
+    if env_example.is_file() and not env_target.exists():
+        shutil.copyfile(env_example, env_target)
+        print(f"wrote {env_target} — put your tokens/keys here (never commit it)")
+    print("next: fill both files in, then run `sift scan` and `sift serve`")
     return 0
 
 
