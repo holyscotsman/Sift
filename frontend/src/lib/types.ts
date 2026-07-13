@@ -137,6 +137,21 @@ export interface MissingCollectionsResponse {
   collections: CollectionGap[];
 }
 
+export interface AskSource {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+}
+
+export interface AskResponse {
+  answer: string;
+  provider: string;
+  model: string;
+  latency_ms: number;
+  ai_configured: boolean;
+  sources: AskSource[];
+}
+
 // Live scan progress frames pushed over /ws/scan/{id}.
 export interface ScanProgressEvent {
   event: "progress";

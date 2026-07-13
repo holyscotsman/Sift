@@ -22,9 +22,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import __version__
 from .actions.engine import ActionEngine
 from .actions.radarr_writes import RadarrWriter
+from .ai.registry import build_llm_provider
 from .api import (
     routes_actions,
     routes_analysis,
+    routes_ask,
     routes_health,
     routes_movies,
     routes_scan,
@@ -51,6 +53,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     for task in list(app.state.scan_tasks):
         task.cancel()
+    await app.state.sift.llm.aclose()
 
 
 def create_app(
@@ -82,12 +85,20 @@ def create_app(
         session_factory=session_factory,
         engine=action_engine,
         hub=ws.ScanHub(),
+        llm=build_llm_provider(settings),
     )
     # scan_tasks also set in lifespan; initialise here so TestClient (which may not
     # run lifespan in every path) always has it.
     app.state.scan_tasks = set()
 
-    for module in (routes_health, routes_scan, routes_movies, routes_actions, routes_analysis):
+    for module in (
+        routes_health,
+        routes_scan,
+        routes_movies,
+        routes_actions,
+        routes_analysis,
+        routes_ask,
+    ):
         app.include_router(module.router)
     app.include_router(ws.router)
 

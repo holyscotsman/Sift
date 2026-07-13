@@ -4,6 +4,7 @@
 import type {
   ActionRecord,
   ActionType,
+  AskResponse,
   HealthResponse,
   JunkResponse,
   MissingCollectionsResponse,
@@ -86,6 +87,8 @@ export const api = {
       method: "POST",
     }),
   scanGet: (id: number) => request<ScanRun>(`/api/scan/${id}`),
+  ask: (query: string, mode = "single") =>
+    request<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, mode }) }),
   junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),

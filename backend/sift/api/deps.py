@@ -8,6 +8,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..actions.engine import ActionEngine
+from ..ai.provider import LLMProvider
 from ..config import Settings
 from ..services.scanner import ProgressHub
 
@@ -18,6 +19,7 @@ class AppState:
     session_factory: sessionmaker[Session]
     engine: ActionEngine
     hub: ProgressHub
+    llm: LLMProvider
 
 
 def get_state(request: Request) -> AppState:

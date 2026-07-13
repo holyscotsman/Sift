@@ -166,6 +166,26 @@ class RecommendationsResponse(BaseModel):
     note: str | None = None
 
 
+class AskRequest(BaseModel):
+    query: str
+    mode: str = "single"  # single | compare (compare needs a 2nd provider)
+
+
+class AskSource(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+
+
+class AskResponse(BaseModel):
+    answer: str
+    provider: str
+    model: str
+    latency_ms: float
+    ai_configured: bool
+    sources: list[AskSource]
+
+
 class ActionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

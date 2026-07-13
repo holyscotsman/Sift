@@ -3,13 +3,6 @@
 
 import { PlaceholderPage } from "@/components/ui";
 
-export const Ask = () => (
-  <PlaceholderPage
-    title="Ask"
-    note="Grounded natural-language Q&A over the snapshot, with Local / Anthropic / Compare modes and streamed answers. Arrives with the Phase-2 provider layer."
-  />
-);
-
 export const TasteProfile = () => (
   <PlaceholderPage
     title="Taste Profile"
