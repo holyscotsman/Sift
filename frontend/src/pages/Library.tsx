@@ -1,12 +1,14 @@
-// Library — grid/table over the real /api/movies, with quick filters and
-// pagination. Deep-links from global search via ?q=.
+// Library — grid/table over the real /api/movies with continuous (infinite)
+// scrolling. Pages are fetched and appended as a sentinel near the bottom scrolls
+// into view. Deep-links from global search via ?q=.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { GridIcon, TableIcon } from "@/components/icons";
+import { api } from "@/lib/api";
+import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Skeleton } from "@/components/ui";
-import { useMovies } from "@/lib/hooks";
 import type { Movie } from "@/lib/types";
 
 type View = "grid" | "table";
@@ -28,34 +30,84 @@ export function Library() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [view, setView] = useState<View>("grid");
-  // Default to the Plex library — Plex is the source of truth for what you have.
   const [quick, setQuick] = useState<Quick>("plex");
   const [sort, setSort] = useState("title");
-  const [page, setPage] = useState(1);
-  const pageSize = view === "grid" ? 24 : 50;
+  const pageSize = view === "grid" ? 36 : 60;
 
-  // Reset to page 1 whenever the query shape changes.
-  useEffect(() => setPage(1), [q, quick, sort, view]);
+  const [items, setItems] = useState<Movie[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [done, setDone] = useState(false);
+  const pageRef = useRef(1);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const query = useMemo(
-    () => ({
+  // A stable key over everything that changes the result set. Changing it resets
+  // the accumulated list and reloads from page 1.
+  const filterKey = useMemo(
+    () => JSON.stringify({ q, quick, sort, pageSize }),
+    [q, quick, sort, pageSize],
+  );
+
+  const buildQuery = useCallback(
+    (page: number): MovieQuery => ({
       q: q || undefined,
       in_plex: quick === "plex" ? true : undefined,
       monitored: quick === "monitored" ? true : undefined,
       is_kids: quick === "kids" ? true : undefined,
       sort,
-      order: (sort === "title" ? "asc" : "desc") as "asc" | "desc",
+      order: sort === "title" ? "asc" : "desc",
       page,
       page_size: pageSize,
     }),
-    [q, quick, sort, page, pageSize],
+    [q, quick, sort, pageSize],
   );
-  const { data, loading } = useMovies(query);
 
-  const total = data?.total ?? 0;
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(total, page * pageSize);
+  const fetchPage = useCallback(
+    async (page: number, replace: boolean) => {
+      setLoading(true);
+      try {
+        const res = await api.movies(buildQuery(page));
+        setTotal(res.total);
+        setItems((prev) => (replace ? res.items : [...prev, ...res.items]));
+        setDone(page * pageSize >= res.total || res.items.length === 0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [buildQuery, pageSize],
+  );
+
+  // Reset + load page 1 whenever the filters change.
+  useEffect(() => {
+    pageRef.current = 1;
+    setItems([]);
+    setTotal(0);
+    setDone(false);
+    void fetchPage(1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  const loadMore = useCallback(() => {
+    if (loading || done) return;
+    pageRef.current += 1;
+    void fetchPage(pageRef.current, false);
+  }, [loading, done, fetchPage]);
+
+  // Observe a sentinel near the bottom; fetch the next page as it approaches.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore();
+      },
+      { rootMargin: "800px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMore]);
+
+  const firstLoad = loading && items.length === 0;
 
   return (
     <div className="page-enter">
@@ -65,9 +117,9 @@ export function Library() {
             Library
           </h1>
           <p className="mt-1 text-sm text-fg2">
-            {loading
+            {firstLoad
               ? "Loading…"
-              : `${QUICK_LABELS[quick]} · showing ${from}–${to} of ${total.toLocaleString()}`}
+              : `${QUICK_LABELS[quick]} · ${items.length.toLocaleString()} of ${total.toLocaleString()}`}
             {q && <span className="text-fg3"> · filtered by “{q}”</span>}
           </p>
         </div>
@@ -116,9 +168,9 @@ export function Library() {
         </div>
       </div>
 
-      {loading ? (
+      {firstLoad ? (
         <LoadingState view={view} />
-      ) : total === 0 ? (
+      ) : items.length === 0 ? (
         <div className="panel">
           <EmptyState
             title="No movies match these filters"
@@ -127,34 +179,23 @@ export function Library() {
         </div>
       ) : view === "grid" ? (
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(158px, 1fr))" }}>
-          {data!.items.map((m) => (
+          {items.map((m) => (
             <GridTile key={m.tmdb_id} movie={m} />
           ))}
         </div>
       ) : (
-        <TableView items={data!.items} />
+        <TableView items={items} />
       )}
 
-      {pages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-3 text-sm">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="rounded-md border border-line px-3 py-1.5 text-fg2 hover:bg-bg2 disabled:opacity-40"
-          >
-            Prev
-          </button>
-          <span className="text-fg3">
-            Page {page} of {pages}
-          </span>
-          <button
-            disabled={page >= pages}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded-md border border-line px-3 py-1.5 text-fg2 hover:bg-bg2 disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
+      {/* Infinite-scroll sentinel + status. */}
+      <div ref={sentinelRef} className="h-6" />
+      {!firstLoad && loading && items.length > 0 && (
+        <p className="py-4 text-center text-sm text-fg3">Loading more…</p>
+      )}
+      {done && items.length > 0 && (
+        <p className="py-6 text-center text-xs text-fg3">
+          That’s everything · {total.toLocaleString()} titles
+        </p>
       )}
     </div>
   );
@@ -224,7 +265,7 @@ function TableView({ items }: { items: Movie[] }) {
             <th className="hidden px-3 py-3 font-semibold md:table-cell">Year</th>
             <th className="px-3 py-3 font-semibold">Library</th>
             <th className="hidden px-3 py-3 font-semibold md:table-cell">Quality</th>
-            <th className="px-3 py-3 font-semibold">Rating</th>
+            <th className="px-3 py-3 font-semibold">In Plex</th>
             <th className="hidden px-3 py-3 font-semibold md:table-cell">Monitored</th>
           </tr>
         </thead>
@@ -240,7 +281,9 @@ function TableView({ items }: { items: Movie[] }) {
               <td className="hidden px-3 py-2.5 md:table-cell">
                 {m.quality ? <Pill>{m.quality}</Pill> : <span className="text-fg3">—</span>}
               </td>
-              <td className="px-3 py-2.5 text-fg2">{m.is_kids ? "Kids" : "—"}</td>
+              <td className="px-3 py-2.5">
+                {m.in_plex ? <Pill tone="keep">Yes</Pill> : <span className="text-fg3">—</span>}
+              </td>
               <td className="hidden px-3 py-2.5 md:table-cell">
                 {m.monitored ? <Pill tone="accent">Yes</Pill> : <span className="text-fg3">No</span>}
               </td>
