@@ -9,6 +9,27 @@
 Butlarr stays the heavy, on-server, file-plane tool. Sift is the portable metadata
 brain. They share **no database** — they talk to the same APIs independently.
 
+## 🚀 Open the app
+
+Sift is a **local** web app — the FastAPI backend serves the UI on your own
+machine (bound to `localhost` by design, since it holds your Plex/Radarr keys, so
+there is no public URL). Once it's running, open:
+
+**▶ [http://127.0.0.1:8756](http://127.0.0.1:8756)**
+
+Run it from source (packaged `pipx install sift` / `uvx sift` lands in Phase 4):
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"                                   # backend
+npm --prefix frontend ci && npm --prefix frontend run build   # build the UI
+sift serve                                                # then open the link above
+```
+
+- **Source / repo:** <https://github.com/holyscotsman/Sift>
+- To reach it from another device on your network, front it with **Tailscale** or a
+  reverse proxy rather than exposing it publicly (see [Remote access](#remote-access)).
+
 ---
 
 ## Status
