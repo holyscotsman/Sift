@@ -1,0 +1,51 @@
+# Sift configuration — copy to `sift.toml` and edit.
+#
+# Precedence (highest wins):  environment (SIFT_*) > .env > sift.toml > defaults.
+# Put NON-secret config here; put secrets (tokens/keys) in `.env` so they never
+# get committed. See `.env.example`.
+
+[server]
+host = "127.0.0.1"        # bind localhost by default (see CLAUDE.md non-functionals)
+port = 8756
+# api_token is a secret — set SIFT_SERVER__API_TOKEN in .env instead.
+
+[database]
+path = "sift.db"          # SQLite snapshot; travels with the laptop.
+
+[plex]
+enabled = true
+base_url = "http://plex.local:32400"
+# token -> .env  (SIFT_PLEX__TOKEN)
+
+[radarr]
+enabled = true
+base_url = "http://radarr.local:7878"
+# api_key -> .env  (SIFT_RADARR__API_KEY)
+
+[tautulli]
+enabled = true
+base_url = "http://tautulli.local:8181"
+# api_key -> .env  (SIFT_TAUTULLI__API_KEY)
+
+[tmdb]
+enabled = true
+language = "en-US"
+# api_key -> .env  (SIFT_TMDB__API_KEY)
+
+[junk]
+# Deterministic junk-scoring thresholds (Phase 1). Data decides the score;
+# the LLM only explains it, never overrides it.
+min_votes = 50            # ratings below this vote count are down-weighted
+rating_floor = 5.0        # weighted rating at/below this contributes to junk
+unwatched_years = 3       # never/last-played older than this many years
+low_completion_pct = 0.25 # average completion below this counts as low engagement
+exclude_kids_sections = true
+
+[ai]
+# Phase 2. mode: route_by_task | compare | race_fallback
+mode = "route_by_task"
+local_base_url = "http://127.0.0.1:11434"   # Ollama
+local_model = "llama3.1"
+anthropic_model = "claude-sonnet-5"
+embedding_provider = "local"                 # local | hosted
+embedding_model = "nomic-embed-text"
