@@ -7,6 +7,7 @@ guard and are excluded from removal candidates (never auto-flagged on rating).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -26,39 +27,45 @@ def _best_rating(session: Session, movie_id: int) -> tuple[float | None, int | N
     return best.value, best.votes
 
 
+def _iter_scores(
+    session: Session, thr: JunkThresholds, now: datetime | None
+) -> Iterator[tuple[int, scoring.ScoreResult]]:
+    engagement_available = (
+        session.scalar(select(func.count()).select_from(WatchHistory)) or 0
+    ) > 0
+    for tmdb_id in list(session.scalars(select(Movie.tmdb_id).where(Movie.in_plex.is_(True)))):
+        movie = session.get(Movie, tmdb_id)
+        if movie is None:
+            continue
+        value, votes = _best_rating(session, tmdb_id)
+        watch = [
+            {
+                "plays": w.plays,
+                "last_played_at": w.last_played_at,
+                "completion_pct": w.completion_pct,
+            }
+            for w in session.scalars(select(WatchHistory).where(WatchHistory.movie_id == tmdb_id))
+        ]
+        yield tmdb_id, scoring.score_movie(
+            rating_value=value,
+            rating_votes=votes,
+            watch=watch,
+            is_kids=movie.is_kids,
+            thr=thr,
+            engagement_available=engagement_available,
+            now=now,
+        )
+
+
 def compute_and_store(
     factory: sessionmaker[Session], thr: JunkThresholds, *, now: datetime | None = None
 ) -> int:
     with factory() as session:
-        engagement_available = (
-            session.scalar(select(func.count()).select_from(WatchHistory)) or 0
-        ) > 0
-        movie_ids = list(session.scalars(select(Movie.tmdb_id).where(Movie.in_plex.is_(True))))
         written = 0
-        for tmdb_id in movie_ids:
+        for tmdb_id, result in _iter_scores(session, thr, now):
             movie = session.get(Movie, tmdb_id)
             if movie is None:
                 continue
-            value, votes = _best_rating(session, tmdb_id)
-            watch = [
-                {
-                    "plays": w.plays,
-                    "last_played_at": w.last_played_at,
-                    "completion_pct": w.completion_pct,
-                }
-                for w in session.scalars(
-                    select(WatchHistory).where(WatchHistory.movie_id == tmdb_id)
-                )
-            ]
-            result = scoring.score_movie(
-                rating_value=value,
-                rating_votes=votes,
-                watch=watch,
-                is_kids=movie.is_kids,
-                thr=thr,
-                engagement_available=engagement_available,
-                now=now,
-            )
             row = movie.score
             if row is None:
                 row = Score(movie_id=tmdb_id)
@@ -73,6 +80,21 @@ def compute_and_store(
             written += 1
         session.commit()
         return written
+
+
+def preview(factory: sessionmaker[Session], thr: JunkThresholds) -> dict[str, int]:
+    """Count how many titles each band *would* have under the given thresholds,
+    without persisting — powers the Settings live preview. Kids items are excluded
+    from the junk/borderline counts (never auto-flagged)."""
+    counts = {"junk": 0, "borderline": 0, "keep": 0, "total": 0}
+    with factory() as session:
+        for _tmdb_id, result in _iter_scores(session, thr, None):
+            counts["total"] += 1
+            if result.kids_guard and result.band != "keep":
+                counts["keep"] += 1  # guarded → treated as keep for candidate counts
+            else:
+                counts[result.band] += 1
+    return counts
 
 
 def candidates(

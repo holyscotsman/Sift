@@ -182,8 +182,15 @@ class ScanPipeline:
 
     async def _phase_score(self) -> dict[str, int]:
         # Deterministic junk scoring over the Plex library. Data decides the score.
-        scored = await asyncio.to_thread(junk.compute_and_store, self.factory, self.settings.junk)
+        scored = await asyncio.to_thread(self._score)
         return {"scored": scored}
+
+    def _score(self) -> int:
+        from ..services.settings_store import effective_junk
+
+        with self.factory() as session:
+            thr = effective_junk(session, self.settings)
+        return junk.compute_and_store(self.factory, thr)
 
     # ------------------------------------------------------------- sync persistence
 

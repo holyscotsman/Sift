@@ -13,6 +13,7 @@ from ..analysis import collections as coll_analysis
 from ..analysis import junk as junk_analysis
 from ..analysis import scoring
 from ..config import Settings
+from ..services import settings_store
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
     CollectionGap,
@@ -33,8 +34,8 @@ def junk(
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
 ) -> JunkResponse:
-    thr = settings.junk
     with factory() as session:
+        thr = settings_store.effective_junk(session, settings)
         rows = junk_analysis.candidates(session, thr, limit=limit)
         items: list[JunkCandidate] = []
         for movie, score in rows:

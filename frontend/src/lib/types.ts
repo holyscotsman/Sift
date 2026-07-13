@@ -137,6 +137,27 @@ export interface MissingCollectionsResponse {
   collections: CollectionGap[];
 }
 
+export interface Thresholds {
+  min_votes: number;
+  rating_floor: number;
+  unwatched_years: number;
+  junk_cutoff: number;
+  borderline_cutoff: number;
+}
+
+export interface SettingsResponse {
+  connections: ServiceHealth[];
+  thresholds: Thresholds;
+  ai_configured: boolean;
+}
+
+export interface ThresholdPreview {
+  junk: number;
+  borderline: number;
+  keep: number;
+  total: number;
+}
+
 export interface AskSource {
   tmdb_id: number;
   title: string;

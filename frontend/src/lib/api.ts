@@ -11,7 +11,11 @@ import type {
   MovieListResponse,
   ScanRun,
   ScanStartResponse,
+  ServiceHealth,
+  SettingsResponse,
   StatusResponse,
+  ThresholdPreview,
+  Thresholds,
 } from "./types";
 
 const TOKEN_KEY = "sift_token";
@@ -93,6 +97,19 @@ export const api = {
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
+  getSettings: () => request<SettingsResponse>("/api/settings"),
+  previewThresholds: (t: Thresholds) =>
+    request<ThresholdPreview>("/api/settings/thresholds/preview", {
+      method: "POST",
+      body: JSON.stringify(t),
+    }),
+  saveThresholds: (t: Thresholds) =>
+    request<ThresholdPreview>("/api/settings/thresholds", {
+      method: "PUT",
+      body: JSON.stringify(t),
+    }),
+  testConnection: (service: string) =>
+    request<ServiceHealth>(`/api/settings/test/${service}`, { method: "POST" }),
   proposeAction: (body: {
     type: ActionType;
     movie_tmdb_id?: number | null;

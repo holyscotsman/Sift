@@ -10,9 +10,3 @@ export const TasteProfile = () => (
   />
 );
 
-export const Settings = () => (
-  <PlaceholderPage
-    title="Settings"
-    note="Connections, model routing, scoring thresholds (with live 'would affect N titles' preview), the autonomy tiers (Delete = approval-required, locked), and appearance. The read-only connection health is already live in the header; editable settings land with the settings API."
-  />
-);

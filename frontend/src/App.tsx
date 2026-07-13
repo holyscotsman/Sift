@@ -11,7 +11,8 @@ import { Ask } from "@/pages/Ask";
 import { Junk } from "@/pages/Junk";
 import { Library } from "@/pages/Library";
 import { Missing } from "@/pages/Missing";
-import { Settings, TasteProfile } from "@/pages/placeholders";
+import { Settings } from "@/pages/Settings";
+import { TasteProfile } from "@/pages/placeholders";
 
 export default function App() {
   return (

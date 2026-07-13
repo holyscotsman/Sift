@@ -30,6 +30,7 @@ from .api import (
     routes_health,
     routes_movies,
     routes_scan,
+    routes_settings,
     ws,
 )
 from .api.deps import AppState
@@ -98,6 +99,7 @@ def create_app(
         routes_actions,
         routes_analysis,
         routes_ask,
+        routes_settings,
     ):
         app.include_router(module.router)
     app.include_router(ws.router)

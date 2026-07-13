@@ -166,6 +166,27 @@ class RecommendationsResponse(BaseModel):
     note: str | None = None
 
 
+class ThresholdsModel(BaseModel):
+    min_votes: int
+    rating_floor: float
+    unwatched_years: int
+    junk_cutoff: float
+    borderline_cutoff: float
+
+
+class SettingsResponse(BaseModel):
+    connections: list[ServiceHealth]
+    thresholds: ThresholdsModel
+    ai_configured: bool
+
+
+class ThresholdPreview(BaseModel):
+    junk: int
+    borderline: int
+    keep: int
+    total: int
+
+
 class AskRequest(BaseModel):
     query: str
     mode: str = "single"  # single | compare (compare needs a 2nd provider)
