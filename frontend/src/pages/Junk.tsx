@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight } from "@/components/icons";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { EmptyState, Pill, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
 import type { JunkCandidate } from "@/lib/types";
 
 type Decision = "kept" | "removed";
@@ -173,9 +174,12 @@ function Row({
   onRemove: () => void;
   onReset: () => void;
 }) {
+  const { open } = useDrawer();
   return (
     <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start">
-      <div
+      <button
+        onClick={() => open(c.tmdb_id)}
+        aria-label={`Details for ${c.title}`}
         className="h-24 w-16 shrink-0 rounded-md"
         style={c.poster_url ? { backgroundImage: `url(${c.poster_url})`, backgroundSize: "cover" } : { background: posterGradient(c.tmdb_id) }}
       />

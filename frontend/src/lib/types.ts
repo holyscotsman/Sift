@@ -137,6 +137,34 @@ export interface MissingCollectionsResponse {
   collections: CollectionGap[];
 }
 
+export interface RatingOut {
+  source: string;
+  value: number;
+  votes: number | null;
+}
+
+export interface WatchOut {
+  plex_user: string;
+  plays: number;
+  last_played_at: string | null;
+  completion_pct: number | null;
+  is_kids_account: boolean;
+}
+
+export interface SiftScore {
+  junk_score: number;
+  band: string;
+  rationale: string;
+}
+
+export interface MovieDetail extends Movie {
+  overview: string | null;
+  keywords: string[];
+  ratings: RatingOut[];
+  watch_history: WatchOut[];
+  sift_score: SiftScore | null;
+}
+
 export interface Thresholds {
   min_votes: number;
   rating_floor: number;

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 import { SearchIcon } from "@/components/icons";
 import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
 
 export function GlobalSearch() {
@@ -15,6 +16,7 @@ export function GlobalSearch() {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { open: openDrawer } = useDrawer();
 
   // `/` focuses search from anywhere (unless already typing in a field).
   useEffect(() => {
@@ -52,8 +54,12 @@ export function GlobalSearch() {
 
   function openResult(m: Movie | undefined) {
     setOpen(false);
-    if (m) navigate(`/library?q=${encodeURIComponent(m.title)}`);
-    else if (value.trim()) navigate(`/library?q=${encodeURIComponent(value.trim())}`);
+    if (m) {
+      setValue("");
+      openDrawer(m.tmdb_id);
+    } else if (value.trim()) {
+      navigate(`/library?q=${encodeURIComponent(value.trim())}`);
+    }
   }
 
   function posterGradient(hue: number): string {

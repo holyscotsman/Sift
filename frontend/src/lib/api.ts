@@ -8,6 +8,7 @@ import type {
   HealthResponse,
   JunkResponse,
   MissingCollectionsResponse,
+  MovieDetail,
   MovieListResponse,
   ScanRun,
   ScanStartResponse,
@@ -86,6 +87,7 @@ export const api = {
   status: () => request<StatusResponse>("/api/status"),
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
+  movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),
   scanStart: (resumeId?: number) =>
     request<ScanStartResponse>(`/api/scan${resumeId ? `?resume_id=${resumeId}` : ""}`, {
       method: "POST",

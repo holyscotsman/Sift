@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..analysis import scoring
 from ..db.models import Movie
 from .deps import AuthDep, get_session_factory
 from .schemas import (
@@ -13,6 +14,7 @@ from .schemas import (
     MovieListResponse,
     MovieOut,
     RatingOut,
+    SiftScoreOut,
     WatchOut,
 )
 
@@ -88,4 +90,12 @@ def get_movie(
             )
             for w in movie.watch_history
         ]
+        if movie.score is not None:
+            payload = movie.score.signals or {}
+            band = payload.get("band") or "keep"
+            detail.sift_score = SiftScoreOut(
+                junk_score=movie.score.junk_score,
+                band=band,
+                rationale=scoring.rationale(list(payload.get("signals", [])), band),
+            )
         return detail

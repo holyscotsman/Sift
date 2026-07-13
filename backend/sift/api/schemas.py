@@ -68,12 +68,16 @@ class MovieListResponse(BaseModel):
 
 
 class RatingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     source: str
     value: float
     votes: int | None
 
 
 class WatchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     plex_user: str
     plays: int
     last_played_at: datetime | None
@@ -81,11 +85,18 @@ class WatchOut(BaseModel):
     is_kids_account: bool
 
 
+class SiftScoreOut(BaseModel):
+    junk_score: float
+    band: str
+    rationale: str
+
+
 class MovieDetail(MovieOut):
     overview: str | None = None
     keywords: list[str] = []
     ratings: list[RatingOut] = []
     watch_history: list[WatchOut] = []
+    sift_score: SiftScoreOut | None = None
 
 
 class ScanRunOut(BaseModel):

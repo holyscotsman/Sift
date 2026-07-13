@@ -9,6 +9,7 @@ import { GridIcon, TableIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Skeleton } from "@/components/ui";
+import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
 
 type View = "grid" | "table";
@@ -227,8 +228,9 @@ function ViewBtn({
 }
 
 function GridTile({ movie }: { movie: Movie }) {
+  const { open } = useDrawer();
   return (
-    <button className="group text-left">
+    <button className="group text-left" onClick={() => open(movie.tmdb_id)}>
       <div
         className="relative aspect-[2/3] overflow-hidden rounded-md"
         style={movie.poster_url ? undefined : { background: posterGradient(movie.tmdb_id) }}
@@ -256,6 +258,7 @@ function GridTile({ movie }: { movie: Movie }) {
 }
 
 function TableView({ items }: { items: Movie[] }) {
+  const { open } = useDrawer();
   return (
     <div className="panel overflow-x-auto">
       <table className="w-full text-sm">
@@ -271,7 +274,11 @@ function TableView({ items }: { items: Movie[] }) {
         </thead>
         <tbody>
           {items.map((m) => (
-            <tr key={m.tmdb_id} className="border-b border-line/60 hover:bg-bg2">
+            <tr
+              key={m.tmdb_id}
+              onClick={() => open(m.tmdb_id)}
+              className="cursor-pointer border-b border-line/60 hover:bg-bg2"
+            >
               <td className="flex items-center gap-3 px-4 py-2.5">
                 <span className="h-9 w-6 shrink-0 rounded-sm" style={{ background: posterGradient(m.tmdb_id) }} />
                 <span className="font-medium text-fg">{m.title}</span>

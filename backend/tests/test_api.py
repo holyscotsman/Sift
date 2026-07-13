@@ -66,6 +66,29 @@ def test_movie_detail_404(client):
     assert c.get("/api/movies/999999").status_code == 404
 
 
+def test_movie_detail_with_ratings_watch_and_score(client):
+    from sift.analysis import junk
+    from sift.config import JunkThresholds
+    from sift.db.models import Rating, RatingSource, WatchHistory
+
+    c, factory = client
+    with factory() as session:
+        m = Movie(tmdb_id=603, title="The Matrix", year=1999, in_plex=True)
+        m.ratings.append(Rating(source=RatingSource.IMDB, value=8.7, votes=1_900_000))
+        m.watch_history.append(
+            WatchHistory(movie_id=603, plex_user="Dad", plays=3, completion_pct=0.9)
+        )
+        session.add(m)
+        session.commit()
+    junk.compute_and_store(factory, JunkThresholds())
+
+    body = c.get("/api/movies/603").json()
+    assert body["title"] == "The Matrix"
+    assert body["ratings"][0]["source"] == "imdb" and body["ratings"][0]["value"] == 8.7
+    assert body["watch_history"][0]["plays"] == 3
+    assert body["sift_score"] is not None and "band" in body["sift_score"]
+
+
 def test_health_reports_all_services(client):
     c, _ = client
     services = {s["service"] for s in c.get("/api/health").json()["services"]}

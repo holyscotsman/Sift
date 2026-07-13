@@ -120,6 +120,14 @@
     transform: translateX(100%);
   }
 }
+@keyframes sift-drawer {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
 @keyframes sift-backdrop {
   from {
     opacity: 0;

@@ -3,10 +3,10 @@
 // only phrases the answer. Streaming is a later polish — this posts and renders.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { SparkleIcon } from "@/components/icons";
 import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
 import type { AskResponse, AskSource } from "@/lib/types";
 
 interface UserMsg {
@@ -34,7 +34,7 @@ export function Ask() {
   const [thread, setThread] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
-  const navigate = useNavigate();
+  const { open: openDrawer } = useDrawer();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [thread, thinking]);
@@ -122,7 +122,7 @@ export function Ask() {
                       {m.sources.map((s) => (
                         <button
                           key={s.tmdb_id}
-                          onClick={() => navigate(`/library?q=${encodeURIComponent(s.title)}`)}
+                          onClick={() => openDrawer(s.tmdb_id)}
                           className="rounded-pill bg-bg2 px-2 py-0.5 text-[11px] text-fg2 hover:text-fg"
                         >
                           {s.title}

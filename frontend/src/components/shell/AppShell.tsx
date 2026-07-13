@@ -4,6 +4,7 @@
 import { Outlet } from "react-router-dom";
 
 import { Aurora } from "@/components/Aurora";
+import { MovieDrawer } from "@/components/MovieDrawer";
 
 import { Header } from "./Header";
 import { ScanPanel } from "./ScanPanel";
@@ -21,6 +22,7 @@ export function AppShell() {
         </main>
       </div>
       <ScanPanel />
+      <MovieDrawer />
     </div>
   );
 }
