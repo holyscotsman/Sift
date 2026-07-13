@@ -198,6 +198,29 @@ class ThresholdPreview(BaseModel):
     total: int
 
 
+class ProfileBucket(BaseModel):
+    name: str
+    count: int
+
+
+class ProfileWeights(BaseModel):
+    genre: float
+    director: float
+    cast: float
+    keywords: float
+    era: float
+
+
+class ProfileResponse(BaseModel):
+    genres: list[ProfileBucket]
+    keywords: list[ProfileBucket]
+    directors: list[ProfileBucket]
+    actors: list[ProfileBucket]
+    eras: list[ProfileBucket]
+    library_size: int
+    weights: ProfileWeights
+
+
 class AskRequest(BaseModel):
     query: str
     mode: str = "single"  # single | compare (compare needs a 2nd provider)

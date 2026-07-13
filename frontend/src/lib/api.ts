@@ -10,6 +10,8 @@ import type {
   MissingCollectionsResponse,
   MovieDetail,
   MovieListResponse,
+  ProfileResponse,
+  ProfileWeights,
   ScanRun,
   ScanStartResponse,
   ServiceHealth,
@@ -99,6 +101,9 @@ export const api = {
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
+  getProfile: () => request<ProfileResponse>("/api/profile"),
+  saveWeights: (w: ProfileWeights) =>
+    request<ProfileResponse>("/api/profile/weights", { method: "PUT", body: JSON.stringify(w) }),
   getSettings: () => request<SettingsResponse>("/api/settings"),
   previewThresholds: (t: Thresholds) =>
     request<ThresholdPreview>("/api/settings/thresholds/preview", {

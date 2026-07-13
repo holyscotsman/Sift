@@ -137,6 +137,29 @@ export interface MissingCollectionsResponse {
   collections: CollectionGap[];
 }
 
+export interface ProfileBucket {
+  name: string;
+  count: number;
+}
+
+export interface ProfileWeights {
+  genre: number;
+  director: number;
+  cast: number;
+  keywords: number;
+  era: number;
+}
+
+export interface ProfileResponse {
+  genres: ProfileBucket[];
+  keywords: ProfileBucket[];
+  directors: ProfileBucket[];
+  actors: ProfileBucket[];
+  eras: ProfileBucket[];
+  library_size: number;
+  weights: ProfileWeights;
+}
+
 export interface RatingOut {
   source: string;
   value: number;

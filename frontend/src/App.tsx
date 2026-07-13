@@ -13,7 +13,7 @@ import { Junk } from "@/pages/Junk";
 import { Library } from "@/pages/Library";
 import { Missing } from "@/pages/Missing";
 import { Settings } from "@/pages/Settings";
-import { TasteProfile } from "@/pages/placeholders";
+import { TasteProfile } from "@/pages/TasteProfile";
 
 export default function App() {
   return (

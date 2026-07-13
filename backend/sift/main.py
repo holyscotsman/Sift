@@ -29,6 +29,7 @@ from .api import (
     routes_ask,
     routes_health,
     routes_movies,
+    routes_profile,
     routes_scan,
     routes_settings,
     ws,
@@ -100,6 +101,7 @@ def create_app(
         routes_analysis,
         routes_ask,
         routes_settings,
+        routes_profile,
     ):
         app.include_router(module.router)
     app.include_router(ws.router)
