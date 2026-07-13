@@ -69,6 +69,10 @@ class PlexClient(BaseClient):
             data = await self.request_json(
                 "GET",
                 f"/library/sections/{section_key}/all",
+                # includeGuids=1 makes Plex return the `Guid` array (tmdb://, imdb://)
+                # in the listing — without it, modern-agent items carry only a
+                # `plex://` guid and can't be resolved to a tmdb_id.
+                params={"type": 1, "includeGuids": 1},
                 headers={
                     "X-Plex-Container-Start": str(start),
                     "X-Plex-Container-Size": str(_PAGE_SIZE),

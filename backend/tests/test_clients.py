@@ -51,6 +51,8 @@ async def test_plex_sections_items_and_health():
                 },
             )
         if path == "/library/sections/1/all":
+            # Must request the Guid array so tmdb ids resolve on modern agents.
+            assert request.url.params.get("includeGuids") == "1"
             return httpx.Response(
                 200,
                 json={
