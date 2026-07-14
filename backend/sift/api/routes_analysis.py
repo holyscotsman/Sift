@@ -14,19 +14,24 @@ from ..analysis import junk as junk_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
-from ..services import settings_store
+from ..services import curated_lists, settings_store
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
     CollectionGap,
     CollectionMemberOut,
     JunkCandidate,
     JunkResponse,
+    ListMovie,
     MissingCollectionsResponse,
+    MissingList,
+    MissingListsResponse,
     RecommendationsResponse,
     SignalOut,
     UpgradeCandidateOut,
     UpgradesResponse,
 )
+
+_LIST_LABELS = {"cult": "Cult classics", "imdb_top": "IMDb top-ranked"}
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[AuthDep])
 
@@ -119,6 +124,23 @@ def missing_collections(
             for g in gaps
         ]
     )
+
+
+@router.get("/missing/lists", response_model=MissingListsResponse)
+def missing_lists(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> MissingListsResponse:
+    with factory() as session:
+        grouped = curated_lists.missing_from_lists(session)
+    lists = [
+        MissingList(
+            name=name,
+            label=_LIST_LABELS.get(name, name.replace("_", " ").title()),
+            items=[ListMovie(**m) for m in items],
+        )
+        for name, items in sorted(grouped.items())
+    ]
+    return MissingListsResponse(lists=lists)
 
 
 @router.get("/missing/recommendations", response_model=RecommendationsResponse)

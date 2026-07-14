@@ -72,6 +72,16 @@ class TmdbClient(BaseClient):
         data: dict[str, Any] = await self.get_json(f"/collection/{collection_id}")
         return data
 
+    async def search_movie(self, title: str, year: int | None = None) -> int | None:
+        """Resolve a title (optionally disambiguated by year) to a TMDB id."""
+        params: dict[str, Any] = {"query": title}
+        if year:
+            params["year"] = year
+        data = await self.get_json("/search/movie", params=params)
+        results = data.get("results", []) if isinstance(data, dict) else []
+        first = results[0] if results else None
+        return int(first["id"]) if isinstance(first, dict) and first.get("id") else None
+
     async def get_similar(self, tmdb_id: int, *, page: int = 1) -> list[dict[str, Any]]:
         data = await self.get_json(f"/movie/{tmdb_id}/similar", params={"page": page})
         return list(data.get("results", [])) if isinstance(data, dict) else []

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..ai.registry import ai_configured
 from ..analysis import junk
 from ..config import JunkThresholds, Settings
-from ..services import settings_store
+from ..services import curated_lists, settings_store
 from ..services.health import check_service, gather_health
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
@@ -73,7 +73,8 @@ def save_thresholds(
     with factory() as session:
         settings_store.set_junk_thresholds(session, body.model_dump())
         thr = settings_store.effective_junk(session, settings)
-    junk.compute_and_store(factory, thr)  # re-score with the new thresholds
+        cult = curated_lists.cult_ids(session)
+    junk.compute_and_store(factory, thr, cult_ids=cult)  # re-score with the new thresholds
     return ThresholdPreview(**junk.preview(factory, thr))
 
 

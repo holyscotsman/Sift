@@ -10,6 +10,7 @@ import type {
   HealthResponse,
   JunkResponse,
   MissingCollectionsResponse,
+  MissingListsResponse,
   MovieDetail,
   MovieListResponse,
   ProfileResponse,
@@ -137,6 +138,7 @@ export const api = {
   upgrades: (limit = 200) => request<UpgradesResponse>(`/api/upgrades?limit=${limit}`),
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
+  missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   getProfile: () => request<ProfileResponse>("/api/profile"),
   saveWeights: (w: ProfileWeights) =>

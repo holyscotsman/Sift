@@ -4,19 +4,20 @@ import { useEffect, useState } from "react";
 
 import { CheckIcon, SparkleIcon } from "@/components/icons";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
+import { useDrawer } from "@/lib/drawer";
 import { api } from "@/lib/api";
-import type { CollectionGap } from "@/lib/types";
+import type { CollectionGap, MissingList } from "@/lib/types";
 
 export function Missing() {
   const [gaps, setGaps] = useState<CollectionGap[]>([]);
+  const [lists, setLists] = useState<MissingList[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .missingCollections()
-      .then((r) => setGaps(r.collections))
-      .catch(() => setGaps([]))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.missingCollections().then((r) => setGaps(r.collections)).catch(() => setGaps([])),
+      api.missingLists().then((r) => setLists(r.lists)).catch(() => setLists([])),
+    ]).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -90,6 +91,10 @@ export function Missing() {
         )}
       </section>
 
+      {lists.map((list) => (
+        <ListSection key={list.name} list={list} />
+      ))}
+
       <section>
         <div className="mb-2 flex items-center gap-2">
           <span className="eyebrow">Recommended for you</span>
@@ -107,5 +112,40 @@ export function Missing() {
         </div>
       </section>
     </div>
+  );
+}
+
+function ListSection({ list }: { list: MissingList }) {
+  const { open } = useDrawer();
+  if (list.items.length === 0) return null;
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="eyebrow">{list.label} you don't own</span>
+        <Pill tone="borderline">{list.items.length}</Pill>
+      </div>
+      <div className="panel p-4">
+        <div className="flex flex-wrap gap-3">
+          {list.items.map((m) => (
+            <button
+              key={m.tmdb_id}
+              onClick={() => open(m.tmdb_id)}
+              className="w-[92px] text-left"
+              title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
+            >
+              <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+                <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
+              </div>
+              <p className="mt-1 truncate text-[11px] text-fg3">
+                {m.title} {m.year ? `· ${m.year}` : ""}
+              </p>
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-fg3">
+          Starter list, pending human review — expand or correct it anytime.
+        </p>
+      </div>
+    </section>
   );
 }

@@ -233,6 +233,23 @@ class MissingCollectionsResponse(BaseModel):
     collections: list[CollectionGap]
 
 
+class ListMovie(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    review_status: str
+
+
+class MissingList(BaseModel):
+    name: str
+    label: str
+    items: list[ListMovie]
+
+
+class MissingListsResponse(BaseModel):
+    lists: list[MissingList]
+
+
 class RecommendationsResponse(BaseModel):
     items: list[dict[str, Any]]
     note: str | None = None

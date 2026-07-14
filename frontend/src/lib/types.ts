@@ -161,6 +161,23 @@ export interface MissingCollectionsResponse {
   collections: CollectionGap[];
 }
 
+export interface ListMovie {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  review_status: string;
+}
+
+export interface MissingList {
+  name: string;
+  label: string;
+  items: ListMovie[];
+}
+
+export interface MissingListsResponse {
+  lists: MissingList[];
+}
+
 export interface UpgradeCandidate {
   tmdb_id: number;
   title: string;

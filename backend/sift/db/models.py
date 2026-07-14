@@ -296,3 +296,19 @@ class Setting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class CuratedListEntry(Base):
+    """A title on a curated list (e.g. cult classics, IMDb top). Content is
+    human-reviewable: ``review_status`` gates whether it drives keep/remove decisions.
+    ``tmdb_id`` is resolved from ``title``/``year`` via TMDB search during a scan."""
+
+    __tablename__ = "curated_list_entries"
+    __table_args__ = (UniqueConstraint("list_name", "title", "year", name="uq_curated_entry"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    list_name: Mapped[str] = mapped_column(String(32), index=True)  # "cult" | "imdb_top"
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer)
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    review_status: Mapped[str] = mapped_column(String(16), default="pending")

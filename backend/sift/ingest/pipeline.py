@@ -164,19 +164,55 @@ class ScanPipeline:
         return await asyncio.to_thread(self._persist_watch, list(aggregates.values()))
 
     async def _phase_tmdb(self) -> dict[str, int]:
-        if self.tmdb is None or self.tmdb_enrich_limit <= 0:
+        if self.tmdb is None:
             return {}
-        targets = await asyncio.to_thread(self._tmdb_targets, self.tmdb_enrich_limit)
-        enriched = []
-        for tmdb_id in targets:
+        stats: dict[str, int] = {}
+        if self.tmdb_enrich_limit > 0:
+            targets = await asyncio.to_thread(self._tmdb_targets, self.tmdb_enrich_limit)
+            enriched = []
+            for tmdb_id in targets:
+                try:
+                    # release_dates powers the US-theatrical classifier fact.
+                    raw = await self.tmdb.get_movie(
+                        tmdb_id, append="keywords,credits,release_dates"
+                    )
+                except Exception as exc:  # noqa: BLE001 - enrichment is best-effort
+                    log.info("tmdb enrich skipped for %s: %s", tmdb_id, exc)
+                    continue
+                enriched.append(normalize.normalize_tmdb_movie(raw))
+            stats.update(await asyncio.to_thread(self._persist_tmdb, enriched))
+        stats.update(await self._resolve_curated_lists())
+        return stats
+
+    async def _resolve_curated_lists(self) -> dict[str, int]:
+        """Seed the starter lists, then resolve any titles still lacking a TMDB id."""
+        if self.tmdb is None:
+            return {}
+        pending = await asyncio.to_thread(self._curated_seed_and_pending)
+        resolved: dict[int, int] = {}
+        for entry_id, title, year in pending:
             try:
-                # release_dates powers the US-theatrical classifier fact.
-                raw = await self.tmdb.get_movie(tmdb_id, append="keywords,credits,release_dates")
-            except Exception as exc:  # noqa: BLE001 - enrichment is best-effort
-                log.info("tmdb enrich skipped for %s: %s", tmdb_id, exc)
+                tmdb_id = await self.tmdb.search_movie(title, year)
+            except Exception as exc:  # noqa: BLE001 - best-effort resolution
+                log.info("curated resolve failed for %r: %s", title, exc)
                 continue
-            enriched.append(normalize.normalize_tmdb_movie(raw))
-        return await asyncio.to_thread(self._persist_tmdb, enriched)
+            if tmdb_id:
+                resolved[entry_id] = tmdb_id
+        applied = await asyncio.to_thread(self._curated_apply, resolved)
+        return {"curated_resolved": applied}
+
+    def _curated_seed_and_pending(self) -> list[tuple[int, str, int | None]]:
+        from ..services import curated_lists
+
+        with self.factory() as session:
+            curated_lists.seed_defaults(session)
+            return curated_lists.pending_resolution(session)
+
+    def _curated_apply(self, resolved: dict[int, int]) -> int:
+        from ..services import curated_lists
+
+        with self.factory() as session:
+            return curated_lists.apply_resolution(session, resolved)
 
     async def _phase_finalize(self) -> dict[str, int]:
         return await asyncio.to_thread(self._finalize_counts)
@@ -187,11 +223,13 @@ class ScanPipeline:
         return {"scored": scored}
 
     def _score(self) -> int:
+        from ..services import curated_lists
         from ..services.settings_store import effective_junk
 
         with self.factory() as session:
             thr = effective_junk(session, self.settings)
-        return junk.compute_and_store(self.factory, thr)
+            cult = curated_lists.cult_ids(session)
+        return junk.compute_and_store(self.factory, thr, cult_ids=cult)
 
     # ------------------------------------------------------------- sync persistence
 
