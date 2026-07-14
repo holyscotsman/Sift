@@ -33,6 +33,27 @@ export function Junk() {
   const [modal, setModal] = useState<{ candidates: JunkCandidate[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [dryRun, setDryRun] = useState(true);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState<string | null>(null);
+
+  async function runReview() {
+    setReviewing(true);
+    setReviewMsg(null);
+    try {
+      const r = await api.runReview();
+      const src =
+        r.provider === "deterministic"
+          ? "no AI configured — showing the deterministic reason"
+          : `via ${r.provider}`;
+      setReviewMsg(`Reviewed ${r.reviewed} title(s) ${src}.`);
+      const fresh = await api.junk();
+      setItems(fresh.items);
+    } catch {
+      setReviewMsg("AI review failed — check your Ollama/Anthropic settings.");
+    } finally {
+      setReviewing(false);
+    }
+  }
 
   useEffect(() => {
     api
@@ -87,15 +108,29 @@ export function Junk() {
             deterministic; kids libraries are guarded and never listed here.
           </p>
         </div>
-        {pending.length > 0 && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setModal({ candidates: pending })}
-            className="rounded-pill border border-line px-4 py-1.5 text-sm font-semibold text-fg2 hover:bg-bg2"
+            onClick={runReview}
+            disabled={reviewing || items.length === 0}
+            className="gradient-fill rounded-pill px-4 py-1.5 text-sm font-bold shadow-glow disabled:opacity-60"
           >
-            Approve all ({pending.length})
+            {reviewing ? "Reviewing…" : "Run AI review"}
           </button>
-        )}
+          {pending.length > 0 && (
+            <button
+              onClick={() => setModal({ candidates: pending })}
+              className="rounded-pill border border-line px-4 py-1.5 text-sm font-semibold text-fg2 hover:bg-bg2"
+            >
+              Approve all ({pending.length})
+            </button>
+          )}
+        </div>
       </div>
+      {reviewMsg && (
+        <p className="mb-3 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">
+          {reviewMsg}
+        </p>
+      )}
 
       {loading ? (
         <div className="panel p-4">
@@ -215,6 +250,12 @@ function Row({
           <Pill tone={bandTone(c.band)}>{c.band}</Pill>
         </div>
         <p className="mt-1.5 text-sm text-fg2">{c.rationale}</p>
+        {c.ai_note && (
+          <div className="mt-2 rounded-md border-l-2 pl-2.5 text-sm text-fg2" style={{ borderColor: "var(--accent)" }}>
+            <span className="mr-1 font-semibold text-accent">AI</span>
+            {c.ai_note}
+          </div>
+        )}
 
         <button
           onClick={onToggle}

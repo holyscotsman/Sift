@@ -75,6 +75,7 @@ def junk(
                     kids_guard=bool(payload.get("kids_guard")),
                     rationale=rationale,
                     signals=[SignalOut(**s) for s in signals],
+                    ai_note=payload.get("ai_note"),
                 )
             )
     return JunkResponse(items=items, total=len(items))

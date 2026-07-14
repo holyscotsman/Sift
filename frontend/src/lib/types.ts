@@ -135,6 +135,12 @@ export interface JunkCandidate {
   kids_guard: boolean;
   rationale: string;
   signals: Signal[];
+  ai_note: string | null;
+}
+
+export interface ReviewRunResponse {
+  reviewed: number;
+  provider: string;
 }
 
 export interface JunkResponse {

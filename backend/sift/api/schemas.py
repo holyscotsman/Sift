@@ -191,6 +191,12 @@ class JunkCandidate(BaseModel):
     kids_guard: bool
     rationale: str
     signals: list[SignalOut]
+    ai_note: str | None = None
+
+
+class ReviewRunResponse(BaseModel):
+    reviewed: int
+    provider: str
 
 
 class JunkResponse(BaseModel):

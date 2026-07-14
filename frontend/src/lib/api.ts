@@ -16,6 +16,7 @@ import type {
   ProfileResponse,
   ProfileWeights,
   ResetResponse,
+  ReviewRunResponse,
   ScanRun,
   ScanStartResponse,
   ServiceHealth,
@@ -135,6 +136,8 @@ export const api = {
   ask: (query: string, mode = "single") =>
     request<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, mode }) }),
   junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),
+  runReview: (limit = 50) =>
+    request<ReviewRunResponse>(`/api/review/run?limit=${limit}`, { method: "POST" }),
   upgrades: (limit = 200) => request<UpgradesResponse>(`/api/upgrades?limit=${limit}`),
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
