@@ -1,5 +1,5 @@
 // Floating top-nav bar (no left sidebar). Active pill = quiet accent-soft fill;
-// Junk/Missing carry numeric count badges. Design System sits after a spacer.
+// Junk carries a numeric count badge.
 
 import { NavLink } from "react-router-dom";
 
@@ -51,15 +51,6 @@ export function TopNav() {
           {item.label === "Junk" && <Badge n={junkCount} />}
         </NavLink>
       ))}
-      <div className="flex-1" />
-      <NavLink
-        to="/design"
-        className={({ isActive }) =>
-          `${pill} ${isActive ? "bg-accent-soft text-accent" : "text-fg3 hover:bg-bg2 hover:text-fg"}`
-        }
-      >
-        Design System
-      </NavLink>
     </nav>
   );
 }

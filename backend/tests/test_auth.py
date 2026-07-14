@@ -104,3 +104,17 @@ def test_poster_accepts_session_token(client):
     # because sources are disabled, so no poster resolves — proving auth, not artwork).
     assert client.get("/api/poster/603").status_code == 401
     assert client.get(f"/api/poster/603?token={token}").status_code == 404
+
+
+def test_scan_ws_accepts_session_token(client):
+    from starlette.websockets import WebSocketDisconnect
+
+    token = _setup(client).json()["token"]
+    # A bad token is rejected (server closes before accept).
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/scan/1?token=wrong-token"):
+            pass
+    # The login session token is accepted — the connection opens (this used to fail:
+    # the WS only honoured the static API token, so progress dropped for logged-in users).
+    with client.websocket_connect(f"/ws/scan/1?token={token}"):
+        pass

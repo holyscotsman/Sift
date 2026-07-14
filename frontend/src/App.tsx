@@ -7,7 +7,6 @@ import { PrefsProvider } from "@/lib/prefs";
 import { ScanProvider } from "@/lib/scan";
 import { Activity } from "@/pages/Activity";
 import { Dashboard } from "@/pages/Dashboard";
-import { DesignSystem } from "@/pages/DesignSystem";
 import { Ask } from "@/pages/Ask";
 import { Junk } from "@/pages/Junk";
 import { Library } from "@/pages/Library";
@@ -32,7 +31,6 @@ export default function App() {
                   <Route path="profile" element={<TasteProfile />} />
                   <Route path="activity" element={<Activity />} />
                   <Route path="settings" element={<Settings />} />
-                  <Route path="design" element={<DesignSystem />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Routes>

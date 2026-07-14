@@ -125,6 +125,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ keep_thumbnails: keepThumbnails }),
     }),
+  getActionsConfig: () => request<{ dry_run: boolean }>("/api/config/actions"),
+  setActionsConfig: (dryRun: boolean) =>
+    request<{ dry_run: boolean }>("/api/config/actions", {
+      method: "PUT",
+      body: JSON.stringify({ dry_run: dryRun }),
+    }),
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),

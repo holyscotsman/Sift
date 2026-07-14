@@ -23,7 +23,8 @@ log = logging.getLogger("sift.runtime")
 async def rebuild(state: AppState) -> None:
     with state.session_factory() as session:
         conn = config_store.get_config(session)
-    effective = config_store.apply_to_settings(state.base_settings, conn)
+        actions_cfg = config_store.get_actions(session)
+    effective = config_store.apply_to_settings(state.base_settings, conn, actions_cfg)
     state.settings = effective
     state.posters = PosterCache(effective, state.session_factory)
     state.engine = ActionEngine(

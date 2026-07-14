@@ -79,7 +79,8 @@ def create_app(
     # Effective config = the env/toml base overlaid with any UI-entered connections.
     with session_factory() as session:
         conn = config_store.get_config(session)
-    settings = config_store.apply_to_settings(base_settings, conn)
+        actions_cfg = config_store.get_actions(session)
+    settings = config_store.apply_to_settings(base_settings, conn, actions_cfg)
 
     if action_engine is None:
         # The writer is built from the Radarr connection so an approved delete (or an

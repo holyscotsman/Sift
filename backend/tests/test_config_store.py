@@ -95,6 +95,17 @@ def test_config_test_anthropic_key_presence(client):
     assert without.json()["ok"] is False
 
 
+def test_actions_dry_run_toggle(client):
+    # Default is dry-run (staged). The Autonomy toggle flips it live and it sticks.
+    assert client.get("/api/config/actions").json()["dry_run"] is True
+    put = client.put("/api/config/actions", json={"dry_run": False})
+    assert put.status_code == 200 and put.json()["dry_run"] is False
+    # Reflected in the effective settings surfaced to the UI.
+    assert client.get("/api/settings").json()["actions_dry_run"] is False
+    # And back on.
+    assert client.put("/api/config/actions", json={"dry_run": True}).json()["dry_run"] is True
+
+
 def test_reset_wipes_data_and_reopens_wizard(client, factory):
     from sift.db.models import Movie
 

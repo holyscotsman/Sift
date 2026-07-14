@@ -9,8 +9,8 @@ from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from ..config import Settings
 from ..ingest.pipeline import ScanProgress
+from .deps import token_accepted
 
 router = APIRouter()
 
@@ -44,17 +44,15 @@ class ScanHub:
         await self.publish(progress.scan_run_id, {"event": "progress", **asdict(progress)})
 
 
-def _token_ok(settings: Settings, token: str | None) -> bool:
-    configured = settings.server.api_token
-    return configured is None or (token is not None and token == configured.get_secret_value())
-
-
 @router.websocket("/ws/scan/{scan_id}")
 async def scan_ws(
     websocket: WebSocket, scan_id: int, token: str | None = Query(default=None)
 ) -> None:
     state = websocket.app.state.sift
-    if not _token_ok(state.settings, token):
+    # Same auth as the REST gate: a login session token or the static API token.
+    # (Previously only the static token was accepted, so progress silently dropped
+    # for logged-in users on a token-configured deploy.)
+    if not token_accepted(state, token):
         await websocket.close(code=4401)
         return
     hub: ScanHub = state.hub

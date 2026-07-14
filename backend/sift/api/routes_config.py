@@ -16,6 +16,8 @@ from ..services import config_store, reset, runtime
 from ..services.health import check_service
 from .deps import AuthDep, get_session_factory, get_state
 from .schemas import (
+    ActionsConfigIn,
+    ActionsConfigOut,
     ConnectionsIn,
     ConnectionsOut,
     ConnectionTestIn,
@@ -44,6 +46,20 @@ async def save_config(body: ConnectionsIn, request: Request) -> ConnectionsOut:
     # Re-overlay + swap the live services (health, scan, posters, writer, LLM).
     await runtime.rebuild(state)
     return ConnectionsOut(connections=config_store.masked(merged))
+
+
+@router.get("/actions", response_model=ActionsConfigOut)
+def read_actions(request: Request) -> ActionsConfigOut:
+    return ActionsConfigOut(dry_run=get_state(request).settings.actions.dry_run)
+
+
+@router.put("/actions", response_model=ActionsConfigOut)
+async def save_actions(body: ActionsConfigIn, request: Request) -> ActionsConfigOut:
+    state = get_state(request)
+    with state.session_factory() as session:
+        config_store.set_actions(session, body.dry_run)
+    await runtime.rebuild(state)
+    return ActionsConfigOut(dry_run=state.settings.actions.dry_run)
 
 
 @router.post("/reset", response_model=ResetResponse)

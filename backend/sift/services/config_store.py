@@ -21,6 +21,7 @@ from ..config import Settings
 from ..db.models import Setting
 
 _CONN_KEY = "connections"
+_ACTIONS_KEY = "actions"
 
 # Non-secret fields we echo back; secret fields become ``<name>_set`` booleans.
 _SECRET_FIELDS = {"token", "api_key"}
@@ -57,6 +58,16 @@ def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
+def get_actions(session: Session) -> dict[str, Any]:
+    row = session.get(Setting, _ACTIONS_KEY)
+    return dict(row.value) if row and row.value else {}
+
+
+def set_actions(session: Session, dry_run: bool) -> None:
+    session.merge(Setting(key=_ACTIONS_KEY, value={"dry_run": bool(dry_run)}))
+    session.commit()
+
+
 def masked(config: dict[str, Any]) -> dict[str, Any]:
     """Config safe to send to the client: secrets replaced with ``<field>_set`` flags."""
     out: dict[str, Any] = {}
@@ -76,13 +87,18 @@ def _s(value: Any) -> str | None:
     return text or None
 
 
-def apply_to_settings(base: Settings, config: dict[str, Any]) -> Settings:
+def apply_to_settings(
+    base: Settings, config: dict[str, Any], actions: dict[str, Any] | None = None
+) -> Settings:
     """Return a copy of ``base`` with the stored connection config overlaid.
 
     ``model_copy`` (not re-constructing ``Settings``) is deliberate — re-instantiating
     a ``BaseSettings`` would re-read env/.env/toml and clobber the overlay.
     """
     eff = base.model_copy(deep=True)
+
+    if actions and "dry_run" in actions:
+        eff.actions.dry_run = bool(actions["dry_run"])
 
     plex = config.get("plex") or {}
     if _s(plex.get("base_url")):

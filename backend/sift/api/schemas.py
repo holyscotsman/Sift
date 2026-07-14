@@ -137,6 +137,14 @@ class ConnectionTestIn(BaseModel):
     values: dict[str, Any] = {}
 
 
+class ActionsConfigIn(BaseModel):
+    dry_run: bool
+
+
+class ActionsConfigOut(BaseModel):
+    dry_run: bool
+
+
 class ResetRequest(BaseModel):
     keep_thumbnails: bool = False
 

@@ -325,25 +325,78 @@ function Scoring() {
 }
 
 function Autonomy() {
+  const [dryRun, setDryRun] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.getActionsConfig().then((a) => setDryRun(a.dry_run)).catch(() => setDryRun(null));
+  }, []);
+
+  async function toggle(next: boolean) {
+    setSaving(true);
+    try {
+      const res = await api.setActionsConfig(next);
+      setDryRun(res.dry_run);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const tiers = [
     { name: "Add / monitor", policy: "Automatic", tone: "keep" as const, locked: false },
     { name: "Unmonitor", policy: "Automatic + audit", tone: "borderline" as const, locked: false },
     { name: "File delete", policy: "Approval required", tone: "junk" as const, locked: true },
   ];
+
   return (
-    <Section title="Autonomy tiers">
-      <div className="divide-y divide-line">
-        {tiers.map((t) => (
-          <div key={t.name} className="flex items-center gap-3 py-3">
-            <span className="flex-1 text-sm font-semibold">{t.name}</span>
-            <Pill tone={t.tone}>{t.policy}</Pill>
-            {t.locked && <LockIcon size={15} className="text-fg3" />}
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-fg3">
-        A file delete is always approval-gated and cannot be disabled.
-      </p>
-    </Section>
+    <>
+      <Section title="Write mode">
+        <p className="text-sm text-fg2">
+          Controls whether approved actions are actually sent to Radarr, or only staged
+          (logged, nothing sent). File deletes still require per-item approval either way.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => toggle(true)}
+            disabled={saving || dryRun === null}
+            className={`rounded-md border px-4 py-2 text-sm font-semibold ${
+              dryRun ? "border-accent-line text-accent" : "border-line text-fg2 hover:bg-bg2"
+            }`}
+          >
+            Staged (dry-run)
+          </button>
+          <button
+            onClick={() => toggle(false)}
+            disabled={saving || dryRun === null}
+            className={`rounded-md border px-4 py-2 text-sm font-semibold ${
+              dryRun === false ? "border-accent-line text-accent" : "border-line text-fg2 hover:bg-bg2"
+            }`}
+          >
+            Live — send to Radarr
+          </button>
+        </div>
+        {dryRun === false && (
+          <p className="mt-2 text-xs" style={{ color: "var(--junk)" }}>
+            Live mode: approving a removal will delete the file in Radarr. This can't be undone.
+          </p>
+        )}
+        {dryRun === null && <p className="mt-2 text-xs text-fg3">Loading…</p>}
+      </Section>
+
+      <Section title="Autonomy tiers">
+        <div className="divide-y divide-line">
+          {tiers.map((t) => (
+            <div key={t.name} className="flex items-center gap-3 py-3">
+              <span className="flex-1 text-sm font-semibold">{t.name}</span>
+              <Pill tone={t.tone}>{t.policy}</Pill>
+              {t.locked && <LockIcon size={15} className="text-fg3" />}
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-fg3">
+          A file delete is always approval-gated and cannot be disabled.
+        </p>
+      </Section>
+    </>
   );
 }

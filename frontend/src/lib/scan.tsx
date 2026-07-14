@@ -43,12 +43,32 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   const [panelOpen, setPanelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const pollRef = useRef<number | null>(null);
+  const finishedRef = useRef(false);
+
+  const finish = useCallback(
+    (status: string, err?: string | null) => {
+      if (finishedRef.current) return;
+      finishedRef.current = true;
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = null;
+      socketRef.current?.close();
+      socketRef.current = null;
+      setPct(100);
+      setScanning(false);
+      if (status !== "completed") setError(err || status);
+      onComplete?.();
+      window.setTimeout(() => setPanelOpen(false), 1400);
+    },
+    [onComplete],
+  );
 
   const start = useCallback(async () => {
     if (scanning) {
       setPanelOpen(true);
       return;
     }
+    finishedRef.current = false;
     setError(null);
     setPct(0);
     setPhaseStates(initialPhases());
@@ -56,6 +76,8 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
     setPanelOpen(true);
     try {
       const { scan_run_id } = await api.scanStart();
+
+      // WebSocket: snappy live progress when it's reachable.
       const ws = new WebSocket(scanSocketUrl(scan_run_id));
       socketRef.current = ws;
       ws.onmessage = (msg) => {
@@ -69,26 +91,53 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
             return next;
           });
           const done = evt.status === "done" || evt.status === "skipped";
-          setPct(Math.min(100, Math.round(((evt.phase_index + (done ? 1 : 0.4)) / total) * 100)));
+          const p = Math.round(((evt.phase_index + (done ? 1 : 0.4)) / total) * 100);
+          setPct((prev) => Math.min(100, Math.max(prev, p)));
         } else if (evt.event === "terminal") {
-          setPct(100);
-          setScanning(false);
-          if (evt.status !== "completed") setError(evt.error ?? evt.status);
-          onComplete?.();
-          window.setTimeout(() => setPanelOpen(false), 1400);
-          ws.close();
+          finish(evt.status, "error" in evt ? evt.error : null);
         }
       };
-      ws.onerror = () => setError("scan socket error");
+      // A socket error/close is NOT the end — the poller below is the source of
+      // truth, so progress still completes even if the WS is blocked.
       ws.onclose = () => {
-        socketRef.current = null;
-        setScanning(false);
+        if (socketRef.current === ws) socketRef.current = null;
       };
+
+      // Polling fallback: reconcile from the scan record every 1.5s. Immune to WS
+      // auth/proxy issues, so the bar never gets stuck.
+      const poll = async () => {
+        try {
+          const run = await api.scanGet(scan_run_id);
+          const cps = run.checkpoints || {};
+          let done = 0;
+          setPhaseStates((prev) => {
+            const next = { ...prev };
+            for (const ph of SCAN_PHASES) {
+              const st = cps[ph.key]?.status;
+              if (st === "done" || st === "skipped") {
+                next[ph.key] = "done";
+                done++;
+              }
+            }
+            if (run.status === "running") {
+              const active = SCAN_PHASES.find((ph) => next[ph.key] !== "done");
+              if (active) next[active.key] = "active";
+            }
+            return next;
+          });
+          const base = Math.round((done / SCAN_PHASES.length) * 100);
+          setPct((prev) => Math.max(prev, run.status === "running" ? Math.min(base, 96) : 100));
+          if (run.status !== "running") finish(run.status, run.error);
+        } catch {
+          /* transient — try again next tick */
+        }
+      };
+      pollRef.current = window.setInterval(poll, 1500);
+      void poll();
     } catch (e) {
-      setScanning(false);
-      setError(e instanceof Error ? e.message : String(e));
+      finish("failed", e instanceof Error ? e.message : String(e));
     }
-  }, [scanning, onComplete]);
+  }, [scanning, finish]);
 
   const value = useMemo<ScanCtx>(
     () => ({ scanning, pct, phaseStates, panelOpen, error, start, setPanelOpen }),
