@@ -4,6 +4,18 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — poster cache + Library A–Z jump
+- **Thumbnails now load for every title.** New `GET /api/poster/{tmdb_id}` resolves a
+  poster from the stored URL or by TMDB id, downloads it, and caches the bytes on
+  disk keyed by id — fixing Plex-only titles (most of the library) that carry no
+  Radarr artwork. The route accepts `?token=` so `<img>` tags authenticate; a shared
+  `<Poster>` component falls back to the gradient placeholder on 404. Cache dir
+  defaults beside the DB (`PostersConfig.cache_dir`) so a persistent disk covers it —
+  this is the cache the upcoming "reset (keep thumbnails)" preserves.
+- **Library A–Z rail:** when sorted by title, a letter rail jumps straight to titles
+  starting with that letter via a new `starts_with` filter on `/api/movies`
+  (`#` = digits/symbols). Verified in-browser: filter works, 0 broken images.
+
 ### Added — upgrade detector (cutoff-unmet)
 - Deterministic **upgrade detector**: library titles whose current file is below
   Radarr's quality-profile cutoff. The verdict (`cutoff_unmet`) is read straight off
