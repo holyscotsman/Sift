@@ -9,15 +9,16 @@ Resume point + working decisions. Read after `CLAUDE.md`.
 **Full MVP + owner upgrades: code-complete.** Ingestion, deterministic analysis,
 live action execution, **username/password login + Setup Wizard + in-app config**,
 poster cache, Library A–Z jump, **smarter junk classification**, **curated
-cult/IMDb lists**, and **Ollama↔Anthropic AI review**. Hosted on Render; PR open on
-`claude/sift-webapp-setup-2qmxsn`.
+cult/IMDb lists**, **Ollama↔Anthropic AI review**, **add/monitor/remove wired into
+the UI**, and **deterministic taste recommendations**. Hosted on Render (optional
+Postgres); PR #1 open on `claude/sift-webapp-setup-2qmxsn`.
 
 Green gates (run from `backend/` in the venv at `../.venv`):
 
 ```bash
 ruff check .            # clean
-../.venv/bin/mypy sift  # strict, clean (67 files)
-../.venv/bin/pytest -q  # 106 passed
+../.venv/bin/mypy sift  # strict, clean (69 files)
+../.venv/bin/pytest -q  # 119 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
 alembic -c alembic.ini upgrade head  # 0001→0004, idempotent over create_all
 ```
@@ -39,6 +40,16 @@ The delete-safety test is mutation-verified: disabling the guard in
   resolved via TMDB search; feed the cult rule + Missing "you don't own these".
 - **AI review**: Ollama drafts → Anthropic refines, advisory-only; "Run AI review"
   on the Junk screen. Degrades to a deterministic note with no providers.
+- **Add/monitor/remove in the UI**: the movie drawer exposes Monitor/Unmonitor +
+  confirm-gated Remove; Missing exposes "+ Add". `POST /api/actions/add` resolves the
+  Radarr root folder + quality profile for live adds. Engine dispatches to Radarr on
+  the stored `radarr_id` (not `tmdb_id`) and refuses titles Radarr doesn't manage.
+- **Taste recommendations** (`analysis/recommend.py`): TMDB discovery graph seeded by
+  your highest-rated owned titles; aggregated, ranked, and explained; owned titles
+  excluded. Deterministic — degrades to a connect-TMDB / run-a-scan note.
+- **Write mode toggle** (Settings › Autonomy): staged vs live, persisted via
+  `config_store.set_actions` and re-overlaid on `runtime.rebuild`. **Density toggle**
+  now actually drives the library table row spacing.
 
 ### Upgrade detector (cutoff-unmet) — latest slice
 - `Movie.cutoff_unmet` (migration `0002`, indexed) captures Radarr's "below profile
