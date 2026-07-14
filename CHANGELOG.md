@@ -17,6 +17,11 @@ Versioning scheme: `YYMM.major.patch`.
   rows) and the tooltip says what it does.
 - **Ask** — stale "add ANTHROPIC_API_KEY" hint replaced with a pointer to the in-app
   Settings › Connections (config moved into the UI).
+- **Connections** — a live inline warning when a service URL points at
+  ``localhost``/``127.0.0.1`` on a hosted instance (the #1 Ollama setup gotcha), shown
+  before the Test round-trips and fails cryptically.
+- **Activity** — added a "monitor" filter chip (monitor actions are common now that the
+  drawer exposes them).
 
 ### Added — add/monitor/remove actions in the UI
 - **Movie actions surfaced in the drawer** — Monitor/Unmonitor toggle + Remove

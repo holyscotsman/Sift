@@ -96,6 +96,17 @@ export function ConnectionsForm({
     setSaved(false);
   }
 
+  // A hosted Sift can't reach the operator's own machine — the #1 setup gotcha
+  // (esp. Ollama). Warn as soon as a URL points at localhost, before Test fails.
+  const isHosted = typeof location !== "undefined" && !/^(localhost|127\.|0\.0\.0\.0)/.test(location.hostname);
+  function localhostWarning(svc: string, field: string): string | null {
+    if (field !== "base_url" || !isHosted) return null;
+    const v = (vals[`${svc}.${field}`] ?? "").toLowerCase();
+    return /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(v)
+      ? "This points at localhost — Sift runs on a server and can't reach your machine. Use a LAN IP or a tunnel URL."
+      : null;
+  }
+
   // Collect the entered (non-blank) values for one service. Blank secrets are omitted
   // so a saved key is preserved rather than cleared.
   function serviceValues(spec: ServiceSpec): Record<string, unknown> {
@@ -159,6 +170,7 @@ export function ConnectionsForm({
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {spec.fields.map((f) => {
                 const savedFlag = Boolean(initial[spec.key]?.[`${f.name}_set`]);
+                const warn = localhostWarning(spec.key, f.name);
                 return (
                   <label key={f.name} className="text-xs text-fg3">
                     {f.label}
@@ -174,6 +186,11 @@ export function ConnectionsForm({
                       autoComplete="off"
                       className="mt-1 w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
                     />
+                    {warn && (
+                      <span className="mt-1 block text-[11px]" style={{ color: "var(--borderline)" }}>
+                        {warn}
+                      </span>
+                    )}
                   </label>
                 );
               })}

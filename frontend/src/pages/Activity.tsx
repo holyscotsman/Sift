@@ -7,7 +7,7 @@ import { EmptyState, Pill } from "@/components/ui";
 import { useActivity } from "@/lib/hooks";
 import type { ActionRecord } from "@/lib/types";
 
-type Filter = "all" | "add" | "unmonitor" | "delete";
+type Filter = "all" | "add" | "monitor" | "unmonitor" | "delete";
 
 const TIER: Record<string, { label: string; tone: "keep" | "borderline" | "junk" | "accent" }> = {
   add: { label: "Auto", tone: "keep" },
@@ -27,7 +27,7 @@ export function Activity() {
       <p className="mt-1 text-sm text-fg2">Every action Sift takes, audited — with its dry-run payload.</p>
 
       <div className="my-4 flex flex-wrap gap-2">
-        {(["all", "add", "unmonitor", "delete"] as Filter[]).map((f) => (
+        {(["all", "add", "monitor", "unmonitor", "delete"] as Filter[]).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
