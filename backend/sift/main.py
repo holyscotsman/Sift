@@ -29,6 +29,7 @@ from .api import (
     routes_ask,
     routes_health,
     routes_movies,
+    routes_posters,
     routes_profile,
     routes_scan,
     routes_settings,
@@ -37,6 +38,7 @@ from .api import (
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
+from .services.posters import PosterCache
 
 log = logging.getLogger("sift")
 
@@ -89,6 +91,7 @@ def create_app(
         engine=action_engine,
         hub=ws.ScanHub(),
         llm=build_llm_provider(settings),
+        posters=PosterCache(settings, session_factory),
     )
     # scan_tasks also set in lifespan; initialise here so TestClient (which may not
     # run lifespan in every path) always has it.
@@ -98,6 +101,7 @@ def create_app(
         routes_health,
         routes_scan,
         routes_movies,
+        routes_posters,
         routes_actions,
         routes_analysis,
         routes_ask,

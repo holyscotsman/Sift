@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ChevronDown, ChevronRight } from "@/components/icons";
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { EmptyState, Pill, RingGauge, Skeleton } from "@/components/ui";
+import { EmptyState, Pill, Poster, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { JunkCandidate } from "@/lib/types";
@@ -23,10 +23,6 @@ function bandTone(band: string): "junk" | "borderline" | "keep" {
 function fmtSize(bytes: number | null): string {
   if (!bytes) return "—";
   return `${(bytes / 1e9).toFixed(1)} GB`;
-}
-function posterGradient(id: number): string {
-  const hue = (id * 47) % 360;
-  return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
 }
 
 export function Junk() {
@@ -206,9 +202,10 @@ function Row({
       <button
         onClick={() => open(c.tmdb_id)}
         aria-label={`Details for ${c.title}`}
-        className="h-24 w-16 shrink-0 rounded-md"
-        style={c.poster_url ? { backgroundImage: `url(${c.poster_url})`, backgroundSize: "cover" } : { background: posterGradient(c.tmdb_id) }}
-      />
+        className="h-24 w-16 shrink-0 overflow-hidden rounded-md"
+      >
+        <Poster tmdbId={c.tmdb_id} alt="" className="h-full w-full" />
+      </button>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-display text-base font-bold">{c.title}</span>

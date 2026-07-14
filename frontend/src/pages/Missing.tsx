@@ -3,14 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { CheckIcon, SparkleIcon } from "@/components/icons";
-import { EmptyState, Pill, Skeleton } from "@/components/ui";
+import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { CollectionGap } from "@/lib/types";
-
-function posterGradient(id: number): string {
-  const hue = (id * 47) % 360;
-  return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
-}
 
 export function Missing() {
   const [gaps, setGaps] = useState<CollectionGap[]>([]);
@@ -65,19 +60,20 @@ export function Missing() {
                   {g.members.map((m) => (
                     <div key={m.tmdb_id} className="w-[92px]">
                       <div
-                        className="relative aspect-[2/3] rounded-md"
-                        style={
-                          m.owned
-                            ? { background: posterGradient(m.tmdb_id) }
-                            : { border: "1.5px dashed var(--line-2)" }
-                        }
+                        className="relative aspect-[2/3] overflow-hidden rounded-md"
+                        style={m.owned ? undefined : { border: "1.5px dashed var(--line-2)" }}
                       >
+                        <Poster
+                          tmdbId={m.tmdb_id}
+                          alt=""
+                          className={`h-full w-full ${m.owned ? "" : "opacity-40 grayscale"}`}
+                        />
                         {m.owned ? (
                           <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full" style={{ background: "var(--keep)" }}>
                             <CheckIcon size={11} className="text-[color:var(--accent-fg)]" />
                           </span>
                         ) : (
-                          <span className="absolute inset-x-1 bottom-1 text-center text-[10px] text-fg3">
+                          <span className="absolute inset-x-1 bottom-1 rounded-sm bg-black/50 py-0.5 text-center text-[10px] font-semibold text-white backdrop-blur">
                             missing
                           </span>
                         )}

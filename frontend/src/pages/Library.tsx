@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { GridIcon, TableIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
-import { EmptyState, Pill, Skeleton } from "@/components/ui";
+import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
 
@@ -25,10 +25,7 @@ const QUICK_LABELS: Record<Quick, string> = {
   upgrades: "Below cutoff",
 };
 
-function posterGradient(id: number): string {
-  const hue = (id * 47) % 360;
-  return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
-}
+const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
 
 export function Library() {
   const [params, setParams] = useSearchParams();
@@ -40,6 +37,8 @@ export function Library() {
     seeded && QUICK_ORDER.includes(seeded) ? seeded : "plex",
   );
   const [sort, setSort] = useState("title");
+  // A–Z rail jump (only meaningful when ordered by title). null = no letter filter.
+  const [letter, setLetter] = useState<string | null>(null);
   const pageSize = view === "grid" ? 36 : 60;
 
   const [items, setItems] = useState<Movie[]>([]);
@@ -51,9 +50,12 @@ export function Library() {
 
   // A stable key over everything that changes the result set. Changing it resets
   // the accumulated list and reloads from page 1.
+  // Letter jump only applies when sorted by title; ignore it otherwise.
+  const activeLetter = sort === "title" ? letter : null;
+
   const filterKey = useMemo(
-    () => JSON.stringify({ q, quick, sort, pageSize }),
-    [q, quick, sort, pageSize],
+    () => JSON.stringify({ q, quick, sort, pageSize, activeLetter }),
+    [q, quick, sort, pageSize, activeLetter],
   );
 
   const buildQuery = useCallback(
@@ -65,12 +67,13 @@ export function Library() {
       monitored: quick === "monitored" ? true : undefined,
       is_kids: quick === "kids" ? true : undefined,
       cutoff_unmet: quick === "upgrades" ? true : undefined,
+      starts_with: activeLetter ?? undefined,
       sort,
       order: sort === "title" ? "asc" : "desc",
       page,
       page_size: pageSize,
     }),
-    [q, quick, sort, pageSize],
+    [q, quick, sort, pageSize, activeLetter],
   );
 
   const fetchPage = useCallback(
@@ -132,6 +135,14 @@ export function Library() {
               ? "Loading…"
               : `${QUICK_LABELS[quick]} · ${items.length.toLocaleString()} of ${total.toLocaleString()}`}
             {q && <span className="text-fg3"> · filtered by “{q}”</span>}
+            {activeLetter && (
+              <button
+                onClick={() => setLetter(null)}
+                className="ml-1 text-accent hover:underline"
+              >
+                · jumped to “{activeLetter}” (clear)
+              </button>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-1 rounded-pill border border-line p-0.5">
@@ -198,6 +209,27 @@ export function Library() {
         <TableView items={items} />
       )}
 
+      {/* A–Z rail: jump straight to a letter when ordered by title. */}
+      {sort === "title" && !q && (
+        <nav
+          aria-label="Jump to letter"
+          className="fixed right-1 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-center gap-px rounded-pill border border-line bg-panel px-0.5 py-1.5 shadow-md md:flex"
+        >
+          {ALPHABET.map((L) => (
+            <button
+              key={L}
+              onClick={() => setLetter(L === activeLetter ? null : L)}
+              aria-pressed={L === activeLetter}
+              className={`h-[15px] w-4 rounded-pill text-[9px] font-bold leading-[15px] transition-colors ${
+                L === activeLetter ? "bg-accent text-accent-fg" : "text-fg3 hover:text-accent"
+              }`}
+            >
+              {L}
+            </button>
+          ))}
+        </nav>
+      )}
+
       {/* Infinite-scroll sentinel + status. */}
       <div ref={sentinelRef} className="h-6" />
       {!firstLoad && loading && items.length > 0 && (
@@ -241,13 +273,8 @@ function GridTile({ movie }: { movie: Movie }) {
   const { open } = useDrawer();
   return (
     <button className="group text-left" onClick={() => open(movie.tmdb_id)}>
-      <div
-        className="relative aspect-[2/3] overflow-hidden rounded-md"
-        style={movie.poster_url ? undefined : { background: posterGradient(movie.tmdb_id) }}
-      >
-        {movie.poster_url && (
-          <img src={movie.poster_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-        )}
+      <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+        <Poster tmdbId={movie.tmdb_id} alt="" className="h-full w-full" />
         {movie.quality && (
           <span className="absolute left-1.5 top-1.5 rounded-sm bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
             {movie.quality}
@@ -290,7 +317,7 @@ function TableView({ items }: { items: Movie[] }) {
               className="cursor-pointer border-b border-line/60 hover:bg-bg2"
             >
               <td className="flex items-center gap-3 px-4 py-2.5">
-                <span className="h-9 w-6 shrink-0 rounded-sm" style={{ background: posterGradient(m.tmdb_id) }} />
+                <Poster tmdbId={m.tmdb_id} alt="" className="h-9 w-6 shrink-0 rounded-sm" />
                 <span className="font-medium text-fg">{m.title}</span>
               </td>
               <td className="hidden px-3 py-2.5 text-fg2 md:table-cell">{m.year ?? "—"}</td>

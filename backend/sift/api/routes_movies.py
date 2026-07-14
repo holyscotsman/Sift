@@ -38,6 +38,7 @@ def list_movies(
     in_plex: bool | None = None,
     has_file: bool | None = None,
     cutoff_unmet: bool | None = None,
+    starts_with: str | None = None,
     sort: str = "title",
     order: str = "asc",
     page: int = Query(default=1, ge=1),
@@ -46,6 +47,15 @@ def list_movies(
     stmt = select(Movie)
     if q:
         stmt = stmt.where(Movie.title.ilike(f"%{q}%"))
+    if starts_with:
+        # A–Z rail jump. A single letter matches titles beginning with it; "#"
+        # matches everything that doesn't start with a letter (digits/symbols).
+        # Raw first character so the rail agrees with the by-title sort order.
+        first = func.upper(func.substr(Movie.title, 1, 1))
+        if starts_with == "#":
+            stmt = stmt.where((first < "A") | (first > "Z"))
+        else:
+            stmt = stmt.where(first == starts_with[0].upper())
     if section is not None:
         stmt = stmt.where(Movie.library_section == section)
     if is_kids is not None:

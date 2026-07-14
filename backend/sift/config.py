@@ -107,6 +107,14 @@ class ActionsConfig(BaseModel):
     dry_run: bool = True
 
 
+class PostersConfig(BaseModel):
+    """On-disk thumbnail cache. Defaults to a ``cache/`` dir beside the database, so
+    a Render persistent disk covers both. This is the cache 'reset (keep thumbnails)'
+    preserves."""
+
+    cache_dir: Path | None = None
+
+
 class AIConfig(BaseModel):
     """Phase 2 provider layer. Never used to decide correctness."""
 
@@ -135,6 +143,7 @@ class Settings(BaseSettings):
     tmdb: TmdbConfig = Field(default_factory=TmdbConfig)
     junk: JunkThresholds = Field(default_factory=JunkThresholds)
     actions: ActionsConfig = Field(default_factory=ActionsConfig)
+    posters: PostersConfig = Field(default_factory=PostersConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
 
     @classmethod

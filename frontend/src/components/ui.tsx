@@ -1,6 +1,42 @@
 // Shared UI primitives used across screens.
 
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+
+import { posterUrl } from "@/lib/api";
+
+// Deterministic placeholder gradient from a tmdb id — used behind/instead of a poster.
+export function posterGradient(id: number): string {
+  const hue = (id * 47) % 360;
+  return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
+}
+
+// A poster image resolved through the server cache, with a graceful gradient
+// fallback when no artwork exists. Retries once when the token changes.
+export function Poster({
+  tmdbId,
+  alt = "",
+  className = "",
+}: {
+  tmdbId: number;
+  alt?: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [tmdbId]);
+  if (failed) {
+    return <div className={className} style={{ background: posterGradient(tmdbId) }} aria-hidden />;
+  }
+  return (
+    <img
+      src={posterUrl(tmdbId)}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={`${className} object-cover`}
+    />
+  );
+}
 
 export function PageTitle({ title, subhead }: { title: string; subhead?: ReactNode }) {
   return (

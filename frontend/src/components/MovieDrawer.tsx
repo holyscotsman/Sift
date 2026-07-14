@@ -4,15 +4,11 @@
 
 import { useEffect, useState } from "react";
 
-import { Pill } from "@/components/ui";
+import { Pill, Poster } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { MovieDetail } from "@/lib/types";
 
-function posterGradient(id: number): string {
-  const hue = (id * 47) % 360;
-  return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
-}
 function fmtSize(bytes: number | null): string {
   return bytes ? `${(bytes / 1e9).toFixed(1)} GB` : "—";
 }
@@ -53,10 +49,10 @@ export function MovieDrawer() {
         className="glass absolute right-0 top-0 h-full w-full max-w-[560px] overflow-y-auto"
         style={{ animation: "sift-drawer var(--dur) var(--ease-spring) both" }}
       >
-        <div
-          className="h-28"
-          style={{ background: movie ? posterGradient(movie.tmdb_id) : "var(--bg-2)" }}
-        />
+        <div className="relative h-28 overflow-hidden bg-bg2">
+          {movie && <Poster tmdbId={movie.tmdb_id} alt="" className="h-full w-full opacity-60" />}
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to top, var(--bg-1s), transparent)" }} />
+        </div>
         <button
           onClick={close}
           aria-label="Close"

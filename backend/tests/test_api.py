@@ -61,6 +61,26 @@ def test_movies_list_and_filter(client):
     assert search["total"] == 1 and search["items"][0]["title"] == "The Matrix"
 
 
+def test_movies_starts_with_letter_jump(client):
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="Alien", in_plex=True))
+        session.add(Movie(tmdb_id=2, title="Amadeus", in_plex=True))
+        session.add(Movie(tmdb_id=3, title="Braveheart", in_plex=True))
+        session.add(Movie(tmdb_id=4, title="300", in_plex=True))
+        session.commit()
+
+    a = c.get("/api/movies", params={"starts_with": "A"}).json()
+    assert {m["title"] for m in a["items"]} == {"Alien", "Amadeus"}
+
+    b = c.get("/api/movies", params={"starts_with": "b"}).json()  # case-insensitive
+    assert b["total"] == 1 and b["items"][0]["title"] == "Braveheart"
+
+    # "#" bucket = titles not starting with a letter (digits/symbols).
+    hashed = c.get("/api/movies", params={"starts_with": "#"}).json()
+    assert hashed["total"] == 1 and hashed["items"][0]["title"] == "300"
+
+
 def test_movie_detail_404(client):
     c, _ = client
     assert c.get("/api/movies/999999").status_code == 404

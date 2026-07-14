@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..actions.engine import ActionEngine
 from ..ai.provider import LLMProvider
 from ..config import Settings
+from ..services.posters import PosterCache
 from ..services.scanner import ProgressHub
 
 
@@ -20,6 +21,7 @@ class AppState:
     engine: ActionEngine
     hub: ProgressHub
     llm: LLMProvider
+    posters: PosterCache
 
 
 def get_state(request: Request) -> AppState:

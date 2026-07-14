@@ -71,6 +71,7 @@ export interface MovieQuery {
   in_plex?: boolean;
   has_file?: boolean;
   cutoff_unmet?: boolean;
+  starts_with?: string;
   sort?: string;
   order?: "asc" | "desc";
   page?: number;
@@ -133,6 +134,14 @@ export const api = {
   executeAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/execute`, { method: "POST" }),
 };
+
+// Server-resolved, cached poster for any title (works for Plex-only movies with no
+// Radarr artwork). Carries the token as a query param since <img> can't set headers.
+export function posterUrl(tmdbId: number): string {
+  const token = getToken();
+  const q = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `/api/poster/${tmdbId}${q}`;
+}
 
 // Build the WebSocket URL for live scan progress, carrying the API token.
 export function scanSocketUrl(scanId: number): string {
