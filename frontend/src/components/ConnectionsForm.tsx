@@ -57,9 +57,9 @@ export const SERVICE_SPECS: ServiceSpec[] = [
   {
     key: "ollama",
     label: "Local AI (Ollama)",
-    hint: "Optional — the cheap bulk pass for AI review.",
+    hint: "Optional — must be reachable from the Sift server, so use a public URL/tunnel (not localhost) when hosted.",
     fields: [
-      { name: "base_url", label: "URL", placeholder: "http://localhost:11434" },
+      { name: "base_url", label: "URL", placeholder: "http://your-host:11434 (not localhost)" },
       { name: "model", label: "Model", placeholder: "llama3.1" },
     ],
   },

@@ -81,7 +81,19 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
                 service="ollama", ok=True, detail=f"reachable ({count} model(s))", latency_ms=None
             )
         except Exception as exc:  # noqa: BLE001 - surfaced as a status, not raised
-            return ServiceHealth(service="ollama", ok=False, detail=str(exc)[:120], latency_ms=None)
+            low = base.lower()
+            if "localhost" in low or "127.0.0.1" in low:
+                # The probe runs on the Sift server, so "localhost" is the server, not
+                # the user's machine — the #1 cause of this failing on a hosted deploy.
+                detail = (
+                    "unreachable — 'localhost' is the Sift server, not your machine. "
+                    "Expose Ollama at a public URL (tunnel or port-forward) instead."
+                )
+            elif low.startswith("https://"):
+                detail = "unreachable — try http:// (Ollama serves plain HTTP by default)."
+            else:
+                detail = str(exc)[:120]
+            return ServiceHealth(service="ollama", ok=False, detail=detail, latency_ms=None)
 
     if service == "anthropic":
         # A live call would cost tokens; treat a present key as configured. The real
