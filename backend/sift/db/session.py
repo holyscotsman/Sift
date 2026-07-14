@@ -18,26 +18,42 @@ from sqlalchemy.orm import Session, sessionmaker
 from .models import Base
 
 
-def make_engine(db_path: str | Path, *, echo: bool = False) -> Engine:
-    """Create an engine for a SQLite file (or ``:memory:``) with sane pragmas."""
-    url = "sqlite://" if str(db_path) == ":memory:" else f"sqlite:///{Path(db_path)}"
-    engine = create_engine(
-        url,
-        echo=echo,
-        future=True,
-        connect_args={"check_same_thread": False},
-    )
+def _resolve_url(target: str | Path) -> str:
+    """Turn a target (SQLite path, ``:memory:``, or a full DB URL) into a SQLAlchemy
+    URL. Postgres URLs are normalised: ``postgres://`` → ``postgresql://`` and SSL is
+    required by default (Neon and most hosted Postgres need it)."""
+    raw = str(target)
+    if "://" not in raw:
+        return "sqlite://" if raw == ":memory:" else f"sqlite:///{Path(raw)}"
+    if raw.startswith("postgres://"):  # some hosts hand out the legacy scheme
+        raw = "postgresql://" + raw[len("postgres://") :]
+    if raw.startswith("postgresql://") and "sslmode=" not in raw:
+        raw += ("&" if "?" in raw else "?") + "sslmode=require"
+    return raw
 
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragmas(dbapi_conn, _record):  # type: ignore[no-untyped-def]
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys=ON")
-        # WAL improves read/write concurrency during a scan; skip for in-memory.
-        if url != "sqlite://":
-            cur.execute("PRAGMA journal_mode=WAL")
-        cur.close()
 
-    return engine
+def make_engine(target: str | Path, *, echo: bool = False) -> Engine:
+    """Create an engine for SQLite (a path or ``:memory:``) or a full DB URL
+    (e.g. Postgres/Neon for a persistent hosted deploy)."""
+    url = _resolve_url(target)
+    if url.startswith("sqlite"):
+        engine = create_engine(
+            url, echo=echo, future=True, connect_args={"check_same_thread": False}
+        )
+
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_conn, _record):  # type: ignore[no-untyped-def]
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys=ON")
+            if url != "sqlite://":  # WAL improves scan concurrency; skip in-memory
+                cur.execute("PRAGMA journal_mode=WAL")
+            cur.close()
+
+        return engine
+
+    # Hosted Postgres (Neon) scales connections to zero, so pre-ping + recycle keep a
+    # stale pooled connection from surfacing as an error on the next request.
+    return create_engine(url, echo=echo, future=True, pool_pre_ping=True, pool_recycle=300)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

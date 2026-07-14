@@ -10,6 +10,7 @@ Nested settings use a double-underscore delimiter, e.g. ``SIFT_PLEX__TOKEN``.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from functools import lru_cache
 from pathlib import Path
@@ -53,7 +54,17 @@ class ServerConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
+    # SQLite file path (default). For a persistent hosted deploy, set ``url`` (or the
+    # bare ``DATABASE_URL`` env var) to a Postgres URL — e.g. a free Neon database —
+    # so login + config survive redeploys on an ephemeral host.
     path: Path = Path("sift.db")
+    url: str | None = None
+
+    def target(self) -> str:
+        """The connection target: an explicit URL (``SIFT_DATABASE__URL`` or the bare
+        ``DATABASE_URL`` env var) wins; otherwise the SQLite path."""
+        raw = self.url or os.environ.get("DATABASE_URL")
+        return raw.strip() if raw and raw.strip() else str(self.path)
 
 
 class PlexConfig(BaseModel):

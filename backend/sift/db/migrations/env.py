@@ -13,6 +13,7 @@ from sqlalchemy import engine_from_config, pool
 
 from sift.config import load_settings
 from sift.db.models import Base
+from sift.db.session import _resolve_url
 
 config = context.config
 
@@ -23,8 +24,9 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    settings = load_settings()
-    return f"sqlite:///{settings.database.path}"
+    # Same target the app uses: SQLite path by default, or a Postgres URL when
+    # SIFT_DATABASE__URL / DATABASE_URL is set.
+    return _resolve_url(load_settings().database.target())
 
 
 def run_migrations_offline() -> None:

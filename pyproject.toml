@@ -21,6 +21,9 @@ dependencies = [
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "httpx>=0.27",
+    # Postgres driver — enables a persistent hosted DB (e.g. free Neon) via
+    # SIFT_DATABASE__URL / DATABASE_URL. SQLite remains the zero-config default.
+    "psycopg2-binary>=2.9",
 ]
 
 [project.optional-dependencies]

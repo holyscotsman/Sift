@@ -62,16 +62,35 @@ That's it — bookmark the URL on your phone and you're set.
 
 ---
 
+## Make your setup persist (free — do this first)
+
+Render's free tier has an **ephemeral disk**: the default `sift.db` resets on every
+redeploy/restart, so your **login and saved service keys disappear**. Point Sift at a
+free, persistent Postgres and it survives forever — same Render URL, no code changes.
+
+1. Create a free database at **[neon.tech](https://neon.tech)** (or any hosted
+   Postgres — Supabase works too). Neon's free tier is persistent with no expiry.
+2. Copy its **connection string** — it looks like
+   `postgresql://user:pass@ep-xxx.region.aws.neon.tech/dbname?sslmode=require`.
+3. In Render → your Sift service → **Environment**, set
+   `SIFT_DATABASE__URL` to that string and save (Render redeploys).
+
+That's it — Sift creates its tables on first boot. Now run the setup wizard **once**;
+your account, connections, and scans stick across every future redeploy.
+
+> Prefer to stay on SQLite? A Render **Disk** (paid Starter plan) with
+> `SIFT_DATABASE__PATH=/data/sift.db`, or a **Fly.io** deploy with a free volume, also
+> persist. The Postgres route above is the simplest free option.
+
 ## Good to know (free tier)
 
 - **It sleeps when idle.** Free services spin down after ~15 minutes of no traffic;
   the next visit takes ~30s to wake. Fine for personal use.
-- **The snapshot is not persistent.** Free instances have an ephemeral disk, so the
-  `sift.db` snapshot resets on each deploy/restart — just hit **Run scan** again.
-  To keep it, attach a Render **Disk** (paid) and set `SIFT_DATABASE__PATH` to a path
-  on it (e.g. `/data/sift.db`), or use a **Fly.io volume**.
+- **Thumbnail cache** still lives on the ephemeral disk, so posters re-fetch from TMDB
+  after a redeploy — that's automatic and only affects first paint. Your data (in the
+  Postgres above) is what matters and it persists.
 - **Updating.** With `autoDeploy` on, pushing new commits to the branch redeploys
-  automatically.
+  automatically — safe now, because your data lives in Postgres, not the container.
 
 ## Security
 

@@ -30,7 +30,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 def _cmd_scan(args: argparse.Namespace) -> int:
     settings = load_settings(args.config)
-    engine = make_engine(settings.database.path)
+    engine = make_engine(settings.database.target())
     init_db(engine)
     factory = make_session_factory(engine)
 

@@ -72,7 +72,9 @@ def create_app(
 ) -> FastAPI:
     base_settings = settings or get_settings()
     if session_factory is None:
-        engine = make_engine(base_settings.database.path)
+        # `target()` is the SQLite path by default, or a Postgres URL when
+        # SIFT_DATABASE__URL / DATABASE_URL is set (a persistent hosted DB like Neon).
+        engine = make_engine(base_settings.database.target())
         init_db(engine)
         session_factory = make_session_factory(engine)
 

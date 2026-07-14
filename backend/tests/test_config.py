@@ -15,6 +15,33 @@ def test_defaults_without_toml_or_env(monkeypatch):
     assert s.plex.token is None
 
 
+def test_database_target_prefers_url(monkeypatch):
+    from sift.config import DatabaseConfig
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    # Default: the SQLite path.
+    assert DatabaseConfig().target() == "sift.db"
+    # Bare DATABASE_URL env is honoured when no explicit url is set.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host/db")
+    assert DatabaseConfig().target() == "postgresql://u:p@host/db"
+    # An explicit url wins over the env var.
+    assert DatabaseConfig(url="postgres://x/y").target() == "postgres://x/y"
+
+
+def test_resolve_url_normalizes_postgres():
+    from sift.db.session import _resolve_url
+
+    # sqlite path + :memory:
+    assert _resolve_url("sift.db") == "sqlite:///sift.db"
+    assert _resolve_url(":memory:") == "sqlite://"
+    # legacy scheme upgraded + sslmode added
+    assert _resolve_url("postgres://u:p@h/db") == "postgresql://u:p@h/db?sslmode=require"
+    # existing query string keeps its params, sslmode appended with &
+    assert _resolve_url("postgresql://u:p@h/db?a=1") == "postgresql://u:p@h/db?a=1&sslmode=require"
+    # explicit sslmode is left alone
+    assert _resolve_url("postgresql://u@h/db?sslmode=disable") == "postgresql://u@h/db?sslmode=disable"
+
+
 def test_toml_is_read(tmp_path):
     toml = tmp_path / "sift.toml"
     toml.write_text(

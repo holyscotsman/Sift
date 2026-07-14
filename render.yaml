@@ -9,6 +9,14 @@ services:
     plan: free
     autoDeploy: true
     envVars:
+      # Persistent database (STRONGLY RECOMMENDED). Without this, Sift uses an
+      # ephemeral SQLite file that Render's free tier wipes on every redeploy/restart —
+      # so your login and saved service keys disappear. Point this at a free, persistent
+      # Postgres (e.g. a Neon database) and your setup survives forever. Paste the full
+      # connection string, e.g. postgresql://user:pass@host/db?sslmode=require
+      - key: SIFT_DATABASE__URL
+        sync: false
+
       # Access token that gates the whole app — Render generates a strong random
       # value; read it from the dashboard and paste it into Sift's unlock screen.
       - key: SIFT_SERVER__API_TOKEN
