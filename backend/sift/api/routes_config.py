@@ -12,10 +12,17 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..services import config_store, runtime
+from ..services import config_store, reset, runtime
 from ..services.health import check_service
 from .deps import AuthDep, get_session_factory, get_state
-from .schemas import ConnectionsIn, ConnectionsOut, ConnectionTestIn, ServiceHealth
+from .schemas import (
+    ConnectionsIn,
+    ConnectionsOut,
+    ConnectionTestIn,
+    ResetRequest,
+    ResetResponse,
+    ServiceHealth,
+)
 
 router = APIRouter(prefix="/api/config", tags=["config"], dependencies=[AuthDep])
 
@@ -37,6 +44,17 @@ async def save_config(body: ConnectionsIn, request: Request) -> ConnectionsOut:
     # Re-overlay + swap the live services (health, scan, posters, writer, LLM).
     await runtime.rebuild(state)
     return ConnectionsOut(connections=config_store.masked(merged))
+
+
+@router.post("/reset", response_model=ResetResponse)
+async def reset_instance(body: ResetRequest, request: Request) -> ResetResponse:
+    """Factory reset back to the setup wizard. Optionally keeps the thumbnail cache."""
+    state = get_state(request)
+    reset.wipe_data(state.session_factory)
+    cleared = 0 if body.keep_thumbnails else state.posters.clear()
+    # Config + account are gone now; re-overlay so live services return to the base.
+    await runtime.rebuild(state)
+    return ResetResponse(ok=True, cleared_posters=cleared)
 
 
 @router.post("/test/{service}", response_model=ServiceHealth)

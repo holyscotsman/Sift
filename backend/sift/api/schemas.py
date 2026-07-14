@@ -137,6 +137,15 @@ class ConnectionTestIn(BaseModel):
     values: dict[str, Any] = {}
 
 
+class ResetRequest(BaseModel):
+    keep_thumbnails: bool = False
+
+
+class ResetResponse(BaseModel):
+    ok: bool
+    cleared_posters: int
+
+
 class SetupRequest(BaseModel):
     username: str
     password: str

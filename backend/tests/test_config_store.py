@@ -93,3 +93,25 @@ def test_config_test_anthropic_key_presence(client):
     assert with_key.json()["ok"] is True and with_key.json()["detail"] == "key set"
     without = client.post("/api/config/test/anthropic", json={"values": {}})
     assert without.json()["ok"] is False
+
+
+def test_reset_wipes_data_and_reopens_wizard(client, factory):
+    from sift.db.models import Movie
+
+    client.put(
+        "/api/config",
+        json={"connections": {"radarr": {"base_url": "http://r", "api_key": "k"}}},
+    )
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True))
+        session.commit()
+
+    r = client.post("/api/config/reset", json={"keep_thumbnails": True})
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+    # Snapshot + config + account are gone: library empty and the wizard is reachable.
+    with factory() as session:
+        assert session.get(Movie, 603) is None
+    # The account was cleared, so setup-status flips back and the gate reopens.
+    assert client.get("/api/auth/status").json()["setup_complete"] is False
+    assert client.get("/api/config").json()["connections"] == {}
