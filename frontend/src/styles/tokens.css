@@ -17,6 +17,7 @@
   --card-pad: 22px;
   --gap: 18px;
   --row-h: 50px;
+  --row-pad: 10px; /* table row vertical padding — tightens in compact density */
 
   /* motion */
   --dur-fast: 160ms;
@@ -30,6 +31,7 @@
   --card-pad: 15px;
   --gap: 12px;
   --row-h: 38px;
+  --row-pad: 4px;
 }
 
 /* ---------------------------------------------------------------- Dark (primary) */

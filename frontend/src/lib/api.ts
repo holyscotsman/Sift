@@ -15,6 +15,7 @@ import type {
   MovieListResponse,
   ProfileResponse,
   ProfileWeights,
+  RecommendationsResponse,
   ResetResponse,
   ReviewRunResponse,
   ScanRun,
@@ -148,6 +149,8 @@ export const api = {
   missingCollections: () =>
     request<MissingCollectionsResponse>("/api/missing/collections"),
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
+  missingRecommendations: () =>
+    request<RecommendationsResponse>("/api/missing/recommendations"),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   getProfile: () => request<ProfileResponse>("/api/profile"),
   saveWeights: (w: ProfileWeights) =>

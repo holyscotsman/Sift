@@ -269,8 +269,16 @@ class MissingListsResponse(BaseModel):
     lists: list[MissingList]
 
 
+class RecommendedMovie(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    vote_average: float
+    reason: str
+
+
 class RecommendationsResponse(BaseModel):
-    items: list[dict[str, Any]]
+    items: list[RecommendedMovie]
     note: str | None = None
 
 

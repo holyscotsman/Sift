@@ -6,7 +6,7 @@ import { CheckIcon, SparkleIcon } from "@/components/icons";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
 import { api } from "@/lib/api";
-import type { CollectionGap, MissingList } from "@/lib/types";
+import type { CollectionGap, MissingList, RecommendedMovie } from "@/lib/types";
 
 // Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
 function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
@@ -123,23 +123,90 @@ export function Missing() {
         <ListSection key={list.name} list={list} />
       ))}
 
-      <section>
-        <div className="mb-2 flex items-center gap-2">
-          <span className="eyebrow">Recommended for you</span>
-          <Pill tone="accent">AI</Pill>
+      <RecommendationsSection />
+    </div>
+  );
+}
+
+// Taste-based suggestions: TMDB's discovery graph seeded by your highest-rated titles.
+// Lazy — only fetched when the section mounts, since it fans out to TMDB.
+function RecommendationsSection() {
+  const { open } = useDrawer();
+  const [items, setItems] = useState<RecommendedMovie[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .missingRecommendations()
+      .then((r) => {
+        setItems(r.items);
+        setNote(r.note);
+      })
+      .catch(() => setNote("Recommendations are unavailable right now."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="eyebrow">Recommended for you</span>
+        <Pill tone="accent">Taste graph</Pill>
+      </div>
+      {loading ? (
+        <div className="panel p-4">
+          <div className="flex flex-wrap gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[138px] w-[92px]" />
+            ))}
+          </div>
         </div>
+      ) : items.length === 0 ? (
         <div className="panel">
           <EmptyState
-            title="Recommendations arrive with the AI layer"
+            title="No recommendations yet"
             hint={
               <span className="inline-flex items-center gap-1.5">
-                <SparkleIcon size={14} /> Taste-based suggestions come once the provider layer is wired.
+                <SparkleIcon size={14} />
+                {note ?? "Run a scan and connect TMDB to surface titles that match your taste."}
               </span>
             }
           />
         </div>
-      </section>
-    </div>
+      ) : (
+        <div className="panel p-4">
+          <div className="flex flex-wrap gap-3">
+            {items.map((m) => (
+              <div key={m.tmdb_id} className="w-[92px]">
+                <button
+                  onClick={() => open(m.tmdb_id)}
+                  className="block w-full text-left"
+                  title={m.reason}
+                >
+                  <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+                    <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
+                    {m.vote_average > 0 && (
+                      <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
+                        {m.vote_average.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 truncate text-[11px] text-fg3">
+                    {m.title} {m.year ? `· ${m.year}` : ""}
+                  </p>
+                  <p className="truncate text-[10px] text-fg3/80">{m.reason}</p>
+                </button>
+                <AddButton tmdbId={m.tmdb_id} title={m.title} />
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-fg3">
+            Grounded in your highest-rated titles via TMDB — Sift ranks and explains, it
+            never invents.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

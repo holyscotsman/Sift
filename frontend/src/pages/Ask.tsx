@@ -133,7 +133,9 @@ export function Ask() {
                   )}
                 </div>
                 <p className="mt-1 px-1 text-[11px] text-fg3">
-                  {m.provider === "stub" ? "no model — add ANTHROPIC_API_KEY" : `${m.model}`}
+                  {m.provider === "stub"
+                    ? "grounded answer — connect a model in Settings › Connections for richer phrasing"
+                    : `${m.model}`}
                   {m.latency ? ` · ${Math.round(m.latency)}ms` : ""}
                 </p>
               </div>

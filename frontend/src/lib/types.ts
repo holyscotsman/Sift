@@ -184,6 +184,19 @@ export interface MissingListsResponse {
   lists: MissingList[];
 }
 
+export interface RecommendedMovie {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  vote_average: number;
+  reason: string;
+}
+
+export interface RecommendationsResponse {
+  items: RecommendedMovie[];
+  note: string | null;
+}
+
 export interface UpgradeCandidate {
   tmdb_id: number;
   title: string;

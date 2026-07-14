@@ -298,7 +298,7 @@ function TableView({ items }: { items: Movie[] }) {
   const { open } = useDrawer();
   return (
     <div className="panel overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="movie-table w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg3">
             <th className="px-4 py-3 font-semibold">Title</th>
@@ -316,13 +316,13 @@ function TableView({ items }: { items: Movie[] }) {
               onClick={() => open(m.tmdb_id)}
               className="cursor-pointer border-b border-line/60 hover:bg-bg2"
             >
-              <td className="flex items-center gap-3 px-4 py-2.5">
+              <td className="flex items-center gap-3 px-4">
                 <Poster tmdbId={m.tmdb_id} alt="" className="h-9 w-6 shrink-0 rounded-sm" />
                 <span className="font-medium text-fg">{m.title}</span>
               </td>
-              <td className="hidden px-3 py-2.5 text-fg2 md:table-cell">{m.year ?? "—"}</td>
-              <td className="px-3 py-2.5 text-fg2">{m.library_section ?? "—"}</td>
-              <td className="hidden px-3 py-2.5 md:table-cell">
+              <td className="hidden px-3 text-fg2 md:table-cell">{m.year ?? "—"}</td>
+              <td className="px-3 text-fg2">{m.library_section ?? "—"}</td>
+              <td className="hidden px-3 md:table-cell">
                 <span className="flex items-center gap-1.5">
                   {m.quality ? <Pill>{m.quality}</Pill> : <span className="text-fg3">—</span>}
                   {m.cutoff_unmet && (
@@ -332,10 +332,10 @@ function TableView({ items }: { items: Movie[] }) {
                   )}
                 </span>
               </td>
-              <td className="px-3 py-2.5">
+              <td className="px-3">
                 {m.in_plex ? <Pill tone="keep">Yes</Pill> : <span className="text-fg3">—</span>}
               </td>
-              <td className="hidden px-3 py-2.5 md:table-cell">
+              <td className="hidden px-3 md:table-cell">
                 {m.monitored ? <Pill tone="accent">Yes</Pill> : <span className="text-fg3">No</span>}
               </td>
             </tr>

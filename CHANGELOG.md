@@ -4,6 +4,33 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — taste recommendations + polish
+- **Real "Recommended for you"** — the Missing screen's recommendations are no longer a
+  stub. `analysis/recommend.py` seeds TMDB's discovery graph from your highest-rated
+  owned titles (anchors), pulls `recommendations`/`similar` for each, aggregates and
+  ranks candidates you don't own, and explains each ("Because you own X and Y").
+  Deterministic — TMDB picks the candidates, Sift ranks and explains, never invents.
+  `GET /api/missing/recommendations` degrades to a clear "connect TMDB" / "run a scan"
+  note when it can't run.
+- **Density toggle now does something** — the header's row-density button drove CSS
+  variables nothing consumed. The library table now honours it (comfortable vs compact
+  rows) and the tooltip says what it does.
+- **Ask** — stale "add ANTHROPIC_API_KEY" hint replaced with a pointer to the in-app
+  Settings › Connections (config moved into the UI).
+
+### Added — add/monitor/remove actions in the UI
+- **Movie actions surfaced in the drawer** — Monitor/Unmonitor toggle + Remove
+  (confirm-gated, dry-run aware) on any Radarr-managed title; a clear "not managed by
+  Radarr" note otherwise. The **Missing** screen gains "+ Add" on collection gaps and
+  starter-list titles. New `POST /api/actions/add` (autonomous, staged unless
+  `SIFT_ACTIONS__DRY_RUN=false`) resolves the Radarr root folder + quality profile for
+  live adds via `radarr_add`.
+- **Fixed an id-conflation bug** — monitor/unmonitor/delete dispatch to Radarr
+  endpoints keyed on Radarr's own movie id, not `tmdb_id`. The engine now resolves the
+  stored `radarr_id` and refuses (clear error) any title Radarr doesn't manage; the
+  golden delete-approval guard is unchanged. Safety tests seed `radarr_id` and assert
+  live calls key on it.
+
 ### Added — smarter junk, curated lists, and AI review
 - **Smarter junk classification** — a rule cascade over the rating score: adult →
   remove; cult classic → keep; US theatrical → keep; low + independent → remove;

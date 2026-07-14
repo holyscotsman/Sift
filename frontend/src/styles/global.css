@@ -59,6 +59,11 @@
     border-radius: var(--r-lg);
     box-shadow: var(--elev);
   }
+  /* The main library table honours the density toggle — comfortable vs compact rows. */
+  .movie-table tbody td {
+    padding-top: var(--row-pad);
+    padding-bottom: var(--row-pad);
+  }
   .gradient-text {
     background: var(--grad);
     -webkit-background-clip: text;

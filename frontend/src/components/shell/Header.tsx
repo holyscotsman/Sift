@@ -39,8 +39,12 @@ export function Header() {
 
         <button
           onClick={toggleDensity}
-          title={`Density: ${density}`}
-          aria-label={`Density: ${density}`}
+          title={`Row spacing: ${density} — switch to ${
+            density === "comfortable" ? "compact" : "comfortable"
+          }`}
+          aria-label={`Row spacing: ${density}. Switch to ${
+            density === "comfortable" ? "compact" : "comfortable"
+          }`}
           className="grid h-8 w-8 place-items-center rounded-md text-fg2 hover:bg-bg2"
         >
           <DensityIcon size={16} />

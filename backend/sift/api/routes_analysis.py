@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import collections as coll_analysis
 from ..analysis import junk as junk_analysis
+from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
@@ -26,6 +27,7 @@ from .schemas import (
     MissingList,
     MissingListsResponse,
     RecommendationsResponse,
+    RecommendedMovie,
     SignalOut,
     UpgradeCandidateOut,
     UpgradesResponse,
@@ -145,9 +147,15 @@ def missing_lists(
 
 
 @router.get("/missing/recommendations", response_model=RecommendationsResponse)
-def missing_recommendations() -> RecommendationsResponse:
-    # Taste-based recommendations need the Phase-2 embeddings/profile layer.
+async def missing_recommendations(
+    limit: int = 24,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    settings: Settings = Depends(get_settings),
+) -> RecommendationsResponse:
+    """Taste-based suggestions grounded in your highest-rated owned titles, via TMDB's
+    discovery graph. Deterministic: TMDB picks the candidates, we rank and explain them."""
+    result = await recommend_analysis.recommendations(factory, settings, limit=limit)
     return RecommendationsResponse(
-        items=[],
-        note="Taste-based recommendations arrive with the AI layer (next).",
+        items=[RecommendedMovie(**item) for item in result["items"]],
+        note=result["note"],
     )
