@@ -1,7 +1,8 @@
-"""Analysis endpoints: junk removal candidates and collection gaps.
+"""Analysis endpoints: junk removal candidates, collection gaps, and recommendations.
 
 Scores are deterministic and computed during the scan; these routes read and shape
-them. Recommendations arrive with the Phase-2 embeddings layer.
+them. Recommendations are deterministic too — TMDB's discovery graph seeded by your
+highest-rated owned titles (see ``analysis/recommend.py``).
 """
 
 from __future__ import annotations

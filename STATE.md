@@ -19,7 +19,7 @@ Green gates (run from `backend/` in the venv at `../.venv`):
 # from backend/ :
 ruff check .            # clean
 ../.venv/bin/mypy sift  # strict, clean (69 files)
-../.venv/bin/pytest -q  # 119 passed
+../.venv/bin/pytest -q  # 121 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
 # from the repo root (alembic.ini lives there; script_location=backend/sift/db/migrations):
 ./.venv/bin/alembic upgrade head     # 0001→0004, idempotent over create_all
@@ -52,6 +52,12 @@ The delete-safety test is mutation-verified: disabling the guard in
 - **Write mode toggle** (Settings › Autonomy): staged vs live, persisted via
   `config_store.set_actions` and re-overlaid on `runtime.rebuild`. **Density toggle**
   now actually drives the library table row spacing.
+- **Audit pass** over the new action/recommendation code (subagent + fixes): Missing's
+  not-yet-owned posters link to TMDB (were opening a 404 drawer); recommendations show
+  a "couldn't reach TMDB" note when every anchor call fails (was "covers the graph
+  well"); live add returns 400 not 500 on an unreachable Radarr; drawer monitor/
+  unmonitor records `actor=user`. Safety machinery (delete guard, dry-run authority,
+  radarr-id resolution) audited clean.
 
 ### Upgrade detector (cutoff-unmet) — latest slice
 - `Movie.cutoff_unmet` (migration `0002`, indexed) captures Radarr's "below profile
