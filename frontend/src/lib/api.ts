@@ -5,6 +5,8 @@ import type {
   ActionRecord,
   ActionType,
   AskResponse,
+  AuthStatus,
+  ConnectionsResponse,
   HealthResponse,
   JunkResponse,
   MissingCollectionsResponse,
@@ -12,6 +14,7 @@ import type {
   MovieListResponse,
   ProfileResponse,
   ProfileWeights,
+  ResetResponse,
   ScanRun,
   ScanStartResponse,
   ServiceHealth,
@@ -19,6 +22,7 @@ import type {
   StatusResponse,
   ThresholdPreview,
   Thresholds,
+  TokenResponse,
   UpgradesResponse,
 } from "./types";
 
@@ -90,6 +94,35 @@ function queryString(params: Record<string, unknown>): string {
 export const api = {
   health: () => request<HealthResponse>("/api/health"),
   status: () => request<StatusResponse>("/api/status"),
+  // Auth (open endpoints — the way in).
+  authStatus: () => request<AuthStatus>("/api/auth/status"),
+  authSetup: (username: string, password: string) =>
+    request<TokenResponse>("/api/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  authLogin: (username: string, password: string) =>
+    request<TokenResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  // In-app connection config.
+  getConfig: () => request<ConnectionsResponse>("/api/config"),
+  saveConfig: (connections: Record<string, Record<string, unknown>>) =>
+    request<ConnectionsResponse>("/api/config", {
+      method: "PUT",
+      body: JSON.stringify({ connections }),
+    }),
+  testConfig: (service: string, values: Record<string, unknown>) =>
+    request<ServiceHealth>(`/api/config/test/${service}`, {
+      method: "POST",
+      body: JSON.stringify({ values }),
+    }),
+  resetInstance: (keepThumbnails: boolean) =>
+    request<ResetResponse>("/api/config/reset", {
+      method: "POST",
+      body: JSON.stringify({ keep_thumbnails: keepThumbnails }),
+    }),
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),

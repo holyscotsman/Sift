@@ -3,13 +3,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { ConnectionsForm } from "@/components/ConnectionsForm";
 import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, setToken } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
-import type { ServiceHealth, ThresholdPreview, Thresholds } from "@/lib/types";
+import type { Connections as ConnConfig, ServiceHealth, ThresholdPreview, Thresholds } from "@/lib/types";
 
-const TABS = ["Appearance", "Connections", "Scoring", "Autonomy"] as const;
+const TABS = ["Appearance", "Connections", "Scoring", "Autonomy", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const ACCENTS = ["#2ee6e6", "#92dd23", "#7855fa", "#ff6b5b", "#ffc857", "#1fdde9"];
@@ -40,6 +42,7 @@ export function Settings() {
           {tab === "Connections" && <Connections />}
           {tab === "Scoring" && <Scoring />}
           {tab === "Autonomy" && <Autonomy />}
+          {tab === "Account" && <Account />}
         </div>
       </div>
     </div>
@@ -115,49 +118,131 @@ function Appearance() {
 
 function Connections() {
   const [rows, setRows] = useState<ServiceHealth[]>([]);
-  const [testing, setTesting] = useState<string | null>(null);
+  const [config, setConfig] = useState<ConnConfig | null>(null);
 
-  useEffect(() => {
+  const refreshStatus = useCallback(() => {
     api.getSettings().then((s) => setRows(s.connections)).catch(() => setRows([]));
   }, []);
 
-  async function test(service: string) {
-    setTesting(service);
+  useEffect(() => {
+    refreshStatus();
+    api.getConfig().then((c) => setConfig(c.connections)).catch(() => setConfig({}));
+  }, [refreshStatus]);
+
+  return (
+    <>
+      <Section title="Status">
+        <div className="divide-y divide-line">
+          {rows.map((r) => (
+            <div key={r.service} className="flex items-center gap-3 py-2.5">
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: r.ok ? "var(--keep)" : "var(--fg-3)" }}
+              />
+              <span className="w-24 text-sm font-semibold capitalize">{r.service}</span>
+              <span className="flex-1 truncate text-xs text-fg3">{r.detail}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+      <span className="eyebrow">Edit connections</span>
+      <p className="mb-3 mt-1 text-xs text-fg3">
+        Entered here and stored on your server — no need to touch Render. Test each one, then save.
+      </p>
+      {config === null ? (
+        <div className="panel p-5 text-sm text-fg3">Loading…</div>
+      ) : (
+        <ConnectionsForm
+          initial={config}
+          onSaved={(c) => {
+            setConfig(c);
+            refreshStatus();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function Account() {
+  const [username, setUsername] = useState<string | null>(null);
+  const [modal, setModal] = useState<null | { keepThumbs: boolean }>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.authStatus().then((s) => setUsername(s.username)).catch(() => setUsername(null));
+  }, []);
+
+  async function doReset(keepThumbs: boolean) {
+    setBusy(true);
     try {
-      const r = await api.testConnection(service);
-      setRows((rs) => rs.map((x) => (x.service === service ? r : x)));
+      await api.resetInstance(keepThumbs);
+      setToken(null);
+      window.location.reload(); // back to the setup wizard
     } finally {
-      setTesting(null);
+      setBusy(false);
+      setModal(null);
     }
   }
 
   return (
-    <Section title="Connections">
-      <div className="divide-y divide-line">
-        {rows.map((r) => (
-          <div key={r.service} className="flex items-center gap-3 py-3">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: r.ok ? "var(--keep)" : "var(--fg-3)" }}
-            />
-            <span className="w-24 text-sm font-semibold capitalize">{r.service}</span>
-            <span className="flex-1 truncate text-xs text-fg3">{r.detail}</span>
-            {r.service !== "model" && (
-              <button
-                onClick={() => test(r.service)}
-                disabled={testing === r.service}
-                className="rounded-md border border-line px-2.5 py-1 text-xs text-fg2 hover:bg-bg2 disabled:opacity-50"
-              >
-                {testing === r.service ? "Testing…" : "Test"}
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-fg3">
-        Connection URLs and keys are set as environment variables on the server.
-      </p>
-    </Section>
+    <>
+      <Section title="Account">
+        <p className="text-sm text-fg2">
+          Signed in as <span className="font-semibold text-fg">{username ?? "—"}</span>.
+        </p>
+        <button
+          onClick={() => {
+            setToken(null);
+            window.location.reload();
+          }}
+          className="mt-3 rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+        >
+          Sign out
+        </button>
+      </Section>
+
+      <Section title="Reset">
+        <p className="text-sm text-fg2">
+          Wipe the library snapshot, saved connections, and your login, returning Sift to the setup
+          wizard. This cannot be undone.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => setModal({ keepThumbs: true })}
+            className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+          >
+            Reset · keep thumbnails
+          </button>
+          <button
+            onClick={() => setModal({ keepThumbs: false })}
+            className="rounded-md px-4 py-2 text-sm font-bold"
+            style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+          >
+            Reset everything
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-fg3">
+          “Keep thumbnails” preserves the poster cache so your next scan renders instantly.
+        </p>
+      </Section>
+
+      <ConfirmModal
+        open={modal !== null}
+        title={modal?.keepThumbs ? "Reset (keep thumbnails)?" : "Reset everything?"}
+        confirmLabel={busy ? "Resetting…" : "Reset"}
+        busy={busy}
+        onCancel={() => setModal(null)}
+        onConfirm={() => modal && doReset(modal.keepThumbs)}
+        body={
+          <p className="text-sm text-fg2">
+            This wipes your library snapshot, saved connections, and login
+            {modal?.keepThumbs ? " but keeps the thumbnail cache" : " and clears the thumbnail cache"}.
+            You'll be taken back to the setup wizard.
+          </p>
+        }
+      />
+    </>
   );
 }
 

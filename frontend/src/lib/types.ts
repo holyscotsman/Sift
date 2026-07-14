@@ -2,6 +2,28 @@
 
 export type ServiceName = "plex" | "radarr" | "tautulli" | "tmdb";
 
+export interface AuthStatus {
+  setup_complete: boolean;
+  username: string | null;
+}
+
+export interface TokenResponse {
+  token: string;
+  username: string;
+}
+
+// {service: {field: value | `${field}_set`: boolean}} — secrets come back as *_set.
+export type Connections = Record<string, Record<string, unknown>>;
+
+export interface ConnectionsResponse {
+  connections: Connections;
+}
+
+export interface ResetResponse {
+  ok: boolean;
+  cleared_posters: number;
+}
+
 export interface ServiceHealth {
   service: string;
   ok: boolean;
