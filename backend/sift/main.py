@@ -27,6 +27,7 @@ from .api import (
     routes_actions,
     routes_analysis,
     routes_ask,
+    routes_auth,
     routes_health,
     routes_movies,
     routes_posters,
@@ -98,6 +99,7 @@ def create_app(
     app.state.scan_tasks = set()
 
     for module in (
+        routes_auth,
         routes_health,
         routes_scan,
         routes_movies,

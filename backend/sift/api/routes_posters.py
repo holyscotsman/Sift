@@ -11,27 +11,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
-from .deps import get_state
+from .deps import get_state, presented_token, token_accepted
 
 router = APIRouter(prefix="/api", tags=["posters"])
-
-
-def _authorize(
-    request: Request,
-    token: str | None,
-    authorization: str | None,
-    x_sift_token: str | None,
-) -> None:
-    configured = get_state(request).settings.server.api_token
-    if configured is None:
-        return
-    secret = configured.get_secret_value()
-    bearer = None
-    if authorization and authorization.lower().startswith("bearer "):
-        bearer = authorization[7:]
-    if secret in (token, x_sift_token, bearer):
-        return
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or missing token")
 
 
 @router.get("/poster/{tmdb_id}")
@@ -42,7 +24,10 @@ async def poster(
     authorization: str | None = Header(default=None),
     x_sift_token: str | None = Header(default=None),
 ) -> FileResponse:
-    _authorize(request, token, authorization, x_sift_token)
+    # <img> can't send headers, so the token also comes via ?token=.
+    presented = token or presented_token(authorization, x_sift_token)
+    if not token_accepted(get_state(request), presented):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="login required")
     path = await get_state(request).posters.get(tmdb_id)
     if path is None:
         # No artwork available — the UI falls back to its gradient placeholder.

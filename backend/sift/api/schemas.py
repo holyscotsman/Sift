@@ -118,6 +118,26 @@ class ScanStartResponse(BaseModel):
     resume: bool
 
 
+class AuthStatus(BaseModel):
+    setup_complete: bool
+    username: str | None = None
+
+
+class SetupRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    token: str
+    username: str
+
+
 class ProposeActionIn(BaseModel):
     type: ActionType
     movie_tmdb_id: int | None = None
