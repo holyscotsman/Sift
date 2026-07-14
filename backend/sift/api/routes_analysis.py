@@ -45,6 +45,17 @@ def junk(
             payload = score.signals or {}
             signals = list(payload.get("signals", []))
             band = payload.get("band") or scoring.band(score.junk_score, thr)
+            # A forced-removal classification (adult / low independent / low
+            # international) leads the rationale; otherwise the score rationale stands.
+            classifier_reason = str(payload.get("verdict_reason") or "")
+            if payload.get("verdict") == "remove":
+                band = "junk"  # a forced removal reads as junk, not its numeric band
+            score_rationale = scoring.rationale(signals, band)
+            rationale = (
+                f"{classifier_reason} {score_rationale}".strip()
+                if classifier_reason
+                else score_rationale
+            )
             items.append(
                 JunkCandidate(
                     tmdb_id=movie.tmdb_id,
@@ -57,7 +68,7 @@ def junk(
                     junk_score=score.junk_score,
                     band=band,
                     kids_guard=bool(payload.get("kids_guard")),
-                    rationale=scoring.rationale(signals, band),
+                    rationale=rationale,
                     signals=[SignalOut(**s) for s in signals],
                 )
             )

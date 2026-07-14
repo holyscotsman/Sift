@@ -106,6 +106,14 @@ class Movie(Base):
     # meaningful only when has_file. Drives the deterministic upgrade detector.
     cutoff_unmet: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # Facts for the smarter-junk classifier (populated by TMDB enrichment). Absent →
+    # the classifier stays neutral and the numeric score decides.
+    original_language: Mapped[str | None] = mapped_column(String(8))
+    budget: Mapped[int | None] = mapped_column(BigInteger)
+    is_adult: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    us_theatrical: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_independent: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
     added_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow

@@ -170,7 +170,8 @@ class ScanPipeline:
         enriched = []
         for tmdb_id in targets:
             try:
-                raw = await self.tmdb.get_movie(tmdb_id)
+                # release_dates powers the US-theatrical classifier fact.
+                raw = await self.tmdb.get_movie(tmdb_id, append="keywords,credits,release_dates")
             except Exception as exc:  # noqa: BLE001 - enrichment is best-effort
                 log.info("tmdb enrich skipped for %s: %s", tmdb_id, exc)
                 continue
@@ -404,6 +405,14 @@ class ScanPipeline:
                     continue
                 if data["keywords"]:
                     movie.keywords = data["keywords"]
+                # Classifier facts (best-effort; absent → classifier stays neutral).
+                if data.get("original_language"):
+                    movie.original_language = data["original_language"]
+                if data.get("budget") is not None:
+                    movie.budget = data["budget"]
+                movie.is_adult = bool(data.get("is_adult"))
+                movie.us_theatrical = bool(data.get("us_theatrical"))
+                movie.is_independent = bool(data.get("is_independent"))
                 for person in data["people"]:
                     self._upsert_person(session, tmdb_id, person)
                 if data["collection"]:

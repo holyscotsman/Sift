@@ -58,6 +58,39 @@ def test_normalize_radarr_cutoff_unmet_variants():
     assert no_file["cutoff_unmet"] is False
 
 
+def test_normalize_tmdb_classifier_facts():
+    raw = {
+        "id": 27205,
+        "adult": False,
+        "original_language": "en",
+        "budget": 160_000_000,
+        "production_companies": [{"name": "Warner Bros. Pictures"}],
+        "release_dates": {
+            "results": [
+                {"iso_3166_1": "US", "release_dates": [{"type": 3}]},  # theatrical
+                {"iso_3166_1": "FR", "release_dates": [{"type": 1}]},  # premiere only
+            ]
+        },
+        "keywords": {"keywords": [{"name": "dream"}]},
+    }
+    out = normalize.normalize_tmdb_movie(raw)
+    assert out["us_theatrical"] is True
+    assert out["is_adult"] is False
+    assert out["is_independent"] is False  # big budget + major studio
+    assert out["original_language"] == "en"
+
+
+def test_normalize_tmdb_independent_and_adult():
+    indie = normalize.normalize_tmdb_movie(
+        {"id": 1, "budget": 200_000, "production_companies": [{"name": "Tiny Indie LLC"}]}
+    )
+    assert indie["is_independent"] is True
+    assert indie["us_theatrical"] is False  # no release_dates
+
+    adult = normalize.normalize_tmdb_movie({"id": 2, "adult": True})
+    assert adult["is_adult"] is True
+
+
 def test_extract_plex_ids_from_guid_list_and_legacy():
     item = {"Guid": [{"id": "tmdb://27205"}, {"id": "imdb://tt1375666"}]}
     assert normalize.extract_plex_ids(item) == (27205, "tt1375666")

@@ -79,6 +79,45 @@ def test_upgrade_candidates_filter_and_order(factory):
     assert ids[0] == 603  # ordered by file size desc (biggest re-grab first)
 
 
+def test_classification_overrides_rating(factory):
+    with factory() as session:
+        # Low rating but US theatrical → protected (kept off the removal queue).
+        theatrical = Movie(tmdb_id=1, title="Theatrical Flop", in_plex=True, us_theatrical=True)
+        theatrical.ratings.append(Rating(source=RatingSource.IMDB, value=3.0, votes=200))
+        # Good rating but adult → force-removed regardless of score.
+        adult = Movie(tmdb_id=2, title="Adult", in_plex=True, is_adult=True)
+        adult.ratings.append(Rating(source=RatingSource.IMDB, value=8.0, votes=5000))
+        # Low rating + independent → removed.
+        indie = Movie(tmdb_id=3, title="Indie Flop", in_plex=True, is_independent=True)
+        indie.ratings.append(Rating(source=RatingSource.IMDB, value=3.0, votes=200))
+        # Low rating, no facts → neutral, decided by the score (junk) → candidate.
+        plain = Movie(tmdb_id=4, title="Plain Flop", in_plex=True)
+        plain.ratings.append(Rating(source=RatingSource.IMDB, value=3.0, votes=200))
+        session.add_all([theatrical, adult, indie, plain])
+        session.commit()
+
+    junk.compute_and_store(factory, JunkThresholds())
+    with factory() as session:
+        ids = {m.tmdb_id for m, _ in junk.candidates(session, JunkThresholds())}
+    # Adult + independent + plain are cut; the theatrical film is protected.
+    assert ids == {2, 3, 4}
+
+
+def test_cult_classic_is_protected(factory):
+    with factory() as session:
+        m = Movie(tmdb_id=1, title="Cult Flop", in_plex=True, is_independent=True)
+        m.ratings.append(Rating(source=RatingSource.IMDB, value=2.5, votes=300))
+        session.add(m)
+        session.commit()
+    # Without the cult flag it's a removal; marked cult, it's protected.
+    junk.compute_and_store(factory, JunkThresholds())
+    with factory() as session:
+        assert {m.tmdb_id for m, _ in junk.candidates(session, JunkThresholds())} == {1}
+    junk.compute_and_store(factory, JunkThresholds(), cult_ids=frozenset({1}))
+    with factory() as session:
+        assert junk.candidates(session, JunkThresholds()) == []
+
+
 @pytest.fixture
 def client(settings, factory):
     for name in ("plex", "radarr", "tautulli", "tmdb"):

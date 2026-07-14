@@ -84,6 +84,10 @@ class TmdbConfig(BaseModel):
     enabled: bool = True
     api_key: SecretStr | None = None
     language: str = "en-US"
+    # How many in-Plex titles to enrich per scan (keywords, people, and the facts the
+    # smarter-junk classifier needs). Rate-limited; a few thousand covers most
+    # libraries. 0 disables enrichment.
+    enrich_limit: int = 3000
 
 
 class JunkThresholds(BaseModel):

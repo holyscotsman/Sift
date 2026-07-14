@@ -74,6 +74,7 @@ async def run_scan(
         tautulli=tautulli,
         tmdb=tmdb,
         progress_cb=hub.publish_progress,
+        tmdb_enrich_limit=settings.tmdb.enrich_limit,
     )
     try:
         run = await pipeline.run(scan_run_id, resume=resume)

@@ -16,6 +16,19 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..config import JunkThresholds
 from ..db.models import Movie, Rating, Score, WatchHistory
 from . import scoring
+from .classify import MovieFacts, Verdict, classify
+
+
+def _facts(movie: Movie, cult_ids: frozenset[int]) -> MovieFacts:
+    lang = movie.original_language
+    return MovieFacts(
+        us_theatrical=bool(movie.us_theatrical),
+        is_adult=bool(movie.is_adult),
+        is_independent=bool(movie.is_independent),
+        # International = a known non-English original language.
+        is_international=bool(lang) and lang != "en",
+        is_cult=movie.tmdb_id in cult_ids,
+    )
 
 
 def _best_rating(session: Session, movie_id: int) -> tuple[float | None, int | None]:
@@ -58,7 +71,11 @@ def _iter_scores(
 
 
 def compute_and_store(
-    factory: sessionmaker[Session], thr: JunkThresholds, *, now: datetime | None = None
+    factory: sessionmaker[Session],
+    thr: JunkThresholds,
+    *,
+    now: datetime | None = None,
+    cult_ids: frozenset[int] = frozenset(),
 ) -> int:
     with factory() as session:
         written = 0
@@ -66,6 +83,10 @@ def compute_and_store(
             movie = session.get(Movie, tmdb_id)
             if movie is None:
                 continue
+            # Classification overlay: the numeric band answers "low?"; the classifier
+            # answers "keep or cut, given what kind of film it is".
+            scored_low = result.band in ("junk", "borderline")
+            verdict = classify(_facts(movie, cult_ids), scored_low=scored_low)
             row = movie.score
             if row is None:
                 row = Score(movie_id=tmdb_id)
@@ -75,6 +96,8 @@ def compute_and_store(
                 "signals": [s.as_dict() for s in result.signals],
                 "kids_guard": result.kids_guard,
                 "band": result.band,
+                "verdict": str(verdict.verdict),
+                "verdict_reason": verdict.reason,
             }
             row.model_used = None  # deterministic — no model involved
             written += 1
@@ -97,20 +120,31 @@ def preview(factory: sessionmaker[Session], thr: JunkThresholds) -> dict[str, in
     return counts
 
 
+def _is_candidate(score: Score, thr: JunkThresholds) -> bool:
+    """Classification-aware selection:
+
+    * ``remove`` verdict → always a candidate (e.g. an adult film, even if well-rated);
+    * ``protect`` verdict → never (US theatrical / cult classic, even if it scored low);
+    * otherwise → the numeric band decides (at/above the borderline cutoff).
+    """
+    verdict = (score.signals or {}).get("verdict", Verdict.NEUTRAL)
+    if verdict == Verdict.REMOVE:
+        return True
+    if verdict == Verdict.PROTECT:
+        return False
+    return score.junk_score >= thr.borderline_cutoff
+
+
 def candidates(
     session: Session, thr: JunkThresholds, *, limit: int = 200
 ) -> list[tuple[Movie, Score]]:
-    """Removal candidates: library items scoring at/above the borderline cutoff,
+    """Removal candidates: library items the classifier + score flag for removal,
     excluding kids-section items (never auto-flagged)."""
     stmt = (
         select(Movie, Score)
         .join(Score, Score.movie_id == Movie.tmdb_id)
-        .where(
-            Movie.in_plex.is_(True),
-            Movie.is_kids.is_(False),
-            Score.junk_score >= thr.borderline_cutoff,
-        )
+        .where(Movie.in_plex.is_(True), Movie.is_kids.is_(False))
         .order_by(Score.junk_score.desc())
-        .limit(limit)
     )
-    return list(session.execute(stmt).all())  # type: ignore[arg-type]
+    rows = [(m, s) for m, s in session.execute(stmt) if _is_candidate(s, thr)]
+    return rows[:limit]

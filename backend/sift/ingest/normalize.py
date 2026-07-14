@@ -219,6 +219,45 @@ def aggregate_watch_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str], di
 # -------------------------------------------------------------------------- TMDB
 
 
+# Studios that mark a film as decidedly non-independent. Lower-cased substring match.
+_MAJOR_STUDIOS = (
+    "warner", "universal", "paramount", "walt disney", "disney", "columbia", "sony",
+    "20th century", "twentieth century", "fox", "metro-goldwyn", "mgm", "lionsgate",
+    "lions gate", "dreamworks", "new line", "miramax", "netflix", "amazon", "apple",
+    "marvel", "lucasfilm", "pixar", "legendary", "blumhouse", "a24",
+)
+# Adult/porn keyword signals (TMDB's own ``adult`` flag is the primary tell).
+_ADULT_KEYWORDS = ("pornographic", "hardcore", "softcore", "adult film", "erotica")
+
+
+def _us_theatrical(raw: dict[str, Any]) -> bool:
+    """True if TMDB lists a US theatrical (type 2/3) release date."""
+    for entry in ((raw.get("release_dates") or {}).get("results") or []):
+        if entry.get("iso_3166_1") != "US":
+            continue
+        for rel in entry.get("release_dates", []) or []:
+            if rel.get("type") in (2, 3):  # 2 = limited theatrical, 3 = theatrical
+                return True
+    return False
+
+
+def _is_independent(raw: dict[str, Any]) -> bool:
+    """Heuristic: a real but small budget and no major studio attached. Conservative —
+    an unknown budget is treated as *not* independent so we never force-remove blindly.
+    """
+    budget = _int_or_none(raw.get("budget")) or 0
+    companies = [str(c.get("name", "")).lower() for c in (raw.get("production_companies") or [])]
+    major = any(any(m in name for m in _MAJOR_STUDIOS) for name in companies)
+    return 0 < budget < 5_000_000 and not major
+
+
+def _is_adult(raw: dict[str, Any], keywords: list[str]) -> bool:
+    if bool(raw.get("adult")):
+        return True
+    haystack = " ".join(keywords).lower()
+    return any(term in haystack for term in _ADULT_KEYWORDS)
+
+
 def normalize_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
     keywords = [
         k.get("name")
@@ -244,4 +283,9 @@ def normalize_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "keywords": keywords,
         "people": people,
         "collection": collection,
+        "original_language": raw.get("original_language") or None,
+        "budget": _int_or_none(raw.get("budget")),
+        "is_adult": _is_adult(raw, keywords),
+        "us_theatrical": _us_theatrical(raw),
+        "is_independent": _is_independent(raw),
     }
