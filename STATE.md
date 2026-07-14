@@ -16,11 +16,13 @@ Postgres); PR #1 open on `claude/sift-webapp-setup-2qmxsn`.
 Green gates (run from `backend/` in the venv at `../.venv`):
 
 ```bash
+# from backend/ :
 ruff check .            # clean
 ../.venv/bin/mypy sift  # strict, clean (69 files)
 ../.venv/bin/pytest -q  # 119 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
-alembic -c alembic.ini upgrade head  # 0001→0004, idempotent over create_all
+# from the repo root (alembic.ini lives there; script_location=backend/sift/db/migrations):
+./.venv/bin/alembic upgrade head     # 0001→0004, idempotent over create_all
 ```
 
 The delete-safety test is mutation-verified: disabling the guard in

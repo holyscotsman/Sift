@@ -60,3 +60,21 @@ def test_add_movie_endpoint_stages_in_dry_run(client):
     assert body["payload"]["result"]["sent"] is False
     # It shows up in the activity feed.
     assert any(a["type"] == "add" for a in client.get("/api/activity").json())
+
+
+def test_live_add_with_unreachable_radarr_is_400_not_500(settings, factory, monkeypatch):
+    # In live mode, a Radarr network fault while resolving add options is a graceful
+    # 400 ("check the connection"), never an unhandled 500.
+    settings.actions.dry_run = False
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+
+    async def boom(*_args, **_kwargs):
+        raise httpx.ConnectError("radarr down")
+
+    monkeypatch.setattr(radarr_add, "resolve_add_options", boom)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/add", json={"tmdb_id": 605, "title": "X"})
+    assert resp.status_code == 400
+    assert "Radarr" in resp.json()["detail"]

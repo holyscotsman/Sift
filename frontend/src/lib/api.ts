@@ -173,6 +173,7 @@ export const api = {
     movie_tmdb_id?: number | null;
     payload?: Record<string, unknown>;
     dry_run?: boolean;
+    actor?: "auto" | "user";
   }) => request<ActionRecord>("/api/actions", { method: "POST", body: JSON.stringify(body) }),
   approveAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/approve`, { method: "POST" }),

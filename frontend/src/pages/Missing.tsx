@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 
 import { CheckIcon, SparkleIcon } from "@/components/icons";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
-import { useDrawer } from "@/lib/drawer";
 import { api } from "@/lib/api";
 import type { CollectionGap, MissingList, RecommendedMovie } from "@/lib/types";
+
+// Titles here aren't in the library (that's the point), so the library drawer would
+// 404. Link out to TMDB to preview a title before adding it — the affordance Radarr /
+// Overseerr use for the same "not-yet-owned" case.
+const tmdbMovieUrl = (tmdbId: number) => `https://www.themoviedb.org/movie/${tmdbId}`;
 
 // Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
 function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
@@ -131,7 +135,6 @@ export function Missing() {
 // Taste-based suggestions: TMDB's discovery graph seeded by your highest-rated titles.
 // Lazy — only fetched when the section mounts, since it fans out to TMDB.
 function RecommendationsSection() {
-  const { open } = useDrawer();
   const [items, setItems] = useState<RecommendedMovie[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -178,10 +181,12 @@ function RecommendationsSection() {
           <div className="flex flex-wrap gap-3">
             {items.map((m) => (
               <div key={m.tmdb_id} className="w-[92px]">
-                <button
-                  onClick={() => open(m.tmdb_id)}
+                <a
+                  href={tmdbMovieUrl(m.tmdb_id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="block w-full text-left"
-                  title={m.reason}
+                  title={`${m.reason} — view on TMDB`}
                 >
                   <div className="relative aspect-[2/3] overflow-hidden rounded-md">
                     <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
@@ -195,7 +200,7 @@ function RecommendationsSection() {
                     {m.title} {m.year ? `· ${m.year}` : ""}
                   </p>
                   <p className="truncate text-[10px] text-fg3/80">{m.reason}</p>
-                </button>
+                </a>
                 <AddButton tmdbId={m.tmdb_id} title={m.title} />
               </div>
             ))}
@@ -211,7 +216,6 @@ function RecommendationsSection() {
 }
 
 function ListSection({ list }: { list: MissingList }) {
-  const { open } = useDrawer();
   if (list.items.length === 0) return null;
   return (
     <section>
@@ -223,10 +227,12 @@ function ListSection({ list }: { list: MissingList }) {
         <div className="flex flex-wrap gap-3">
           {list.items.map((m) => (
             <div key={m.tmdb_id} className="w-[92px]">
-              <button
-                onClick={() => open(m.tmdb_id)}
+              <a
+                href={tmdbMovieUrl(m.tmdb_id)}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="block w-full text-left"
-                title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
+                title={`${m.title}${m.year ? ` (${m.year})` : ""} — view on TMDB`}
               >
                 <div className="relative aspect-[2/3] overflow-hidden rounded-md">
                   <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
@@ -234,7 +240,7 @@ function ListSection({ list }: { list: MissingList }) {
                 <p className="mt-1 truncate text-[11px] text-fg3">
                   {m.title} {m.year ? `· ${m.year}` : ""}
                 </p>
-              </button>
+              </a>
               <AddButton tmdbId={m.tmdb_id} title={m.title} />
             </div>
           ))}

@@ -58,7 +58,13 @@ async def add_movie(
     dry_run = settings.actions.dry_run
     payload: dict[str, Any] = {"tmdbId": body.tmdb_id, "title": body.title}
     if not dry_run:
-        root, profile = await radarr_add.resolve_add_options(settings.radarr)
+        try:
+            root, profile = await radarr_add.resolve_add_options(settings.radarr)
+        except Exception as exc:  # noqa: BLE001 - a network/HTTP fault is a 400, not a 500
+            raise HTTPException(
+                status_code=400,
+                detail="Couldn't reach Radarr to resolve add options — check the connection.",
+            ) from exc
         if root is None or profile is None:
             raise HTTPException(
                 status_code=400,

@@ -105,8 +105,11 @@ def _reason(sources: list[tuple[str, float]]) -> str:
 
 async def _collect(
     client: TmdbClient, anchors: list[Anchor], owned: set[int]
-) -> dict[int, Candidate]:
+) -> tuple[dict[int, Candidate], int]:
+    """Aggregate candidates and report how many anchor calls actually reached TMDB —
+    so a total wipeout (bad key, TMDB down) reads as an error, not "nothing to add"."""
     candidates: dict[int, Candidate] = {}
+    reached = 0
     for anchor in anchors:
         try:
             recs = await client.get_recommendations(anchor.tmdb_id)
@@ -115,6 +118,7 @@ async def _collect(
         except Exception as exc:  # noqa: BLE001 - one dead anchor shouldn't sink the set
             log.info("tmdb discovery failed for %s: %s", anchor.tmdb_id, exc)
             continue
+        reached += 1
         for idx, item in enumerate(recs[:_PER_ANCHOR]):
             rid = item.get("id")
             if not isinstance(rid, int) or rid in owned:
@@ -134,7 +138,7 @@ async def _collect(
                 candidates[rid] = cand
             cand.score += contribution
             cand.sources.append((anchor.title, contribution))
-    return candidates
+    return candidates, reached
 
 
 async def recommendations(
@@ -160,9 +164,20 @@ async def recommendations(
 
     client = TmdbClient(settings.tmdb, transport=transport)
     try:
-        candidates = await _collect(client, anchors, owned)
+        candidates, reached = await _collect(client, anchors, owned)
     finally:
         await client.aclose()
+
+    # Every anchor call failed — a connection/key fault, not an empty graph. Don't
+    # tell the user their library "covers the graph well" when we never reached TMDB.
+    if reached == 0:
+        return {
+            "items": [],
+            "note": (
+                "Couldn't reach TMDB for recommendations — check the TMDB connection "
+                "in Settings › Connections."
+            ),
+        }
 
     ranked = sorted(candidates.values(), key=lambda c: c.score, reverse=True)[:limit]
     items = [

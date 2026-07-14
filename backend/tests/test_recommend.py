@@ -67,6 +67,22 @@ async def test_ranks_and_excludes_owned(factory, settings):
     assert top["year"] == 2003
 
 
+async def test_all_anchor_calls_failing_reads_as_connection_error(factory, settings):
+    # A bad key / TMDB outage must not masquerade as "your library covers the graph".
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    _seed(factory, 603, "The Matrix", rating=8.7)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401)  # bad/expired key — non-retriable, every call fails
+
+    result = await recommend.recommendations(
+        factory, settings, transport=httpx.MockTransport(handler)
+    )
+    assert result["items"] == []
+    assert "TMDB" in result["note"] and "covers" not in result["note"]
+
+
 async def test_falls_back_to_similar_when_recommendations_empty(factory, settings):
     settings.tmdb.enabled = True
     settings.tmdb.api_key = SecretStr("k")

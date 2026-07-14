@@ -37,6 +37,7 @@ function MovieActions({ movie }: { movie: MovieDetail }) {
         type: next ? "monitor" : "unmonitor",
         movie_tmdb_id: movie.tmdb_id,
         dry_run: false,
+        actor: "user", // a manual toggle from the drawer is a user action, not autonomous
       });
       const done = await api.executeAction(a.id);
       setMonitored(next);

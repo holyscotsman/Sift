@@ -4,6 +4,20 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Fixed — audit of the new action/recommendation code
+- **Dead-end drawer on Missing** — recommendation and curated-list posters opened the
+  library drawer, but those titles aren't in the library, so it 404'd to "Not found."
+  They now link out to the title's TMDB page (preview before adding), the affordance
+  Radarr/Overseerr use for not-yet-owned titles.
+- **Misleading recommendations note** — if every TMDB discovery call failed (bad key,
+  outage), the user was told their library "already covers the graph well." The engine
+  now tracks whether any anchor call reached TMDB and shows a "couldn't reach TMDB"
+  note instead.
+- **Live add no longer 500s on an unreachable Radarr** — resolving the root folder /
+  quality profile is wrapped, returning the same graceful 400 as the empty-config case.
+- **User monitor/unmonitor mislabeled as autonomous** — a manual toggle from the drawer
+  now records `actor=user` instead of `auto` on the Activity trust surface.
+
 ### Added — taste recommendations + polish
 - **Real "Recommended for you"** — the Missing screen's recommendations are no longer a
   stub. `analysis/recommend.py` seeds TMDB's discovery graph from your highest-rated
