@@ -6,21 +6,39 @@ Resume point + working decisions. Read after `CLAUDE.md`.
 
 ## Where we are
 
-**Phases 0–3 — ingestion, deterministic analysis, AI provider layer, and live
-action execution: code-complete.** Hosted on Render; repo pushed to
-`holyscotsman/wwtbane`, PR open on `claude/sift-webapp-setup-2qmxsn`.
+**Full MVP + owner upgrades: code-complete.** Ingestion, deterministic analysis,
+live action execution, **username/password login + Setup Wizard + in-app config**,
+poster cache, Library A–Z jump, **smarter junk classification**, **curated
+cult/IMDb lists**, and **Ollama↔Anthropic AI review**. Hosted on Render; PR open on
+`claude/sift-webapp-setup-2qmxsn`.
 
 Green gates (run from `backend/` in the venv at `../.venv`):
 
 ```bash
 ruff check .            # clean
-../.venv/bin/mypy sift  # strict, clean (48 files)
-../.venv/bin/pytest -q  # 65 passed
+../.venv/bin/mypy sift  # strict, clean (67 files)
+../.venv/bin/pytest -q  # 106 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
+alembic -c alembic.ini upgrade head  # 0001→0004, idempotent over create_all
 ```
 
 The delete-safety test is mutation-verified: disabling the guard in
 `actions/engine.py` fails `test_actions_safety.py` (negative control has teeth).
+
+### Owner-requested upgrades (latest) — all browser-verified
+- **Login + Setup Wizard + in-app config.** Single-user auth (stdlib pbkdf2 + signed
+  session tokens). Wizard: create login → connect + Test each service → done.
+  Connections (Plex/Radarr/TMDB/Tautulli/Ollama/Anthropic) entered in the UI, stored
+  in the DB, overlaid on env/toml, rebuilt live on save. Settings › Account has
+  sign-out + **Reset** (full / keep-thumbnails).
+- **Thumbnails**: server-side poster cache (`/api/poster/{id}`) fixes Plex-only
+  titles; **Library A–Z rail** jumps by first letter.
+- **Smarter junk**: classifier cascade (adult/cult/US-theatrical/independent/
+  international) over the score, fed by TMDB facts (migration 0003; `enrich_limit`).
+- **Curated lists** (migration 0004): cult + IMDb-top starter lists (pending review),
+  resolved via TMDB search; feed the cult rule + Missing "you don't own these".
+- **AI review**: Ollama drafts → Anthropic refines, advisory-only; "Run AI review"
+  on the Junk screen. Degrades to a deterministic note with no providers.
 
 ### Upgrade detector (cutoff-unmet) — latest slice
 - `Movie.cutoff_unmet` (migration `0002`, indexed) captures Radarr's "below profile

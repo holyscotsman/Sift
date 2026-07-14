@@ -4,6 +4,22 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — smarter junk, curated lists, and AI review
+- **Smarter junk classification** — a rule cascade over the rating score: adult →
+  remove; cult classic → keep; US theatrical → keep; low + independent → remove;
+  low + international (non-cult) → remove; else defer to the score. Facts come from
+  TMDB enrichment (now run per scan, `enrich_limit`): `original_language`, `budget`,
+  `is_adult`, `us_theatrical`, `is_independent` (migration 0003). Forced-removals are
+  flagged even when well-rated; protected titles are kept even when low.
+- **Curated lists** (migration 0004) — cult + IMDb-top starter lists (factual
+  title+year, `review_status: pending`), resolved to TMDB ids via search during a
+  scan (never hand-coded). Cult membership drives the "keep if cult" rule;
+  `GET /api/missing/lists` surfaces list titles you don't own on the Missing screen.
+- **AI review** — `OllamaProvider` + a route-by-task orchestration (local drafts →
+  Anthropic refines; band-aware deterministic fallback). `POST /api/review/run`
+  writes an **advisory** note on each junk candidate (never changes the deterministic
+  verdict — §4/§7); the Junk screen gets a "Run AI review" button and shows the note.
+
 ### Added — Setup Wizard, login, in-app config, and reset
 - **Username/password login** (single-user; stdlib PBKDF2 + stateless HMAC session
   tokens, no new deps). The API gate accepts a session token or the legacy static
