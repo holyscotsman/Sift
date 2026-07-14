@@ -8,6 +8,33 @@ import { useDrawer } from "@/lib/drawer";
 import { api } from "@/lib/api";
 import type { CollectionGap, MissingList } from "@/lib/types";
 
+// Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
+function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
+  const [label, setLabel] = useState("+ Add");
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  async function add(e: React.MouseEvent) {
+    e.stopPropagation();
+    setState("busy");
+    try {
+      const a = await api.addMovie(tmdbId, title);
+      setState("done");
+      setLabel(a.dry_run ? "Add staged" : "Added ✓");
+    } catch {
+      setState("idle");
+      setLabel("Retry");
+    }
+  }
+  return (
+    <button
+      onClick={add}
+      disabled={state !== "idle"}
+      className="mt-1 w-full rounded-md border border-line py-1 text-[11px] font-semibold text-accent hover:bg-bg2 disabled:opacity-70"
+    >
+      {state === "busy" ? "…" : label}
+    </button>
+  );
+}
+
 export function Missing() {
   const [gaps, setGaps] = useState<CollectionGap[]>([]);
   const [lists, setLists] = useState<MissingList[]>([]);
@@ -82,6 +109,7 @@ export function Missing() {
                       <p className="mt-1 truncate text-[11px] text-fg3">
                         {m.title} {m.year ? `· ${m.year}` : ""}
                       </p>
+                      {!m.owned && <AddButton tmdbId={m.tmdb_id} title={m.title} />}
                     </div>
                   ))}
                 </div>
@@ -127,19 +155,21 @@ function ListSection({ list }: { list: MissingList }) {
       <div className="panel p-4">
         <div className="flex flex-wrap gap-3">
           {list.items.map((m) => (
-            <button
-              key={m.tmdb_id}
-              onClick={() => open(m.tmdb_id)}
-              className="w-[92px] text-left"
-              title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
-            >
-              <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-                <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
-              </div>
-              <p className="mt-1 truncate text-[11px] text-fg3">
-                {m.title} {m.year ? `· ${m.year}` : ""}
-              </p>
-            </button>
+            <div key={m.tmdb_id} className="w-[92px]">
+              <button
+                onClick={() => open(m.tmdb_id)}
+                className="block w-full text-left"
+                title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
+              >
+                <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+                  <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
+                </div>
+                <p className="mt-1 truncate text-[11px] text-fg3">
+                  {m.title} {m.year ? `· ${m.year}` : ""}
+                </p>
+              </button>
+              <AddButton tmdbId={m.tmdb_id} title={m.title} />
+            </div>
           ))}
         </div>
         <p className="mt-3 text-xs text-fg3">

@@ -60,3 +60,7 @@ class RadarrClient(BaseClient):
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         data = await self.get_json("/api/v3/qualityprofile")
         return list(data) if isinstance(data, list) else []
+
+    async def get_root_folders(self) -> list[dict[str, Any]]:
+        data = await self.get_json("/api/v3/rootfolder")
+        return list(data) if isinstance(data, list) else []

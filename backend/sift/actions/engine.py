@@ -18,7 +18,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..db.models import Action, ActionActor, ActionStatus, ActionType
+from ..db.models import Action, ActionActor, ActionStatus, ActionType, Movie
 from ..services.audit import AuditTrail
 from .radarr_writes import RadarrWriter, WriteResult
 
@@ -139,16 +139,32 @@ class ActionEngine:
     ) -> WriteResult:
         if action_type == ActionType.ADD:
             return await self.writer.add_movie(payload, dry_run=dry_run)
+        # Monitor/unmonitor/delete operate on Radarr's own movie id, NOT the tmdb id.
+        # Resolve it from the snapshot so a live write hits the right movie.
         if action_type == ActionType.MONITOR:
-            return await self.writer.set_monitored(_require_id(movie_id), True, dry_run=dry_run)
+            return await self.writer.set_monitored(self._radarr_id(movie_id), True, dry_run=dry_run)
         if action_type == ActionType.UNMONITOR:
-            return await self.writer.set_monitored(_require_id(movie_id), False, dry_run=dry_run)
+            return await self.writer.set_monitored(
+                self._radarr_id(movie_id), False, dry_run=dry_run
+            )
         if action_type == ActionType.DELETE:
             delete_files = bool(payload.get("delete_files", True))
             return await self.writer.delete_movie(
-                _require_id(movie_id), delete_files=delete_files, dry_run=dry_run
+                self._radarr_id(movie_id), delete_files=delete_files, dry_run=dry_run
             )
         raise ValueError(f"unknown action type {action_type}")  # pragma: no cover
+
+    def _radarr_id(self, tmdb_id: int | None) -> int:
+        if tmdb_id is None:
+            raise ValueError("action requires a movie id")
+        with self.factory() as session:
+            movie = session.get(Movie, tmdb_id)
+            if movie is None or movie.radarr_id is None:
+                raise ValueError(
+                    f"movie {tmdb_id} isn't managed by Radarr — Sift acts through Radarr, "
+                    "so it can't monitor or remove a title Radarr doesn't have"
+                )
+            return movie.radarr_id
 
     # --------------------------------------------------------------------- helpers
 
@@ -180,12 +196,6 @@ class ActionEngine:
         if action is None:
             raise ValueError(f"action {action_id} not found")
         return action
-
-
-def _require_id(movie_id: int | None) -> int:
-    if movie_id is None:
-        raise ValueError("action requires a movie id")
-    return movie_id
 
 
 def _summarize(result: WriteResult) -> dict[str, Any]:

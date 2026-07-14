@@ -41,6 +41,14 @@ class SpyWriter(RadarrWriter):
         return [c for c in self.calls if c[0] == "delete"]
 
 
+def _seed_movie(factory, tmdb_id: int = 603, radarr_id: int | None = 5001) -> None:
+    from sift.db.models import Movie
+
+    with factory() as session:
+        session.add(Movie(tmdb_id=tmdb_id, title="Seed", radarr_id=radarr_id))
+        session.commit()
+
+
 @pytest.fixture
 def engine(factory):
     return ActionEngine(factory, SpyWriter())
@@ -72,6 +80,7 @@ async def test_unapproved_delete_refused_even_in_dry_run(engine):
 
 
 async def test_approved_delete_executes_once(engine):
+    _seed_movie(engine.factory, tmdb_id=603, radarr_id=5001)
     action = engine.propose(
         ActionType.DELETE, movie_tmdb_id=603, payload={"delete_files": True}, dry_run=True
     )
@@ -79,7 +88,20 @@ async def test_approved_delete_executes_once(engine):
     result = await engine.execute(action.id)
 
     assert result.status == ActionStatus.EXECUTED
-    assert engine.writer.deletes == [("delete", 603, True, True)]
+    # Issued against the RADARR id (5001), resolved from the snapshot — not the tmdb id.
+    assert engine.writer.deletes == [("delete", 5001, True, True)]
+
+
+async def test_delete_without_radarr_id_is_refused(engine):
+    # NEGATIVE CONTROL: a title Radarr doesn't manage can't be deleted via Radarr.
+    _seed_movie(engine.factory, tmdb_id=700, radarr_id=None)
+    action = engine.propose(
+        ActionType.DELETE, movie_tmdb_id=700, payload={"delete_files": True}, dry_run=False
+    )
+    engine.approve(action.id)
+    with pytest.raises(ValueError, match="isn't managed by Radarr"):
+        await engine.execute(action.id)
+    assert engine.writer.deletes == []
 
 
 async def test_add_is_autonomous_without_approval(engine):
@@ -91,10 +113,11 @@ async def test_add_is_autonomous_without_approval(engine):
 
 
 async def test_monitor_is_autonomous_without_approval(engine):
+    _seed_movie(engine.factory, tmdb_id=603, radarr_id=5001)
     action = engine.propose(ActionType.MONITOR, movie_tmdb_id=603)
     result = await engine.execute(action.id)
     assert result.status == ActionStatus.EXECUTED
-    assert ("monitor", 603, True) in engine.writer.calls
+    assert ("monitor", 5001, True) in engine.writer.calls
 
 
 async def test_live_approved_delete_actually_issues_to_radarr(factory):
@@ -109,6 +132,7 @@ async def test_live_approved_delete_actually_issues_to_radarr(factory):
     config = RadarrConfig(base_url="http://radarr.test", api_key=None)
     writer = RadarrWriter(config, transport=httpx.MockTransport(handler))
     engine = ActionEngine(factory, writer)
+    _seed_movie(factory, tmdb_id=603, radarr_id=5001)
 
     action = engine.propose(
         ActionType.DELETE, movie_tmdb_id=603, payload={"delete_files": True}, dry_run=False
@@ -121,7 +145,7 @@ async def test_live_approved_delete_actually_issues_to_radarr(factory):
     assert len(seen) == 1
     req = seen[0]
     assert req.method == "DELETE"
-    assert req.url.path == "/api/v3/movie/603"
+    assert req.url.path == "/api/v3/movie/5001"  # Radarr id, not tmdb id
     assert req.url.params.get("deleteFiles") == "true"
 
 
@@ -130,6 +154,7 @@ async def test_live_writer_without_connection_refuses_live_write(factory):
     than silently no-op'ing — surfaced to the caller as a failed action."""
     writer = RadarrWriter(RadarrConfig(base_url=None))
     engine = ActionEngine(factory, writer)
+    _seed_movie(factory, tmdb_id=603, radarr_id=5001)
     action = engine.propose(
         ActionType.DELETE, movie_tmdb_id=603, payload={"delete_files": True}, dry_run=False
     )

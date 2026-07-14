@@ -177,6 +177,11 @@ export const api = {
     request<ActionRecord>(`/api/actions/${id}/reject`, { method: "POST" }),
   executeAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/execute`, { method: "POST" }),
+  addMovie: (tmdbId: number, title: string) =>
+    request<ActionRecord>("/api/actions/add", {
+      method: "POST",
+      body: JSON.stringify({ tmdb_id: tmdbId, title }),
+    }),
 };
 
 // Server-resolved, cached poster for any title (works for Plex-only movies with no

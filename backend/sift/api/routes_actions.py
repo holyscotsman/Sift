@@ -12,15 +12,18 @@ can never force a live write when the hosted instance is configured dry-run. Fli
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..actions.engine import ActionEngine, ApprovalRequiredError
 from ..config import Settings
-from ..db.models import Action
+from ..db.models import Action, ActionActor, ActionType
+from ..services import radarr_add
 from .deps import AuthDep, get_action_engine, get_session_factory, get_settings
-from .schemas import ActionOut, ProposeActionIn
+from .schemas import ActionOut, AddMovieIn, ProposeActionIn
 
 router = APIRouter(prefix="/api", tags=["actions"], dependencies=[AuthDep])
 
@@ -41,6 +44,37 @@ def propose_action(
         actor=body.actor,
         dry_run=dry_run,
     )
+
+
+@router.post("/actions/add", response_model=ActionOut)
+async def add_movie(
+    body: AddMovieIn,
+    engine: ActionEngine = Depends(get_action_engine),
+    settings: Settings = Depends(get_settings),
+) -> Action:
+    """Add a movie to Radarr. Autonomous (no approval needed), but staged unless
+    SIFT_ACTIONS__DRY_RUN=false. Quality profile + root folder are resolved from Radarr
+    for a live add."""
+    dry_run = settings.actions.dry_run
+    payload: dict[str, Any] = {"tmdbId": body.tmdb_id, "title": body.title}
+    if not dry_run:
+        root, profile = await radarr_add.resolve_add_options(settings.radarr)
+        if root is None or profile is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Radarr root folder / quality profile unavailable — check the connection.",
+            )
+        payload = radarr_add.build_add_payload(
+            body.tmdb_id, body.title, root_folder_path=root, quality_profile_id=profile
+        )
+    action = engine.propose(
+        ActionType.ADD,
+        movie_tmdb_id=body.tmdb_id,
+        payload=payload,
+        actor=ActionActor.USER,
+        dry_run=dry_run,
+    )
+    return await engine.execute(action.id)
 
 
 @router.post("/actions/{action_id}/approve", response_model=ActionOut)

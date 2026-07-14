@@ -160,7 +160,10 @@ def test_execute_unapproved_delete_is_forbidden(client):
 def test_execute_approved_delete_is_staged_in_dry_run(client):
     # Default (hosted) posture is dry-run: an approved delete "executes" but is staged
     # — status executed, nothing sent. This is the safe default.
-    c, _ = client
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True, radarr_id=5001))
+        session.commit()
     action = c.post(
         "/api/actions",
         json={

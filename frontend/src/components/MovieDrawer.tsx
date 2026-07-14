@@ -4,10 +4,113 @@
 
 import { useEffect, useState } from "react";
 
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Pill, Poster } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { MovieDetail } from "@/lib/types";
+
+function MovieActions({ movie }: { movie: MovieDetail }) {
+  const [dryRun, setDryRun] = useState(true);
+  const [monitored, setMonitored] = useState(movie.monitored);
+  const [busy, setBusy] = useState<null | "mon" | "rm">(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  useEffect(() => {
+    api.getActionsConfig().then((a) => setDryRun(a.dry_run)).catch(() => setDryRun(true));
+  }, []);
+
+  if (movie.radarr_id == null) {
+    return (
+      <p className="mt-4 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg3">
+        Not managed by Radarr — Sift can only monitor or remove titles that are in Radarr.
+      </p>
+    );
+  }
+
+  async function setMon(next: boolean) {
+    setBusy("mon");
+    setMsg(null);
+    try {
+      const a = await api.proposeAction({
+        type: next ? "monitor" : "unmonitor",
+        movie_tmdb_id: movie.tmdb_id,
+        dry_run: false,
+      });
+      const done = await api.executeAction(a.id);
+      setMonitored(next);
+      setMsg(
+        done.dry_run
+          ? `${next ? "Monitor" : "Unmonitor"} staged`
+          : next
+            ? "Now monitoring"
+            : "Unmonitored",
+      );
+    } catch {
+      setMsg("Action failed — check the Radarr connection.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    setBusy("rm");
+    setMsg(null);
+    try {
+      const a = await api.proposeAction({
+        type: "delete",
+        movie_tmdb_id: movie.tmdb_id,
+        payload: { delete_files: true, title: movie.title },
+        dry_run: false,
+      });
+      await api.approveAction(a.id);
+      const done = await api.executeAction(a.id);
+      setMsg(done.dry_run ? "Removal staged" : "Removed from Radarr");
+    } catch {
+      setMsg("Removal failed — check the Radarr connection.");
+    } finally {
+      setBusy(null);
+      setConfirm(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      <button
+        onClick={() => setMon(!monitored)}
+        disabled={busy !== null}
+        className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
+      >
+        {busy === "mon" ? "…" : monitored ? "Unmonitor" : "Monitor"}
+      </button>
+      <button
+        onClick={() => setConfirm(true)}
+        disabled={busy !== null}
+        className="rounded-md px-3 py-1.5 text-xs font-bold disabled:opacity-60"
+        style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+      >
+        Remove
+      </button>
+      {msg && <span className="text-xs text-fg2">{msg}</span>}
+      <ConfirmModal
+        open={confirm}
+        title="Remove from Radarr?"
+        confirmLabel={dryRun ? "Stage removal" : "Remove file"}
+        busy={busy === "rm"}
+        onCancel={() => setConfirm(false)}
+        onConfirm={remove}
+        body={
+          <p className="text-sm text-fg2">
+            {dryRun
+              ? "Staged (dry-run) — this records the removal but deletes nothing. Enable live writes in Settings › Autonomy to actually remove."
+              : "This tells Radarr to delete the file. It cannot be undone."}
+          </p>
+        }
+      />
+    </div>
+  );
+}
 
 function fmtSize(bytes: number | null): string {
   return bytes ? `${(bytes / 1e9).toFixed(1)} GB` : "—";
@@ -78,6 +181,8 @@ export function MovieDrawer() {
               {movie.quality && <Pill>{movie.quality}</Pill>}
               {movie.is_kids && <Pill tone="borderline">Kids</Pill>}
             </div>
+
+            <MovieActions key={movie.tmdb_id} movie={movie} />
 
             {movie.sift_score && (
               <div className="mt-5 rounded-lg border border-line bg-bg2 p-4">

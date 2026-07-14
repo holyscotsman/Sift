@@ -177,6 +177,11 @@ class ProposeActionIn(BaseModel):
     dry_run: bool = True
 
 
+class AddMovieIn(BaseModel):
+    tmdb_id: int
+    title: str
+
+
 class SignalOut(BaseModel):
     key: str
     label: str
