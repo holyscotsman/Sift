@@ -4,6 +4,24 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — Setup Wizard, login, in-app config, and reset
+- **Username/password login** (single-user; stdlib PBKDF2 + stateless HMAC session
+  tokens, no new deps). The API gate accepts a session token or the legacy static
+  `SIFT_SERVER__API_TOKEN`, and stays open only until an account exists.
+- **Setup Wizard** (first run): create the login → connect + **Test** each service →
+  done. `AuthGate` now routes first-run → wizard, returning users → login,
+  signed-in → app.
+- **In-app connections** for Plex/Radarr/TMDB/Tautulli + **Ollama** URL/model and
+  **Anthropic** key/model — stored on the server and overlaid on the env/toml base
+  (no need to touch Render). `GET /api/config` masks secrets as `*_set` flags;
+  `PUT` deep-merges and rebuilds the live services; `POST /api/config/test/{service}`
+  probes unsaved values. A **Settings › Connections** editor and the wizard share one
+  form (blank secret = keep the saved one).
+- **Reset** (Settings › Account): factory-reset back to the wizard, with a
+  **keep-thumbnails** variant that preserves the poster cache for fast re-scans.
+- Verified end-to-end in a browser: wizard→dashboard, persistence across reload,
+  login rejects bad passwords, reset returns to the wizard.
+
 ### Added — poster cache + Library A–Z jump
 - **Thumbnails now load for every title.** New `GET /api/poster/{tmdb_id}` resolves a
   poster from the stored URL or by TMDB id, downloads it, and caches the bytes on
