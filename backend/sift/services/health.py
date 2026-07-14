@@ -51,16 +51,16 @@ async def _probe(settings: Settings, service: str) -> HealthStatus:
         await client.aclose()
 
 
-def _ai_health() -> HealthStatus:
+def _ai_health(settings: Settings) -> HealthStatus:
     from ..ai.registry import ai_configured
 
-    ok = ai_configured()
+    ok = ai_configured(settings)
     return HealthStatus("model", ok, "Anthropic" if ok else "not configured")
 
 
 async def gather_health(settings: Settings) -> list[HealthStatus]:
     statuses = list(await asyncio.gather(*(_probe(settings, s) for s in _SERVICES)))
-    statuses.append(_ai_health())
+    statuses.append(_ai_health(settings))
     return statuses
 
 

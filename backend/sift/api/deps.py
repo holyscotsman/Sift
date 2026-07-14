@@ -16,7 +16,10 @@ from ..services.scanner import ProgressHub
 
 @dataclass
 class AppState:
+    # `settings` is the *effective* config (base overlaid with UI-entered connections).
+    # `base_settings` is the untouched env/toml base, re-overlaid on every config save.
     settings: Settings
+    base_settings: Settings
     session_factory: sessionmaker[Session]
     engine: ActionEngine
     hub: ProgressHub

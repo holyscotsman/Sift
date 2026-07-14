@@ -14,17 +14,19 @@ from .anthropic import AnthropicProvider
 from .provider import LLMProvider, StubProvider
 
 
-def anthropic_key() -> str | None:
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    return key or None
+def anthropic_key(settings: Settings) -> str | None:
+    """UI/wizard-entered key wins; otherwise the ANTHROPIC_API_KEY env var (Render)."""
+    if settings.ai.anthropic_api_key is not None:
+        return settings.ai.anthropic_api_key.get_secret_value() or None
+    return os.environ.get("ANTHROPIC_API_KEY") or None
 
 
-def ai_configured() -> bool:
-    return anthropic_key() is not None
+def ai_configured(settings: Settings) -> bool:
+    return anthropic_key(settings) is not None
 
 
 def build_llm_provider(settings: Settings) -> LLMProvider:
-    key = anthropic_key()
+    key = anthropic_key(settings)
     if key:
         return AnthropicProvider(key, settings.ai.anthropic_model)
     return StubProvider()

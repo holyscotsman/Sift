@@ -123,6 +123,20 @@ class AuthStatus(BaseModel):
     username: str | None = None
 
 
+class ConnectionsIn(BaseModel):
+    # {service: {field: value}} — only known fields per service are stored.
+    connections: dict[str, dict[str, Any]]
+
+
+class ConnectionsOut(BaseModel):
+    # Secrets are returned as `<field>_set` booleans, never the values.
+    connections: dict[str, dict[str, Any]]
+
+
+class ConnectionTestIn(BaseModel):
+    values: dict[str, Any] = {}
+
+
 class SetupRequest(BaseModel):
     username: str
     password: str

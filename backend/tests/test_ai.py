@@ -14,9 +14,20 @@ from sift.main import create_app
 
 def test_registry_falls_back_to_stub_without_key(settings, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    assert ai_configured() is False
+    assert ai_configured(settings) is False
     provider = build_llm_provider(settings)
     assert isinstance(provider, StubProvider)
+
+
+def test_registry_uses_ui_entered_key(settings, monkeypatch):
+    from pydantic import SecretStr
+
+    from sift.ai.anthropic import AnthropicProvider
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    settings.ai.anthropic_api_key = SecretStr("sk-ui-entered")
+    assert ai_configured(settings) is True
+    assert isinstance(build_llm_provider(settings), AnthropicProvider)
 
 
 async def test_stub_completion_is_deterministic():

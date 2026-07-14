@@ -119,9 +119,12 @@ class AIConfig(BaseModel):
     """Phase 2 provider layer. Never used to decide correctness."""
 
     mode: str = "route_by_task"  # route_by_task | compare | race_fallback
+    local_enabled: bool = False  # is a local Ollama endpoint configured to use?
     local_base_url: str = "http://127.0.0.1:11434"
     local_model: str = "llama3.1"
     anthropic_model: str = "claude-sonnet-5"
+    # Entered in the wizard/Settings; falls back to the ANTHROPIC_API_KEY env var.
+    anthropic_api_key: SecretStr | None = None
     embedding_provider: str = "local"  # local | hosted
     embedding_model: str = "nomic-embed-text"
 

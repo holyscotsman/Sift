@@ -28,6 +28,7 @@ from .api import (
     routes_analysis,
     routes_ask,
     routes_auth,
+    routes_config,
     routes_health,
     routes_movies,
     routes_posters,
@@ -39,6 +40,7 @@ from .api import (
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
+from .services import config_store
 from .services.posters import PosterCache
 
 log = logging.getLogger("sift")
@@ -67,11 +69,17 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     action_engine: ActionEngine | None = None,
 ) -> FastAPI:
-    settings = settings or get_settings()
+    base_settings = settings or get_settings()
     if session_factory is None:
-        engine = make_engine(settings.database.path)
+        engine = make_engine(base_settings.database.path)
         init_db(engine)
         session_factory = make_session_factory(engine)
+
+    # Effective config = the env/toml base overlaid with any UI-entered connections.
+    with session_factory() as session:
+        conn = config_store.get_config(session)
+    settings = config_store.apply_to_settings(base_settings, conn)
+
     if action_engine is None:
         # The writer is built from the Radarr connection so an approved delete (or an
         # autonomous add/monitor) can actually be issued. It stays safe by default:
@@ -88,6 +96,7 @@ def create_app(
 
     app.state.sift = AppState(
         settings=settings,
+        base_settings=base_settings,
         session_factory=session_factory,
         engine=action_engine,
         hub=ws.ScanHub(),
@@ -100,6 +109,7 @@ def create_app(
 
     for module in (
         routes_auth,
+        routes_config,
         routes_health,
         routes_scan,
         routes_movies,

@@ -49,7 +49,7 @@ async def get_all(
             for s in health
         ],
         thresholds=_thresholds_out(thr),
-        ai_configured=ai_configured(),
+        ai_configured=ai_configured(settings),
         actions_dry_run=settings.actions.dry_run,
     )
 

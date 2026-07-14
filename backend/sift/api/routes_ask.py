@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..ai import query as ai_query
 from ..ai.provider import LLMProvider
 from ..ai.registry import ai_configured
-from .deps import AuthDep, get_session_factory
+from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import AskRequest, AskResponse, AskSource
 
 router = APIRouter(prefix="/api", tags=["ask"], dependencies=[AuthDep])
@@ -25,6 +25,7 @@ async def ask(
     factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> AskResponse:
     provider = _get_llm(request)
+    settings = get_settings(request)
     with factory() as session:
         result = await ai_query.answer(session, provider, body.query)
     return AskResponse(
@@ -32,6 +33,6 @@ async def ask(
         provider=result.provider,
         model=result.model,
         latency_ms=result.latency_ms,
-        ai_configured=ai_configured(),
+        ai_configured=ai_configured(settings),
         sources=[AskSource(tmdb_id=s.tmdb_id, title=s.title, year=s.year) for s in result.sources],
     )
