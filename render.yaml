@@ -1,0 +1,45 @@
+# Render Blueprint — one deploy of Sift as a Docker web service on the free tier.
+# In Render: New → Blueprint → connect this repo. Render reads this file, then
+# prompts for the values marked `sync: false`. See docs/DEPLOY.md for the walkthrough.
+services:
+  - type: web
+    name: sift
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    autoDeploy: true
+    envVars:
+      # Persistent database (STRONGLY RECOMMENDED). Without this, Sift uses an
+      # ephemeral SQLite file that Render's free tier wipes on every redeploy/restart —
+      # so your login and saved service keys disappear. Point this at a free, persistent
+      # Postgres (e.g. a Neon database) and your setup survives forever. Paste the full
+      # connection string, e.g. postgresql://user:pass@host/db?sslmode=require
+      - key: SIFT_DATABASE__URL
+        sync: false
+
+      # Access token that gates the whole app — Render generates a strong random
+      # value; read it from the dashboard and paste it into Sift's unlock screen.
+      - key: SIFT_SERVER__API_TOKEN
+        generateValue: true
+
+      # Radarr (required) — your web-reachable Radarr and its API key.
+      - key: SIFT_RADARR__BASE_URL
+        sync: false
+      - key: SIFT_RADARR__API_KEY
+        sync: false
+
+      # TMDB (recommended) — enrichment + the candidate universe for recommendations.
+      - key: SIFT_TMDB__API_KEY
+        sync: false
+
+      # Plex (optional) — add later for watch state / kids separation.
+      - key: SIFT_PLEX__BASE_URL
+        sync: false
+      - key: SIFT_PLEX__TOKEN
+        sync: false
+
+      # Tautulli (optional) — richer watch history.
+      - key: SIFT_TAUTULLI__BASE_URL
+        sync: false
+      - key: SIFT_TAUTULLI__API_KEY
+        sync: false

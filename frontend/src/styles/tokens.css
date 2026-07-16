@@ -1,0 +1,149 @@
+/* Design tokens — one variable set per theme. `data-theme` on <html> switches
+ * them (see ThemeProvider). Dark is the primary, pixel-faithful theme; Light and
+ * Neon are faithful variants pending visual sign-off. Values from
+ * docs/design/HANDOFF.md. */
+
+:root {
+  --display: "Bricolage Grotesque", "Hanken Grotesk", system-ui, sans-serif;
+  --sans: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* radius / spacing */
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-pill: 999px;
+  --card-pad: 22px;
+  --gap: 18px;
+  --row-h: 50px;
+  --row-pad: 10px; /* table row vertical padding — tightens in compact density */
+
+  /* motion */
+  --dur-fast: 160ms;
+  --dur: 280ms;
+  --dur-slow: 460ms;
+  --anim: running;
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-density="compact"] {
+  --card-pad: 15px;
+  --gap: 12px;
+  --row-h: 38px;
+  --row-pad: 4px;
+}
+
+/* ---------------------------------------------------------------- Dark (primary) */
+:root[data-theme="dark"] {
+  --bg-0: #070812;
+  --bg-1: linear-gradient(158deg, #191c33, #0f1124);
+  --bg-1s: #141731;
+  --bg-2: #1b1f3c;
+  --bg-3: #272c4e;
+  --line: rgba(150, 165, 255, 0.11);
+  --line-2: rgba(150, 165, 255, 0.22);
+  --fg: #eef0ff;
+  --fg-2: #9ea6d4;
+  --fg-3: #6a7099;
+  --accent: #2ee6e6;
+  --accent2: #e85cf5;
+  --grad: linear-gradient(120deg, #2ee6e6, #8a7bf0 52%, #e85cf5);
+  --accent-fg: #04141a;
+  --accent-soft: rgba(46, 230, 230, 0.16);
+  --accent-line: rgba(46, 230, 230, 0.44);
+  --keep: #4be6a4;
+  --borderline: #ffc24a;
+  --junk: #ff6b8a;
+  --chrome: rgba(11, 13, 30, 0.66);
+
+  --aurora-1: rgba(46, 230, 230, 0.26);
+  --aurora-2: rgba(232, 92, 245, 0.24);
+  --aurora-3: rgba(138, 123, 240, 0.22);
+
+  --elev: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 38px -30px rgba(0, 0, 0, 0.65);
+  --shadow-1: 0 2px 8px -4px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 26px 60px -34px rgba(0, 0, 0, 0.78), 0 6px 18px -14px rgba(0, 0, 0, 0.5);
+  --glow: 0 0 20px -6px rgba(46, 230, 230, 0.32);
+}
+
+/* ---------------------------------------------------------------------- Light */
+:root[data-theme="light"] {
+  --bg-0: #eceef7;
+  --bg-1: linear-gradient(158deg, #ffffff, #f2f4fc);
+  --bg-1s: #ffffff;
+  --bg-2: #eef1fb;
+  --bg-3: #e2e6f5;
+  --line: rgba(40, 60, 140, 0.12);
+  --line-2: rgba(40, 60, 140, 0.22);
+  --fg: #161a2e;
+  --fg-2: #4c5680;
+  --fg-3: #7b83a6;
+  --accent: #0e9fb2;
+  --accent2: #c33bd6;
+  --grad: linear-gradient(120deg, #12b3c4, #7b6ce0 52%, #d24ae0);
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(14, 159, 178, 0.14);
+  --accent-line: rgba(14, 159, 178, 0.4);
+  --keep: #12a15e;
+  --borderline: #c88410;
+  --junk: #e0455e;
+  --chrome: rgba(255, 255, 255, 0.76);
+
+  --aurora-1: rgba(14, 159, 178, 0.28);
+  --aurora-2: rgba(195, 59, 214, 0.24);
+  --aurora-3: rgba(123, 108, 224, 0.24);
+
+  --elev: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 16px 38px -30px rgba(40, 50, 90, 0.28);
+  --shadow-1: 0 2px 8px -4px rgba(40, 50, 90, 0.18);
+  --shadow-2: 0 26px 60px -34px rgba(40, 50, 90, 0.32), 0 6px 18px -14px rgba(40, 50, 90, 0.2);
+  --glow: 0 0 20px -6px rgba(14, 159, 178, 0.3);
+}
+
+/* ----------------------------------------------------------------------- Neon */
+:root[data-theme="neon"] {
+  --bg-0: #04030c;
+  --bg-1: linear-gradient(158deg, #141034, #0a0820);
+  --bg-1s: #120f30;
+  --bg-2: #1a1442;
+  --bg-3: #271a5a;
+  --line: rgba(170, 140, 255, 0.14);
+  --line-2: rgba(170, 140, 255, 0.26);
+  --fg: #f2ecff;
+  --fg-2: #b3a6e0;
+  --fg-3: #7d74a8;
+  --accent: #2ee6e6;
+  --accent2: #ff5cf0;
+  --grad: linear-gradient(120deg, #2ee6e6, #9a7bff 52%, #ff5cf0);
+  --accent-fg: #04141a;
+  --accent-soft: rgba(46, 230, 230, 0.2);
+  --accent-line: rgba(46, 230, 230, 0.5);
+  --keep: #4be6a4;
+  --borderline: #ffc24a;
+  --junk: #ff5c8f;
+  --chrome: rgba(12, 8, 34, 0.6);
+
+  --aurora-1: rgba(46, 230, 230, 0.34);
+  --aurora-2: rgba(255, 92, 240, 0.3);
+  --aurora-3: rgba(154, 123, 255, 0.28);
+
+  --elev: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px -28px rgba(0, 0, 0, 0.8);
+  --shadow-1: 0 2px 8px -4px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 26px 60px -34px rgba(0, 0, 0, 0.85), 0 6px 18px -14px rgba(0, 0, 0, 0.6);
+  --glow: 0 0 26px -6px rgba(46, 230, 230, 0.5);
+}
+
+/* Reduce motion: pause ambient loops and collapse durations. Mirrors both the
+ * OS setting and the in-app toggle (which sets data-reduce-motion). */
+:root[data-reduce-motion="true"],
+:root[data-reduce-motion="true"] * {
+  --anim: paused;
+  --dur-fast: 0ms;
+  --dur: 0ms;
+  --dur-slow: 0ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --anim: paused;
+  }
+}

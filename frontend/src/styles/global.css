@@ -1,0 +1,193 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg-0);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display);
+    margin: 0;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  /* Accessible 2px accent focus ring across interactive elements. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  /* Frosted-glass floating chrome (header, top-nav, floating cards). */
+  .glass {
+    background: var(--chrome);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid var(--line);
+  }
+  /* Unified panel with hairline internal dividers (the core surface idiom). */
+  .panel {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--elev);
+  }
+  /* The main library table honours the density toggle — comfortable vs compact rows. */
+  .movie-table tbody td {
+    padding-top: var(--row-pad);
+    padding-bottom: var(--row-pad);
+  }
+  .gradient-text {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .gradient-fill {
+    background: var(--grad);
+    color: var(--accent-fg);
+  }
+  .hairline {
+    background: var(--line);
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    font-weight: 600;
+  }
+}
+
+/* ---------------------------------------------------------------- keyframes */
+@keyframes sift-fadeup {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sift-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sift-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes sift-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(2deg);
+  }
+}
+@keyframes sift-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes sift-drawer {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes sift-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sift-modal {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sift-aurora-a {
+  0%,
+  100% {
+    transform: translate(-6%, -4%) scale(1);
+  }
+  50% {
+    transform: translate(8%, 6%) scale(1.15);
+  }
+}
+@keyframes sift-aurora-b {
+  0%,
+  100% {
+    transform: translate(6%, 2%) scale(1.1);
+  }
+  50% {
+    transform: translate(-8%, -6%) scale(1);
+  }
+}
+@keyframes sift-aurora-c {
+  0%,
+  100% {
+    transform: translate(2%, 8%) scale(1.05);
+  }
+  50% {
+    transform: translate(-4%, -8%) scale(1.2);
+  }
+}
+
+.page-enter {
+  animation: sift-fadeup var(--dur) var(--ease-spring) both;
+  animation-play-state: var(--anim);
+}
+
+/* Utility: hide scrollbars on chrome rows while keeping scroll. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
