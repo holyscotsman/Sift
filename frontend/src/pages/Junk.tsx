@@ -194,9 +194,8 @@ export function Junk() {
             {dryRun ? (
               <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
                 Removals are <strong>staged (dry-run)</strong> — this records your approval in the
-                audit log but does not delete any files. To let Sift issue deletes to Radarr, set
-                <code className="mx-1 rounded bg-bg px-1">SIFT_ACTIONS__DRY_RUN=false</code> on the
-                server.
+                audit log but does not delete any files. To let Sift issue real deletes, switch to
+                Live in <strong>Settings › Autonomy</strong>.
               </p>
             ) : (
               <p

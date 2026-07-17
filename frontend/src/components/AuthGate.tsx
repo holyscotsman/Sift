@@ -1,5 +1,5 @@
-// The front door. Decides between: the first-run Setup Wizard (no account yet),
-// a username/password login (account exists, not signed in), or the app (signed in).
+// The front door. Login is the default screen; the first-run Setup Wizard is
+// reached from a "New user" link that only appears while no account exists yet.
 // Falls back gracefully: a non-auth error (server starting, a source offline) never
 // blocks the app.
 
@@ -13,6 +13,7 @@ type Phase = "checking" | "wizard" | "login" | "authed";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>("checking");
+  const [canSetup, setCanSetup] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,13 +22,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const check = useCallback(async () => {
     try {
       const status = await api.authStatus();
+      // The server only allows account creation while none exists.
+      setCanSetup(!status.setup_complete);
       if (!status.setup_complete) {
-        // First run — always show the setup wizard (the API is open until an account
-        // or static token exists, so we can't rely on /status here).
-        setPhase("wizard");
+        // Fresh install: the API is open until an account exists, so don't let a
+        // successful /status probe wave anyone through — show the front door.
+        setPhase("login");
         return;
       }
-      // Account exists — do we have a valid session?
+      // Signed in already? A valid session goes straight through.
       try {
         await api.status();
         setPhase("authed");
@@ -110,6 +113,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
+        {canSetup && (
+          <button
+            type="button"
+            onClick={() => setPhase("wizard")}
+            className="mt-3 w-full text-center text-xs font-semibold text-fg3 hover:text-fg"
+          >
+            New user? Set up Sift →
+          </button>
+        )}
       </form>
     </div>
   );
