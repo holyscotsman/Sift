@@ -76,7 +76,7 @@ export function Header() {
         </button>
 
         <button
-          onClick={start}
+          onClick={() => void start()}
           disabled={scanning}
           className="gradient-fill flex items-center gap-1.5 rounded-pill px-4 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
         >

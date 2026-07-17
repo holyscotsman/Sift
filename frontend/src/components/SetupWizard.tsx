@@ -131,13 +131,20 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <p className="mt-1 text-sm text-fg2">
                 Enter your keys and hit <strong>Test</strong> to confirm each one. Plex, Radarr,
                 and TMDB are the essentials; Tautulli and the AI providers are optional and can be
-                added later in Settings.
+                added later in Settings. The moment Plex and Radarr test green, Sift quietly starts
+                your first scan in the background — it'll be well underway by the time you land on
+                the dashboard.
               </p>
             </div>
             <ConnectionsForm
               initial={{}}
               saveLabel="Save & continue"
               onSaved={() => setStep("done")}
+              onEssentialsReady={() => {
+                // Fire-and-forget: the server refuses to double-run, and the
+                // dashboard joins this scan if the user asks for one later.
+                void api.scanStart().catch(() => {});
+              }}
             />
             <button
               onClick={() => setStep("done")}
@@ -158,8 +165,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
             </div>
             <h1 className="mt-3 font-display text-xl font-extrabold">You're all set</h1>
             <p className="mt-1 text-sm text-fg2">
-              Head to the dashboard and run your first scan. You can tweak connections anytime in
-              Settings.
+              If Plex and Radarr tested green, your first scan is already running in the
+              background. You can tweak connections anytime in Settings.
             </p>
             <button
               onClick={onComplete}

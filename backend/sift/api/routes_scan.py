@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -14,6 +15,10 @@ from .deps import AuthDep, get_session_factory, get_state
 from .schemas import ScanRunOut, ScanStartResponse
 
 router = APIRouter(prefix="/api", tags=["scan"], dependencies=[AuthDep])
+
+# A RUNNING row older than this is presumed orphaned (server died mid-scan) and is
+# retired instead of blocking new scans forever.
+_STALE_AFTER = timedelta(minutes=30)
 
 
 def _launch(request: Request, scan_run_id: int, resume: bool) -> None:
@@ -41,6 +46,22 @@ async def start_scan(
             session.commit()
         _launch(request, resume_id, resume=True)
         return ScanStartResponse(scan_run_id=resume_id, resume=True)
+
+    # Idempotent start: if a scan is already underway, join it instead of racing a
+    # second one (the wizard auto-starts silently; the dashboard button must not
+    # double-run). Genuinely stale RUNNING rows are retired so they can't wedge us.
+    with factory() as session:
+        active = session.scalars(
+            select(ScanRun).where(ScanRun.status == ScanStatus.RUNNING).order_by(ScanRun.id.desc())
+        ).first()
+        if active is not None:
+            started = active.started_at
+            if started is not None and started.tzinfo is None:
+                started = started.replace(tzinfo=UTC)
+            if started is not None and datetime.now(UTC) - started < _STALE_AFTER:
+                return ScanStartResponse(scan_run_id=active.id, resume=True)
+            active.status = ScanStatus.INTERRUPTED
+            session.commit()
 
     scan_run_id = create_scan_run(factory)
     _launch(request, scan_run_id, resume=False)

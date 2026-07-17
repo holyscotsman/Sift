@@ -1,10 +1,12 @@
 """Resumable ingestion pipeline.
 
-A scan runs a fixed sequence of phases (radarr → plex → tautulli → tmdb →
-finalize). Each phase records a checkpoint in ``scan_runs.checkpoints`` the moment
-it finishes, so an interrupted remote scan resumes exactly where it stopped and a
-re-run is idempotent (all writes are upserts). Network I/O is async; the sync
-snapshot writes are marshalled onto a worker thread so the event loop stays free.
+A scan runs a fixed sequence of phases: read the Plex catalog (the library
+authority), read the Radarr catalog, pull Tautulli history, grab TMDB metadata,
+finalize the snapshot, score the library, then an advisory AI analysis. Each phase
+records a checkpoint in ``scan_runs.checkpoints`` the moment it finishes, so an
+interrupted remote scan resumes exactly where it stopped and a re-run is idempotent
+(all writes are upserts). Network I/O is async; the sync snapshot writes are
+marshalled onto a worker thread so the event loop stays free.
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ from . import normalize
 
 log = logging.getLogger("sift.ingest")
 
-PHASES = ("radarr", "plex", "tautulli", "tmdb", "finalize", "score")
+PHASES = ("plex", "radarr", "tautulli", "tmdb", "finalize", "score", "ai")
 
 
 @dataclass
@@ -221,6 +223,21 @@ class ScanPipeline:
         # Deterministic junk scoring over the Plex library. Data decides the score.
         scored = await asyncio.to_thread(self._score)
         return {"scored": scored}
+
+    async def _phase_ai(self) -> dict[str, int]:
+        """Advisory AI pass over the freshly scored removal queue. Skips silently when
+        no provider is configured; never changes a deterministic verdict."""
+        from ..ai import review as ai_review
+        from ..ai.registry import ai_configured
+
+        if not ai_configured(self.settings):
+            return {}
+        try:
+            result = await ai_review.run_review(self.factory, self.settings, limit=50)
+        except Exception as exc:  # noqa: BLE001 - advisory only; never fails the scan
+            log.info("ai analysis skipped: %s", exc)
+            return {}
+        return {"ai_reviewed": int(result.get("reviewed", 0))}
 
     def _score(self) -> int:
         from ..services import curated_lists
