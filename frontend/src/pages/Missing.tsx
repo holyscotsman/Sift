@@ -12,6 +12,51 @@ import type { CollectionGap, MissingList, MustHaveItem, RecommendedMovie } from 
 // Overseerr use for the same "not-yet-owned" case.
 const tmdbMovieUrl = (tmdbId: number) => `https://www.themoviedb.org/movie/${tmdbId}`;
 
+// The one poster-card used by every not-yet-owned section on this page (must-have,
+// curated lists, recommendations) — one place to fix sizing/links/badges.
+function PosterCard({
+  tmdbId,
+  title,
+  year,
+  subtitle,
+  voteAverage,
+  footer,
+}: {
+  tmdbId: number;
+  title: string;
+  year: number | null;
+  subtitle?: string;
+  voteAverage?: number | null;
+  footer?: React.ReactNode;
+}) {
+  return (
+    <div className="w-[92px]">
+      <a
+        href={tmdbMovieUrl(tmdbId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block w-full text-left"
+        title={`${subtitle ? `${subtitle} — ` : ""}view on TMDB`}
+      >
+        <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+          <Poster tmdbId={tmdbId} alt="" className="h-full w-full opacity-90" />
+          {voteAverage != null && voteAverage > 0 && (
+            <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
+              {voteAverage.toFixed(1)}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 truncate text-[11px] text-fg3">
+          {title} {year ? `· ${year}` : ""}
+        </p>
+        {subtitle && <p className="truncate text-[10px] text-fg3/80">{subtitle}</p>}
+      </a>
+      <AddButton tmdbId={tmdbId} title={title} />
+      {footer}
+    </div>
+  );
+}
+
 // Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
 function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
   const [label, setLabel] = useState("+ Add");
@@ -179,11 +224,14 @@ function MustHaveSection() {
   }
 
   async function dismiss(item: MustHaveItem) {
+    // Optimistic removal; on failure restore the snapshot (a refetch here could
+    // itself fail during the same network blip and wipe the whole list).
+    const snapshot = items;
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     try {
       await api.mustHaveDismiss(item.id);
     } catch {
-      await refresh(); // roll back the optimistic removal
+      setItems(snapshot);
     }
   }
 
@@ -229,35 +277,22 @@ function MustHaveSection() {
         <div className="panel p-4">
           <div className="flex flex-wrap gap-3">
             {items.map((m) => (
-              <div key={m.id} className="w-[92px]">
-                <a
-                  href={tmdbMovieUrl(m.tmdb_id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full text-left"
-                  title={`${m.reason} — view on TMDB`}
-                >
-                  <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-                    <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
-                    {m.vote_average != null && m.vote_average > 0 && (
-                      <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
-                        {m.vote_average.toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 truncate text-[11px] text-fg3">
-                    {m.title} {m.year ? `· ${m.year}` : ""}
-                  </p>
-                  <p className="truncate text-[10px] text-fg3/80">{m.reason}</p>
-                </a>
-                <AddButton tmdbId={m.tmdb_id} title={m.title} />
-                <button
-                  onClick={() => void dismiss(m)}
-                  className="mt-1 w-full rounded-md py-0.5 text-[11px] text-fg3 hover:text-fg"
-                >
-                  Not interested
-                </button>
-              </div>
+              <PosterCard
+                key={m.id}
+                tmdbId={m.tmdb_id}
+                title={m.title}
+                year={m.year}
+                subtitle={m.reason}
+                voteAverage={m.vote_average}
+                footer={
+                  <button
+                    onClick={() => void dismiss(m)}
+                    className="mt-1 w-full rounded-md py-0.5 text-[11px] text-fg3 hover:text-fg"
+                  >
+                    Not interested
+                  </button>
+                }
+              />
             ))}
           </div>
         </div>
@@ -314,29 +349,14 @@ function RecommendationsSection() {
         <div className="panel p-4">
           <div className="flex flex-wrap gap-3">
             {items.map((m) => (
-              <div key={m.tmdb_id} className="w-[92px]">
-                <a
-                  href={tmdbMovieUrl(m.tmdb_id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full text-left"
-                  title={`${m.reason} — view on TMDB`}
-                >
-                  <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-                    <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
-                    {m.vote_average > 0 && (
-                      <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
-                        {m.vote_average.toFixed(1)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 truncate text-[11px] text-fg3">
-                    {m.title} {m.year ? `· ${m.year}` : ""}
-                  </p>
-                  <p className="truncate text-[10px] text-fg3/80">{m.reason}</p>
-                </a>
-                <AddButton tmdbId={m.tmdb_id} title={m.title} />
-              </div>
+              <PosterCard
+                key={m.tmdb_id}
+                tmdbId={m.tmdb_id}
+                title={m.title}
+                year={m.year}
+                subtitle={m.reason}
+                voteAverage={m.vote_average}
+              />
             ))}
           </div>
           <p className="mt-3 text-xs text-fg3">
@@ -360,23 +380,7 @@ function ListSection({ list }: { list: MissingList }) {
       <div className="panel p-4">
         <div className="flex flex-wrap gap-3">
           {list.items.map((m) => (
-            <div key={m.tmdb_id} className="w-[92px]">
-              <a
-                href={tmdbMovieUrl(m.tmdb_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full text-left"
-                title={`${m.title}${m.year ? ` (${m.year})` : ""} — view on TMDB`}
-              >
-                <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-                  <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
-                </div>
-                <p className="mt-1 truncate text-[11px] text-fg3">
-                  {m.title} {m.year ? `· ${m.year}` : ""}
-                </p>
-              </a>
-              <AddButton tmdbId={m.tmdb_id} title={m.title} />
-            </div>
+            <PosterCard key={m.tmdb_id} tmdbId={m.tmdb_id} title={m.title} year={m.year} />
           ))}
         </div>
         <p className="mt-3 text-xs text-fg3">

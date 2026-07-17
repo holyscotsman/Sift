@@ -173,12 +173,16 @@ export function Junk() {
               }}
               onRemove={() => setModal({ candidates: [c] })}
               onReset={() => {
+                // Only a Keep decision holds a server-side override; resetting a
+                // removal decision must not silently strip protection set elsewhere.
+                if (decisions[c.tmdb_id] === "kept") {
+                  void api.setKeepOverride(c.tmdb_id, false).catch(() => {});
+                }
                 setDecisions((d) => {
                   const n = { ...d };
                   delete n[c.tmdb_id];
                   return n;
                 });
-                void api.setKeepOverride(c.tmdb_id, false).catch(() => {});
               }}
             />
           ))}

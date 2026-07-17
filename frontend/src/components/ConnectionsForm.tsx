@@ -2,7 +2,7 @@
 // single Save. Used by the Setup Wizard and the Settings page. Secrets already saved
 // show a "saved" placeholder — leave blank to keep them, type to replace.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import type { Connections, ServiceHealth } from "@/lib/types";
@@ -146,31 +146,37 @@ export function ConnectionsForm({
     setTests((t) => ({ ...t, [spec.key]: res }));
     if (spec.key === "anthropic" && res.ok && res.models?.length) {
       setAnthropicModels(res.models);
-      // Materialise the picker's default so Save persists it even untouched.
-      if (!vals["anthropic.model"] && !initial.anthropic?.model) {
+      // Materialise the picker's value so Save persists what the dropdown shows —
+      // including when a previously saved model isn't in the fetched list anymore.
+      const current = vals["anthropic.model"] || (initial.anthropic?.model as string) || "";
+      if (!current || !res.models.includes(current)) {
         set("anthropic", "model", res.models[0]);
       }
     }
-    // The moment Plex + Radarr both test green, quietly persist them and let the
-    // wizard kick off the first scan in the background.
-    if (res.ok && onEssentialsReady && !essentialsFired.current) {
-      const other = spec.key === "plex" ? "radarr" : spec.key === "radarr" ? "plex" : null;
-      const otherOk = other !== null && (tests[other] as ServiceHealth | undefined)?.ok === true;
-      if (other !== null && otherOk) {
-        essentialsFired.current = true;
-        const payload: Record<string, Record<string, unknown>> = {};
-        for (const s of specs) {
-          if (s.key === "plex" || s.key === "radarr") payload[s.key] = serviceValues(s);
-        }
-        try {
-          await api.saveConfig(payload);
-          onEssentialsReady();
-        } catch {
-          essentialsFired.current = false; // let a later attempt retry
-        }
-      }
-    }
   }
+
+  // The moment Plex + Radarr have both tested green, quietly persist everything
+  // entered so far and let the wizard kick off the first scan in the background.
+  // An effect (not test()'s closure) so it reads fresh state: concurrent Test
+  // clicks or edits made while a request was in flight can't lose the trigger.
+  useEffect(() => {
+    const ok = (key: string) => (tests[key] as ServiceHealth | undefined)?.ok === true;
+    if (!onEssentialsReady || essentialsFired.current || !ok("plex") || !ok("radarr")) return;
+    essentialsFired.current = true;
+    const payload: Record<string, Record<string, unknown>> = {};
+    for (const s of specs) {
+      const values = serviceValues(s);
+      if (Object.keys(values).length > 0) payload[s.key] = values;
+    }
+    void api
+      .saveConfig(payload)
+      .then(() => onEssentialsReady())
+      .catch(() => {
+        essentialsFired.current = false; // let a later test retry
+      });
+    // vals/specs are read at the commit where tests changed — intentionally not deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tests]);
 
   async function save() {
     setSaving(true);

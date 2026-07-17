@@ -1,7 +1,15 @@
 // Scan controller: starts a scan, streams /ws/scan/{id} progress, and shares the
 // live state between the header status pill and the floating scan panel.
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
 import { api, scanSocketUrl } from "./api";
@@ -47,6 +55,17 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   const finishedRef = useRef(false);
 
   const silentRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  // Provider teardown (logout, app unmount) must not leave a zombie poller or a
+  // half-open socket behind.
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+      socketRef.current?.close();
+    };
+  }, []);
 
   const finish = useCallback(
     (status: string, err?: string | null) => {
@@ -60,7 +79,7 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
       setScanning(false);
       if (status !== "completed" && !silentRef.current) setError(err || status);
       onComplete?.();
-      window.setTimeout(() => setPanelOpen(false), 1400);
+      closeTimerRef.current = window.setTimeout(() => setPanelOpen(false), 1400);
     },
     [onComplete],
   );
@@ -68,8 +87,18 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   const start = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent);
     if (scanning) {
-      if (!silent) setPanelOpen(true);
+      if (!silent) {
+        // Joining a scan that started silently: the user is watching now, so
+        // failures must surface like any other scan's.
+        silentRef.current = false;
+        setPanelOpen(true);
+      }
       return;
+    }
+    // A leftover auto-close from the previous scan must not shut this one's panel.
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
     }
     silentRef.current = silent;
     finishedRef.current = false;

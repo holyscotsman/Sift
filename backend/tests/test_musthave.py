@@ -35,6 +35,15 @@ def test_parse_titles_rejects_non_json():
     assert musthave.parse_titles("I suggest some movies you may enjoy!") == []
 
 
+def test_parse_titles_coerces_string_years():
+    # Models frequently emit years as strings; losing the year loses TMDB
+    # disambiguation (Solaris 1972 vs 2002).
+    titles = musthave.parse_titles('[{"title": "Solaris", "year": "1972", "reason": "x"}]')
+    assert titles[0]["year"] == 1972
+    titles = musthave.parse_titles('[{"title": "Solaris", "year": "next year", "reason": "x"}]')
+    assert titles[0]["year"] is None
+
+
 # ------------------------------------------------------------------- fake engine
 
 

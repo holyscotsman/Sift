@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..analysis import junk
 from ..config import Settings
 from ..db.models import Movie
+from ..db.session import in_thread
 from ..services.settings_store import effective_junk
 from .provider import LLMProvider
 from .registry import build_providers
@@ -93,11 +94,17 @@ async def review_one(
     return ReviewNote(band_note, "deterministic")
 
 
-def _targets(session: Session, settings: Settings, limit: int) -> list[dict[str, Any]]:
+def _targets(
+    session: Session, settings: Settings, limit: int, *, only_new: bool
+) -> list[dict[str, Any]]:
     thr = effective_junk(session, settings)
     out: list[dict[str, Any]] = []
     for movie, score in junk.candidates(session, thr, limit=limit):
         payload = score.signals or {}
+        if only_new and payload.get("ai_note"):
+            # Scan-time pass: don't re-spend tokens re-phrasing an unchanged note.
+            # The Junk screen's explicit "Run AI review" refreshes everything.
+            continue
         out.append(
             {
                 "tmdb_id": movie.tmdb_id,
@@ -114,12 +121,25 @@ def _targets(session: Session, settings: Settings, limit: int) -> list[dict[str,
 
 
 async def run_review(
-    session_factory: sessionmaker[Session], settings: Settings, *, limit: int = 50
+    session_factory: sessionmaker[Session],
+    settings: Settings,
+    *,
+    limit: int = 50,
+    only_new: bool = False,
 ) -> dict[str, Any]:
-    """Review the current removal candidates and store an advisory note on each."""
+    """Review the current removal candidates and store an advisory note on each.
+    ``only_new`` skips candidates that already carry a note (the scan-time mode)."""
     local, anthropic = build_providers(settings)
     try:
-        targets = await _in_thread(session_factory, lambda s: _targets(s, settings, limit))
+        if local is not None and not await local.health():
+            # A saved-but-dead Ollama URL would otherwise cost a full timeout per
+            # candidate; one fast probe downgrades the run instead.
+            log.info("ollama unreachable — reviewing without the local draft pass")
+            await local.aclose()
+            local = None
+        targets = await in_thread(
+            session_factory, lambda s: _targets(s, settings, limit, only_new=only_new)
+        )
         notes: dict[int, ReviewNote] = {}
         for target in targets:
             notes[target["tmdb_id"]] = await review_one(target, local=local, anthropic=anthropic)
@@ -136,7 +156,7 @@ async def run_review(
                 movie.score.model_used = note.provider
             session.commit()
 
-        await _in_thread(session_factory, _persist)
+        await in_thread(session_factory, _persist)
         provider = "anthropic+ollama" if (local and anthropic) else (
             "anthropic" if anthropic else "ollama" if local else "deterministic"
         )
@@ -145,13 +165,3 @@ async def run_review(
         for prov in (local, anthropic):
             if prov is not None:
                 await prov.aclose()
-
-
-async def _in_thread(session_factory: sessionmaker[Session], fn: Any) -> Any:
-    import asyncio
-
-    def _run() -> Any:
-        with session_factory() as session:
-            return fn(session)
-
-    return await asyncio.to_thread(_run)

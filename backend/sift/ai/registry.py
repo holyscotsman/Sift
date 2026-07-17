@@ -58,10 +58,14 @@ def ai_configured(settings: Settings) -> bool:
 
 def build_llm_provider(settings: Settings) -> LLMProvider:
     """The single conversational provider (Ask): Anthropic when allowed and keyed,
-    else the local model, else the deterministic stub."""
-    local, remote = build_providers(settings)
-    if remote is not None:
-        return remote
-    if local is not None:
-        return local
+    else the local model, else the deterministic stub. Constructs only the provider
+    it returns — each provider opens an httpx client, so building the pair here
+    would leak the discarded one."""
+    mode = _mode(settings)
+    if mode in ("tandem", "anthropic"):
+        key = anthropic_key(settings)
+        if key:
+            return AnthropicProvider(key, settings.ai.anthropic_model)
+    if mode in ("tandem", "ollama") and settings.ai.local_enabled:
+        return OllamaProvider(settings.ai.local_base_url, settings.ai.local_model)
     return StubProvider()

@@ -12,6 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..ai import anthropic as anthropic_ai
 from ..ai.registry import anthropic_key
 from ..services import config_store, reset, runtime
 from ..services.health import check_service
@@ -117,7 +118,7 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
         if not key:
             return ServiceHealth(service="anthropic", ok=False, detail="no key", latency_ms=None)
         try:
-            models = await list_anthropic_models(key)
+            models = await anthropic_ai.list_models(key)
         except httpx.HTTPStatusError as exc:
             detail = (
                 "key rejected (401) — check it and try again."
@@ -125,9 +126,12 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
                 else f"Anthropic returned HTTP {exc.response.status_code}."
             )
             return ServiceHealth(service="anthropic", ok=False, detail=detail, latency_ms=None)
-        except Exception as exc:  # noqa: BLE001 - surfaced as a status, not raised
+        except Exception:  # noqa: BLE001 - a raw exception could echo request details
             return ServiceHealth(
-                service="anthropic", ok=False, detail=str(exc)[:120], latency_ms=None
+                service="anthropic",
+                ok=False,
+                detail="couldn't reach Anthropic — network problem on the Sift server.",
+                latency_ms=None,
             )
         return ServiceHealth(
             service="anthropic",
@@ -138,19 +142,3 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
         )
 
     raise HTTPException(status_code=404, detail=f"unknown service {service!r}")
-
-
-async def list_anthropic_models(
-    key: str, *, transport: httpx.AsyncBaseTransport | None = None
-) -> list[str]:
-    """Model ids the key can use — a free call that also proves the key works."""
-    async with httpx.AsyncClient(
-        base_url="https://api.anthropic.com",
-        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-        timeout=8.0,
-        transport=transport,
-    ) as client:
-        resp = await client.get("/v1/models", params={"limit": 50})
-        resp.raise_for_status()
-    data = resp.json().get("data", [])
-    return [m["id"] for m in data if isinstance(m, dict) and m.get("id")]

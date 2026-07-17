@@ -90,6 +90,26 @@ async def test_stub_completion_is_deterministic():
     assert "Settings" in a.text  # points at the in-app Connections, not an env var
 
 
+def test_ask_degrades_instead_of_500_when_provider_errors(settings, factory, monkeypatch):
+    # A saved-but-dead provider (e.g. an unreachable Ollama URL) must not turn Ask
+    # into a 500 — the route falls back to grounded sources with a plain message.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.ai.local_enabled = True
+    settings.ai.local_base_url = "http://127.0.0.1:1"  # nothing listens here
+    settings.ai.mode = "ollama"
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as client, factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True))
+        session.commit()
+        resp = client.post("/api/ask", json={"query": "matrix"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["provider"] == "error"
+        assert any(s["tmdb_id"] == 603 for s in body["sources"])
+
+
 def test_retrieve_matches_library_titles(factory):
     with factory() as session:
         session.add(Movie(tmdb_id=603, title="The Matrix", year=1999, in_plex=True))

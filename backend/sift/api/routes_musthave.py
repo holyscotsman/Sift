@@ -34,29 +34,19 @@ def list_suggestions(
     factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> MustHaveListResponse:
     with factory() as session:
-        owned = {
-            tid
-            for (tid,) in session.execute(select(Movie.tmdb_id).where(Movie.in_plex.is_(True)))
-        }
+        # Anti-join: a title acquired since suggestion drops out, without pulling
+        # the whole owned-id column into Python on every page view.
+        now_owned = (
+            select(Movie.tmdb_id)
+            .where(Movie.in_plex.is_(True), Movie.tmdb_id == MustHaveSuggestion.tmdb_id)
+            .exists()
+        )
         rows = session.scalars(
             select(MustHaveSuggestion)
-            .where(MustHaveSuggestion.status == "suggested")
+            .where(MustHaveSuggestion.status == "suggested", ~now_owned)
             .order_by(MustHaveSuggestion.vote_count.desc().nulls_last())
         ).all()
-        items = [
-            MustHaveOut(
-                id=s.id,
-                tmdb_id=s.tmdb_id,
-                title=s.title,
-                year=s.year,
-                reason=s.reason,
-                source=s.source,
-                vote_average=s.vote_average,
-                vote_count=s.vote_count,
-            )
-            for s in rows
-            if s.tmdb_id not in owned  # a title acquired since suggestion drops out
-        ]
+        items = [MustHaveOut.model_validate(s) for s in rows]
     return MustHaveListResponse(items=items)
 
 
@@ -70,13 +60,4 @@ def dismiss(
             raise HTTPException(status_code=404, detail="suggestion not found")
         row.status = "dismissed"
         session.commit()
-        return MustHaveOut(
-            id=row.id,
-            tmdb_id=row.tmdb_id,
-            title=row.title,
-            year=row.year,
-            reason=row.reason,
-            source=row.source,
-            vote_average=row.vote_average,
-            vote_count=row.vote_count,
-        )
+        return MustHaveOut.model_validate(row)

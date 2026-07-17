@@ -97,7 +97,7 @@ def test_config_test_anthropic_verifies_key_and_lists_models(client, monkeypatch
         assert key == "sk-x"
         return ["claude-sonnet-5", "claude-haiku-4-5"]
 
-    monkeypatch.setattr(routes_config, "list_anthropic_models", fake_models)
+    monkeypatch.setattr(routes_config.anthropic_ai, "list_models", fake_models)
     with_key = client.post("/api/config/test/anthropic", json={"values": {"api_key": "sk-x"}})
     body = with_key.json()
     assert body["ok"] is True and body["models"] == ["claude-sonnet-5", "claude-haiku-4-5"]
@@ -116,7 +116,7 @@ def test_config_test_anthropic_rejected_key_is_reported(client, monkeypatch):
             "401", request=request, response=httpx.Response(401, request=request)
         )
 
-    monkeypatch.setattr(routes_config, "list_anthropic_models", rejected)
+    monkeypatch.setattr(routes_config.anthropic_ai, "list_models", rejected)
     r = client.post("/api/config/test/anthropic", json={"values": {"api_key": "sk-bad"}})
     body = r.json()
     assert body["ok"] is False and "rejected" in body["detail"]

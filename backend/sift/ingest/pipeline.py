@@ -226,14 +226,20 @@ class ScanPipeline:
 
     async def _phase_ai(self) -> dict[str, int]:
         """Advisory AI pass over the freshly scored removal queue. Skips silently when
-        no provider is configured; never changes a deterministic verdict."""
-        from ..ai import review as ai_review
-        from ..ai.registry import ai_configured
-
-        if not ai_configured(self.settings):
-            return {}
+        no provider is configured; never changes a deterministic verdict. Everything —
+        the imports included — sits inside the guard: this phase must never be the
+        reason a finished scan reports failure."""
         try:
-            result = await ai_review.run_review(self.factory, self.settings, limit=50)
+            from ..ai import review as ai_review
+            from ..ai.registry import ai_configured
+
+            if not ai_configured(self.settings):
+                return {}
+            # only_new: don't re-spend tokens on candidates that already carry a
+            # note; the Junk screen's explicit button refreshes everything.
+            result = await ai_review.run_review(
+                self.factory, self.settings, limit=50, only_new=True
+            )
         except Exception as exc:  # noqa: BLE001 - advisory only; never fails the scan
             log.info("ai analysis skipped: %s", exc)
             return {}
@@ -306,7 +312,9 @@ class ScanPipeline:
                 movie.radarr_id = data["radarr_id"]
                 movie.imdb_id = data["imdb_id"] or movie.imdb_id
                 movie.title = data["title"] or movie.title
-                movie.year = data["year"]
+                # Radarr runs after Plex now — a missing Radarr year must not
+                # clobber the year Plex already provided.
+                movie.year = data["year"] if data["year"] is not None else movie.year
                 movie.runtime = data["runtime"]
                 movie.genres = data["genres"]
                 movie.overview = data["overview"]

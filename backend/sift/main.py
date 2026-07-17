@@ -59,6 +59,7 @@ _FRONTEND_DIST = Path(
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("Sift %s starting", __version__)
     app.state.scan_tasks = set()
+    app.state.active_scans = set()
     yield
     for task in list(app.state.scan_tasks):
         task.cancel()
@@ -109,8 +110,10 @@ def create_app(
         posters=PosterCache(settings, session_factory),
     )
     # scan_tasks also set in lifespan; initialise here so TestClient (which may not
-    # run lifespan in every path) always has it.
+    # run lifespan in every path) always has it. active_scans tracks which scan-run
+    # ids have a live task in this process (exact liveness for idempotent starts).
     app.state.scan_tasks = set()
+    app.state.active_scans = set()
 
     for module in (
         routes_auth,

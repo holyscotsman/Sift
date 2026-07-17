@@ -4,6 +4,37 @@ Versioning scheme: `YYMM.major.patch`.
 
 ## Unreleased
 
+### Added — refined AI engine, Must-Have catalog, and onboarding flow
+- **AI engine modes** (Settings › Connections): **Tandem** (local Ollama drafts,
+  Anthropic refines — default), **Claude only**, or **Local only**.
+  `registry.build_providers` is the single mode-aware source of providers; review and
+  Ask both honor it, and Ask now works on a local-only setup.
+- **Anthropic key verification + model picker** — Test calls `GET /v1/models` (free),
+  proving the key and returning the models it can use; the model field becomes a
+  dropdown of those ids. Rejected keys report "key rejected (401)".
+- **Must-Have catalog** (Missing › Must-have picks): the engine studies a profile of
+  the library and proposes canon feature films it's missing — acclaimed theatrical
+  releases and Criterion-caliber world cinema. Proposals are hints only; nothing is
+  stored unless TMDB data clears the anti-nonsense gates (resolves on TMDB / ≥200
+  votes / ≥6.5 average / feature runtime / released / not adult / not owned / not
+  dismissed). Dismissals are remembered; re-runs never duplicate (migration 0005).
+  Without AI, the new Criterion + IMDb-top starter lists (pending human review) feed
+  the same gates.
+- **Scan flow**: phases reordered to Plex → Radarr → Tautulli → TMDB → finalize →
+  score → **AI analysis** (auto advisory review; skips silently with no provider).
+  `POST /api/scan` is idempotent (joins an in-flight run; retires stale RUNNING rows).
+  The Setup Wizard silently starts the first scan the moment Plex + Radarr test green.
+- **Login-first front door** — sign-in is the default screen; "New user? Set up Sift"
+  shows only while no account exists.
+- **Keep is permanent** — Junk's Keep persists as `movies.keep_override` (migration
+  0006): protected titles never re-flag across rescans; drawer shows a Protected pill.
+
+### Fixed
+- **A–Z rail drifted off-screen on scroll** — the page container's transform
+  animation demoted `position:fixed`; the rail is now portaled to `<body>`.
+- Ollama connection hint now gives the one-line cloudflared tunnel command; Junk's
+  dry-run note points at Settings › Autonomy instead of an env var.
+
 ### Fixed — audit of the new action/recommendation code
 - **Dead-end drawer on Missing** — recommendation and curated-list posters opened the
   library drawer, but those titles aren't in the library, so it 404'd to "Not found."

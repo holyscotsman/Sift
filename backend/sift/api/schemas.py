@@ -282,6 +282,8 @@ class MissingListsResponse(BaseModel):
 
 
 class MustHaveOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     tmdb_id: int
     title: str

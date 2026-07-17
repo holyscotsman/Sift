@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+from ..ai.registry import MODES
 from ..config import Settings
 from ..db.models import Setting
 
@@ -149,7 +150,7 @@ def apply_to_settings(
 
     ai = config.get("ai") or {}
     mode = _s(ai.get("mode"))
-    if mode and mode.lower() in ("tandem", "anthropic", "ollama"):
+    if mode and mode.lower() in MODES:
         eff.ai.mode = mode.lower()
 
     return eff

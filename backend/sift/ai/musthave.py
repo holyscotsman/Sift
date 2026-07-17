@@ -21,7 +21,6 @@ on their own — the owner adds or dismisses each one.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -35,6 +34,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
 from ..db.models import Movie, MustHaveSuggestion, Rating
+from ..db.session import in_thread
 from .provider import LLMProvider
 from .registry import build_providers
 
@@ -67,13 +67,17 @@ def _prompt(context: str, limit: int) -> str:
 # ------------------------------------------------------------------ library context
 
 
-def _library_context(session: Session) -> str:
-    """A compact profile: size, top genres, and a sample of the strongest titles."""
+def _read_library(session: Session) -> tuple[str, set[int], set[int]]:
+    """(compact library profile, owned tmdb ids, ids already suggested/dismissed) —
+    one pass over the in-Plex rows serves both the context and the owned set."""
     rows = session.execute(
-        select(Movie.title, Movie.year, Movie.genres).where(Movie.in_plex.is_(True))
+        select(Movie.tmdb_id, Movie.title, Movie.year, Movie.genres).where(
+            Movie.in_plex.is_(True)
+        )
     ).all()
+    owned = {tid for tid, _t, _y, _g in rows}
     genre_counts: dict[str, int] = {}
-    for _title, _year, genres in rows:
+    for _tid, _title, _year, genres in rows:
         for g in genres or []:
             genre_counts[g] = genre_counts.get(g, 0) + 1
     top_genres = sorted(genre_counts, key=lambda g: -genre_counts[g])[:8]
@@ -86,19 +90,12 @@ def _library_context(session: Session) -> str:
         .limit(25)
     ).all()
     sample = ", ".join(f"{t} ({y or '?'})" for t, y, _v in best) or "(no titles yet)"
-    return (
+    context = (
         f"{len(rows)} movies. Top genres: {', '.join(top_genres) or 'unknown'}. "
         f"Highest-rated owned titles: {sample}."
     )
-
-
-def _known_ids(session: Session) -> tuple[set[int], set[int]]:
-    """(owned tmdb ids, tmdb ids already suggested or dismissed)."""
-    owned = {
-        tid for (tid,) in session.execute(select(Movie.tmdb_id).where(Movie.in_plex.is_(True)))
-    }
     seen = {tid for (tid,) in session.execute(select(MustHaveSuggestion.tmdb_id))}
-    return owned, seen
+    return context, owned, seen
 
 
 # ------------------------------------------------------------------- AI orchestration
@@ -120,11 +117,18 @@ def parse_titles(text: str) -> list[dict[str, Any]]:
         title = str(item.get("title") or "").strip()
         if not title:
             continue
-        year = item.get("year")
+        # Models frequently emit years as strings ("1972") — losing the year loses
+        # TMDB disambiguation (Solaris 1972 vs 2002), so coerce, don't drop.
+        year: int | None = None
+        raw_year = item.get("year")
+        if isinstance(raw_year, (int, float)):
+            year = int(raw_year)
+        elif isinstance(raw_year, str) and raw_year.strip()[:4].isdigit():
+            year = int(raw_year.strip()[:4])
         out.append(
             {
                 "title": title,
-                "year": int(year) if isinstance(year, (int, float)) else None,
+                "year": year,
                 "reason": str(item.get("reason") or "").strip()[:300],
             }
         )
@@ -241,19 +245,21 @@ async def run_musthave(
     if not settings.tmdb.enabled or settings.tmdb.api_key is None:
         return {"added": 0, "considered": 0, "provider": "none", "note": "connect TMDB first"}
 
-    context, owned, seen = await asyncio.to_thread(_read, session_factory)
+    context, owned, seen = await in_thread(session_factory, _read_library)
 
     local, anthropic = build_providers(settings)
     if local is None and anthropic is None:
-        candidates = await asyncio.to_thread(
-            _run_in_session, session_factory, lambda s: _curated_fallback(s, limit)
-        )
+        candidates = await in_thread(session_factory, lambda s: _curated_fallback(s, limit))
         provider = "curated"
     else:
-        candidates, provider = await _propose(context, limit, local, anthropic)
-        for prov in (local, anthropic):
-            if prov is not None:
-                await prov.aclose()
+        try:
+            candidates, provider = await _propose(context, limit, local, anthropic)
+        finally:
+            # finally: a cancelled request or a raising provider must not leak the
+            # other provider's httpx client.
+            for prov in (local, anthropic):
+                if prov is not None:
+                    await prov.aclose()
 
     client = TmdbClient(settings.tmdb, transport=transport)
     accepted: list[dict[str, Any]] = []
@@ -268,25 +274,7 @@ async def run_musthave(
     finally:
         await client.aclose()
 
-    added = await asyncio.to_thread(_store, session_factory, accepted, provider)
-    return {"added": added, "considered": len(candidates), "provider": provider}
-
-
-def _read(factory: sessionmaker[Session]) -> tuple[str, set[int], set[int]]:
-    with factory() as session:
-        owned, seen = _known_ids(session)
-        return _library_context(session), owned, seen
-
-
-def _run_in_session(factory: sessionmaker[Session], fn: Any) -> Any:
-    with factory() as session:
-        return fn(session)
-
-
-def _store(
-    factory: sessionmaker[Session], accepted: list[dict[str, Any]], provider: str
-) -> int:
-    with factory() as session:
+    def _store(session: Session) -> int:
         added = 0
         for item in accepted:
             exists = session.scalars(
@@ -298,3 +286,6 @@ def _store(
             added += 1
         session.commit()
         return added
+
+    added = await in_thread(session_factory, _store)
+    return {"added": added, "considered": len(candidates), "provider": provider}

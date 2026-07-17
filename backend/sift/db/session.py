@@ -8,7 +8,8 @@ worker thread by the caller so they never block the event loop.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import asyncio
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -77,3 +78,17 @@ def session_scope(factory: sessionmaker[Session]) -> Iterator[Session]:
         raise
     finally:
         session.close()
+
+
+async def in_thread[T](factory: sessionmaker[Session], fn: Callable[[Session], T]) -> T:
+    """Run sync session work on a worker thread (keeps the event loop free).
+
+    The one place the "open a session, call fn, marshal to a thread" pattern lives —
+    the AI modules and pipeline all funnel through here rather than growing copies.
+    """
+
+    def _run() -> T:
+        with factory() as session:
+            return fn(session)
+
+    return await asyncio.to_thread(_run)

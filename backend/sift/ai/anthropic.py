@@ -65,3 +65,21 @@ class AnthropicProvider:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+async def list_models(
+    key: str, *, transport: httpx.AsyncBaseTransport | None = None
+) -> list[str]:
+    """Model ids the key can use — a free call that also proves the key works.
+    Lives beside the provider so there is exactly one definition of how Sift talks
+    to Anthropic (base URL + pinned version)."""
+    async with httpx.AsyncClient(
+        base_url=_API,
+        headers={"x-api-key": key, "anthropic-version": _VERSION},
+        timeout=8.0,
+        transport=transport,
+    ) as client:
+        resp = await client.get("/v1/models", params={"limit": 50})
+        resp.raise_for_status()
+    data = resp.json().get("data", [])
+    return [m["id"] for m in data if isinstance(m, dict) and m.get("id")]

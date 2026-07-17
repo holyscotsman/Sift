@@ -143,7 +143,16 @@
   --dur-slow: 0ms;
 }
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root,
+  :root * {
+    /* Durations must collapse too: a *paused* entry animation with fill "both"
+     * holds its from-keyframe forever — every .page-enter page frozen invisible
+     * at opacity 0, and its retained transform turns fixed descendants into
+     * scroll-along absolute. Zero duration completes instantly to the final
+     * keyframe (visible, transform: none), same as the in-app toggle. */
     --anim: paused;
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
   }
 }
