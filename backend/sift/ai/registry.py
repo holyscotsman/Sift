@@ -1,8 +1,11 @@
-"""Select a provider from configuration / environment.
+"""Select providers from configuration, honoring the AI engine mode.
 
-The Anthropic key is read from ``ANTHROPIC_API_KEY`` (no ``SIFT_`` prefix), which
-is where hosts like Render expect it. With no key, the deterministic stub is used
-so the app degrades gracefully rather than erroring.
+``ai.mode`` picks the engine: ``tandem`` (both, when configured — local drafts,
+Anthropic refines), ``anthropic`` (Claude only), or ``ollama`` (local only). The
+Anthropic key is read from the UI-entered config first, then ``ANTHROPIC_API_KEY``
+(no ``SIFT_`` prefix), which is where hosts like Render expect it. With nothing
+configured, a deterministic stub keeps every AI surface working — degraded, never
+erroring.
 """
 
 from __future__ import annotations
@@ -11,7 +14,10 @@ import os
 
 from ..config import Settings
 from .anthropic import AnthropicProvider
+from .ollama import OllamaProvider
 from .provider import LLMProvider, StubProvider
+
+MODES = ("tandem", "anthropic", "ollama")
 
 
 def anthropic_key(settings: Settings) -> str | None:
@@ -21,12 +27,41 @@ def anthropic_key(settings: Settings) -> str | None:
     return os.environ.get("ANTHROPIC_API_KEY") or None
 
 
+def _mode(settings: Settings) -> str:
+    mode = (settings.ai.mode or "tandem").lower()
+    return mode if mode in MODES else "tandem"
+
+
+def build_providers(
+    settings: Settings,
+) -> tuple[OllamaProvider | None, AnthropicProvider | None]:
+    """(local, anthropic) as the engine mode allows — either may be ``None``."""
+    mode = _mode(settings)
+    local: OllamaProvider | None = None
+    remote: AnthropicProvider | None = None
+    if mode in ("tandem", "ollama") and settings.ai.local_enabled:
+        local = OllamaProvider(settings.ai.local_base_url, settings.ai.local_model)
+    if mode in ("tandem", "anthropic"):
+        key = anthropic_key(settings)
+        if key:
+            remote = AnthropicProvider(key, settings.ai.anthropic_model)
+    return local, remote
+
+
 def ai_configured(settings: Settings) -> bool:
-    return anthropic_key(settings) is not None
+    """Is at least one real provider usable under the current mode?"""
+    mode = _mode(settings)
+    has_local = mode in ("tandem", "ollama") and settings.ai.local_enabled
+    has_remote = mode in ("tandem", "anthropic") and anthropic_key(settings) is not None
+    return has_local or has_remote
 
 
 def build_llm_provider(settings: Settings) -> LLMProvider:
-    key = anthropic_key(settings)
-    if key:
-        return AnthropicProvider(key, settings.ai.anthropic_model)
+    """The single conversational provider (Ask): Anthropic when allowed and keyed,
+    else the local model, else the deterministic stub."""
+    local, remote = build_providers(settings)
+    if remote is not None:
+        return remote
+    if local is not None:
+        return local
     return StubProvider()

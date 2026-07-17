@@ -15,6 +15,8 @@ class ServiceHealth(BaseModel):
     ok: bool
     detail: str = ""
     latency_ms: float | None = None
+    # Anthropic test only: model ids the key can use, so the UI can offer a picker.
+    models: list[str] | None = None
 
 
 class HealthResponse(BaseModel):

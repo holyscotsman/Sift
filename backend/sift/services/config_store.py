@@ -32,6 +32,8 @@ _ALLOWED: dict[str, set[str]] = {
     "tmdb": {"api_key", "language"},
     "ollama": {"base_url", "model"},
     "anthropic": {"api_key", "model"},
+    # The AI engine mode: tandem (both), anthropic, or ollama.
+    "ai": {"mode"},
 }
 
 
@@ -144,5 +146,10 @@ def apply_to_settings(
         eff.ai.local_enabled = True
     if _s(ollama.get("model")):
         eff.ai.local_model = ollama["model"]
+
+    ai = config.get("ai") or {}
+    mode = _s(ai.get("mode"))
+    if mode and mode.lower() in ("tandem", "anthropic", "ollama"):
+        eff.ai.mode = mode.lower()
 
     return eff

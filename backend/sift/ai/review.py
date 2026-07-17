@@ -1,8 +1,9 @@
 """AI review orchestration — Ollama (cheap draft) ↔ Anthropic (refine).
 
-Route-by-task: the local model drafts a quick advisory note, then Anthropic refines
-it into the final one or two sentences. Whichever providers are configured are used;
-with neither, a deterministic note is returned so the flow never hard-fails.
+In tandem mode the local model drafts a quick advisory note, then Anthropic refines
+it into the final one or two sentences; the engine mode (Settings › Connections) can
+pin the work to either provider alone. With nothing configured, a deterministic note
+is returned so the flow never hard-fails.
 
 **Advisory only.** The deterministic classifier + score already decided keep/remove;
 this never changes that. It writes supplementary context for the owner — the §4/§7
@@ -21,10 +22,8 @@ from ..analysis import junk
 from ..config import Settings
 from ..db.models import Movie
 from ..services.settings_store import effective_junk
-from .anthropic import AnthropicProvider
-from .ollama import OllamaProvider
 from .provider import LLMProvider
-from .registry import anthropic_key
+from .registry import build_providers
 
 log = logging.getLogger("sift.ai.review")
 
@@ -40,17 +39,6 @@ SYSTEM = (
 class ReviewNote:
     note: str
     provider: str
-
-
-def build_ollama(settings: Settings) -> OllamaProvider | None:
-    if not settings.ai.local_enabled:
-        return None
-    return OllamaProvider(settings.ai.local_base_url, settings.ai.local_model)
-
-
-def build_anthropic(settings: Settings) -> AnthropicProvider | None:
-    key = anthropic_key(settings)
-    return AnthropicProvider(key, settings.ai.anthropic_model) if key else None
 
 
 def _prompt(target: dict[str, Any]) -> str:
@@ -129,8 +117,7 @@ async def run_review(
     session_factory: sessionmaker[Session], settings: Settings, *, limit: int = 50
 ) -> dict[str, Any]:
     """Review the current removal candidates and store an advisory note on each."""
-    local = build_ollama(settings)
-    anthropic = build_anthropic(settings)
+    local, anthropic = build_providers(settings)
     try:
         targets = await _in_thread(session_factory, lambda s: _targets(s, settings, limit))
         notes: dict[int, ReviewNote] = {}

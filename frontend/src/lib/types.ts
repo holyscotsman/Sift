@@ -29,6 +29,8 @@ export interface ServiceHealth {
   ok: boolean;
   detail: string;
   latency_ms: number | null;
+  // Anthropic test only: model ids the verified key can use (feeds the picker).
+  models?: string[] | null;
 }
 
 export interface HealthResponse {

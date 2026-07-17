@@ -88,11 +88,57 @@ def test_config_test_endpoint_ollama_unreachable(client):
     assert r.status_code == 200 and r.json()["ok"] is False
 
 
-def test_config_test_anthropic_key_presence(client):
+def test_config_test_anthropic_verifies_key_and_lists_models(client, monkeypatch):
+    # A present key is verified against /v1/models and the ids come back for the
+    # UI's model picker; a missing key short-circuits to ok=False.
+    from sift.api import routes_config
+
+    async def fake_models(key, **_kw):
+        assert key == "sk-x"
+        return ["claude-sonnet-5", "claude-haiku-4-5"]
+
+    monkeypatch.setattr(routes_config, "list_anthropic_models", fake_models)
     with_key = client.post("/api/config/test/anthropic", json={"values": {"api_key": "sk-x"}})
-    assert with_key.json()["ok"] is True and with_key.json()["detail"] == "key set"
+    body = with_key.json()
+    assert body["ok"] is True and body["models"] == ["claude-sonnet-5", "claude-haiku-4-5"]
     without = client.post("/api/config/test/anthropic", json={"values": {}})
     assert without.json()["ok"] is False
+
+
+def test_config_test_anthropic_rejected_key_is_reported(client, monkeypatch):
+    import httpx
+
+    from sift.api import routes_config
+
+    async def rejected(key, **_kw):
+        request = httpx.Request("GET", "https://api.anthropic.com/v1/models")
+        raise httpx.HTTPStatusError(
+            "401", request=request, response=httpx.Response(401, request=request)
+        )
+
+    monkeypatch.setattr(routes_config, "list_anthropic_models", rejected)
+    r = client.post("/api/config/test/anthropic", json={"values": {"api_key": "sk-bad"}})
+    body = r.json()
+    assert body["ok"] is False and "rejected" in body["detail"]
+
+
+def test_ai_engine_mode_saves_and_overlays(client):
+    # The AI engine mode round-trips through /api/config and lands in settings.
+    put = client.put("/api/config", json={"connections": {"ai": {"mode": "ollama"}}})
+    assert put.status_code == 200
+    assert put.json()["connections"]["ai"] == {"mode": "ollama"}
+    assert client.get("/api/config").json()["connections"]["ai"]["mode"] == "ollama"
+
+
+def test_ai_engine_mode_invalid_value_is_ignored():
+    from sift.config import load_settings
+    from sift.services.config_store import apply_to_settings
+
+    base = load_settings(config_path=None)
+    eff = apply_to_settings(base, {"ai": {"mode": "chaos"}})
+    assert eff.ai.mode == "tandem"  # default survives nonsense
+    eff = apply_to_settings(base, {"ai": {"mode": "Anthropic"}})
+    assert eff.ai.mode == "anthropic"  # case-insensitive
 
 
 def test_actions_dry_run_toggle(client):
