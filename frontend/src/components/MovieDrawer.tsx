@@ -113,6 +113,23 @@ function MovieActions({ movie }: { movie: MovieDetail }) {
   );
 }
 
+// Protected (keep-override) badge with the only undo surface once a title has left
+// the Junk list: click to unprotect so it can be flagged again.
+function ProtectedPill({ tmdbId }: { tmdbId: number }) {
+  const [on, setOn] = useState(true);
+  if (!on) return null;
+  return (
+    <button
+      onClick={() =>
+        void api.setKeepOverride(tmdbId, false).then(() => setOn(false)).catch(() => {})
+      }
+      title="You marked this Keep — it's never flagged as junk. Click to unprotect."
+    >
+      <Pill tone="keep">Protected ✕</Pill>
+    </button>
+  );
+}
+
 function fmtSize(bytes: number | null): string {
   return bytes ? `${(bytes / 1e9).toFixed(1)} GB` : "—";
 }
@@ -181,6 +198,7 @@ export function MovieDrawer() {
               {movie.monitored && <Pill tone="accent">Monitored</Pill>}
               {movie.quality && <Pill>{movie.quality}</Pill>}
               {movie.is_kids && <Pill tone="borderline">Kids</Pill>}
+              {movie.keep_override && <ProtectedPill tmdbId={movie.tmdb_id} />}
             </div>
 
             <MovieActions key={movie.tmdb_id} movie={movie} />

@@ -134,7 +134,7 @@ export function Dashboard() {
           <span className="eyebrow">Quick actions</span>
           <div className="mt-3 flex flex-col gap-2">
             <button
-              onClick={start}
+              onClick={() => void start()}
               className="gradient-fill flex items-center justify-center gap-2 rounded-md py-2 text-sm font-bold shadow-glow"
             >
               <ScanIcon size={15} /> Run scan

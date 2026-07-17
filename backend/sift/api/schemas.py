@@ -15,6 +15,8 @@ class ServiceHealth(BaseModel):
     ok: bool
     detail: str = ""
     latency_ms: float | None = None
+    # Anthropic test only: model ids the key can use, so the UI can offer a picker.
+    models: list[str] | None = None
 
 
 class HealthResponse(BaseModel):
@@ -96,9 +98,19 @@ class SiftScoreOut(BaseModel):
 class MovieDetail(MovieOut):
     overview: str | None = None
     keywords: list[str] = []
+    keep_override: bool = False
     ratings: list[RatingOut] = []
     watch_history: list[WatchOut] = []
     sift_score: SiftScoreOut | None = None
+
+
+class KeepOverrideIn(BaseModel):
+    keep: bool
+
+
+class KeepOverrideOut(BaseModel):
+    tmdb_id: int
+    keep_override: bool
 
 
 class ScanRunOut(BaseModel):
@@ -267,6 +279,29 @@ class MissingList(BaseModel):
 
 class MissingListsResponse(BaseModel):
     lists: list[MissingList]
+
+
+class MustHaveOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tmdb_id: int
+    title: str
+    year: int | None
+    reason: str
+    source: str
+    vote_average: float | None
+    vote_count: int | None
+
+
+class MustHaveListResponse(BaseModel):
+    items: list[MustHaveOut]
+
+
+class MustHaveRunResponse(BaseModel):
+    added: int
+    considered: int
+    provider: str
 
 
 class RecommendedMovie(BaseModel):

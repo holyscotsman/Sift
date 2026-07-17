@@ -3,6 +3,7 @@
 // into view. Deep-links from global search via ?q=.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 
 import { GridIcon, TableIcon } from "@/components/icons";
@@ -209,26 +210,32 @@ export function Library() {
         <TableView items={items} />
       )}
 
-      {/* A–Z rail: jump straight to a letter when ordered by title. */}
-      {sort === "title" && !q && (
-        <nav
-          aria-label="Jump to letter"
-          className="fixed right-1 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-center gap-px rounded-pill border border-line bg-panel px-0.5 py-1.5 shadow-md md:flex"
-        >
-          {ALPHABET.map((L) => (
-            <button
-              key={L}
-              onClick={() => setLetter(L === activeLetter ? null : L)}
-              aria-pressed={L === activeLetter}
-              className={`h-[15px] w-4 rounded-pill text-[9px] font-bold leading-[15px] transition-colors ${
-                L === activeLetter ? "bg-accent text-accent-fg" : "text-fg3 hover:text-accent"
-              }`}
-            >
-              {L}
-            </button>
-          ))}
-        </nav>
-      )}
+      {/* A–Z rail: jump straight to a letter when ordered by title. Portaled to
+          <body> — the page container animates with a transform, and a transformed
+          ancestor turns position:fixed into scroll-along absolute, which made the
+          rail drift away as you scrolled. */}
+      {sort === "title" &&
+        !q &&
+        createPortal(
+          <nav
+            aria-label="Jump to letter"
+            className="fixed right-1 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-px rounded-pill border border-line bg-panel px-0.5 py-1.5 shadow-md md:flex"
+          >
+            {ALPHABET.map((L) => (
+              <button
+                key={L}
+                onClick={() => setLetter(L === activeLetter ? null : L)}
+                aria-pressed={L === activeLetter}
+                className={`h-[15px] w-4 rounded-pill text-[9px] font-bold leading-[15px] transition-colors ${
+                  L === activeLetter ? "bg-accent text-accent-fg" : "text-fg3 hover:text-accent"
+                }`}
+              >
+                {L}
+              </button>
+            ))}
+          </nav>,
+          document.body,
+        )}
 
       {/* Infinite-scroll sentinel + status. */}
       <div ref={sentinelRef} className="h-6" />

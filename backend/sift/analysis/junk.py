@@ -139,11 +139,16 @@ def candidates(
     session: Session, thr: JunkThresholds, *, limit: int = 200
 ) -> list[tuple[Movie, Score]]:
     """Removal candidates: library items the classifier + score flag for removal,
-    excluding kids-section items (never auto-flagged)."""
+    excluding kids-section items (never auto-flagged) and titles the owner has
+    marked Keep (a standing verdict, not a per-session one)."""
     stmt = (
         select(Movie, Score)
         .join(Score, Score.movie_id == Movie.tmdb_id)
-        .where(Movie.in_plex.is_(True), Movie.is_kids.is_(False))
+        .where(
+            Movie.in_plex.is_(True),
+            Movie.is_kids.is_(False),
+            Movie.keep_override.is_(False),
+        )
         .order_by(Score.junk_score.desc())
     )
     rows = [(m, s) for m, s in session.execute(stmt) if _is_candidate(s, thr)]

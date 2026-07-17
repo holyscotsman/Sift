@@ -79,3 +79,24 @@ def test_review_run_endpoint_stores_notes(client):
 
     item = c.get("/api/junk").json()["items"][0]
     assert item["ai_note"]  # populated
+
+
+async def test_only_new_skips_already_noted_candidates(settings, factory, monkeypatch):
+    # Scan-time mode must not re-spend tokens on unchanged notes; a full run
+    # (only_new=False, the Junk button) still refreshes everything.
+    from sift.ai import review as ai_review
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with factory() as session:
+        m = Movie(tmdb_id=603, title="Junk Film", in_plex=True)
+        m.ratings.append(Rating(source=RatingSource.IMDB, value=3.0, votes=200))
+        session.add(m)
+        session.commit()
+    junk.compute_and_store(factory, JunkThresholds())
+
+    first = await ai_review.run_review(factory, settings, only_new=True)
+    assert first["reviewed"] == 1
+    second = await ai_review.run_review(factory, settings, only_new=True)
+    assert second["reviewed"] == 0  # note already present → skipped
+    full = await ai_review.run_review(factory, settings, only_new=False)
+    assert full["reviewed"] == 1  # negative control: the explicit path re-reviews

@@ -5,8 +5,10 @@ content rules they ship as ``review_status="pending"`` and are meant to be revie
 and expanded by a human (or replaced by importing a fuller list). They are stored as
 title+year so ids come from TMDB search, never fabricated here.
 
-- ``cult``     — cult classics (drives the junk "keep if cult" rule + Missing).
-- ``imdb_top`` — widely top-ranked films (Missing "you don't own these").
+- ``cult``      — cult classics (drives the junk "keep if cult" rule + Missing).
+- ``imdb_top``  — widely top-ranked films (Missing "you don't own these").
+- ``criterion`` — Criterion-collection-caliber world/arthouse canon (feeds the
+  Must-Have fallback and Missing).
 """
 
 from __future__ import annotations
@@ -33,6 +35,28 @@ CURATED_SEED: dict[str, list[tuple[str, int]]] = {
         ("Brazil", 1985),
         ("Dazed and Confused", 1993),
         ("Groundhog Day", 1993),
+    ],
+    "criterion": [
+        ("Seven Samurai", 1954),
+        ("Rashomon", 1950),
+        ("8½", 1963),
+        ("Bicycle Thieves", 1948),
+        ("The 400 Blows", 1959),
+        ("Breathless", 1960),
+        ("Persona", 1966),
+        ("The Seventh Seal", 1957),
+        ("Tokyo Story", 1953),
+        ("M", 1931),
+        ("La Dolce Vita", 1960),
+        ("In the Mood for Love", 2000),
+        ("Andrei Rublev", 1966),
+        ("Wings of Desire", 1987),
+        ("Yojimbo", 1961),
+        ("Paths of Glory", 1957),
+        ("The Battle of Algiers", 1966),
+        ("Chungking Express", 1994),
+        ("Ran", 1985),
+        ("Stalker", 1979),
     ],
     "imdb_top": [
         ("The Shawshank Redemption", 1994),

@@ -101,11 +101,11 @@ export function Junk() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
-            Junk — removal queue
+            Junk
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-fg2">
-            Sift never deletes on its own — every removal needs your approval. Scores are
-            deterministic; kids libraries are guarded and never listed here.
+            Every removal needs your approval. Keep is permanent; kids libraries are never
+            listed.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -160,15 +160,30 @@ export function Junk() {
                   return n;
                 })
               }
-              onKeep={() => setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }))}
+              onKeep={() => {
+                // Persisted: a kept title never comes back after a rescan.
+                setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }));
+                void api.setKeepOverride(c.tmdb_id, true).catch(() => {
+                  setDecisions((d) => {
+                    const n = { ...d };
+                    delete n[c.tmdb_id];
+                    return n;
+                  });
+                });
+              }}
               onRemove={() => setModal({ candidates: [c] })}
-              onReset={() =>
+              onReset={() => {
+                // Only a Keep decision holds a server-side override; resetting a
+                // removal decision must not silently strip protection set elsewhere.
+                if (decisions[c.tmdb_id] === "kept") {
+                  void api.setKeepOverride(c.tmdb_id, false).catch(() => {});
+                }
                 setDecisions((d) => {
                   const n = { ...d };
                   delete n[c.tmdb_id];
                   return n;
-                })
-              }
+                });
+              }}
             />
           ))}
         </div>
@@ -194,9 +209,8 @@ export function Junk() {
             {dryRun ? (
               <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
                 Removals are <strong>staged (dry-run)</strong> — this records your approval in the
-                audit log but does not delete any files. To let Sift issue deletes to Radarr, set
-                <code className="mx-1 rounded bg-bg px-1">SIFT_ACTIONS__DRY_RUN=false</code> on the
-                server.
+                audit log but does not delete any files. To let Sift issue real deletes, switch to
+                Live in <strong>Settings › Autonomy</strong>.
               </p>
             ) : (
               <p
@@ -294,7 +308,7 @@ function Row({
             <>
               <Pill tone={decision === "kept" ? "keep" : "junk"}>
                 {decision === "kept"
-                  ? "Kept"
+                  ? "Kept — won't be flagged again"
                   : decision === "removed_live"
                     ? "Removed"
                     : "Removal staged"}

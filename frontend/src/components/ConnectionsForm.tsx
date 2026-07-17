@@ -2,10 +2,18 @@
 // single Save. Used by the Setup Wizard and the Settings page. Secrets already saved
 // show a "saved" placeholder — leave blank to keep them, type to replace.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import type { Connections, ServiceHealth } from "@/lib/types";
+
+// AI engine modes: tandem uses both providers (local drafts, Claude refines);
+// the other two pin all AI work to a single provider.
+const AI_MODES: { value: string; label: string; hint: string }[] = [
+  { value: "tandem", label: "Tandem", hint: "Local drafts, Claude refines — best of both." },
+  { value: "anthropic", label: "Claude only", hint: "Every AI task goes to Anthropic." },
+  { value: "ollama", label: "Local only", hint: "Every AI task stays on your Ollama." },
+];
 
 interface FieldSpec {
   name: string;
@@ -57,9 +65,9 @@ export const SERVICE_SPECS: ServiceSpec[] = [
   {
     key: "ollama",
     label: "Local AI (Ollama)",
-    hint: "Optional — must be reachable from the Sift server, so use a public URL/tunnel (not localhost) when hosted.",
+    hint: "Optional — must be reachable from the Sift server. Quickest: run `cloudflared tunnel --url http://localhost:11434` on the Ollama machine and paste the https URL it prints.",
     fields: [
-      { name: "base_url", label: "URL", placeholder: "http://your-host:11434 (not localhost)" },
+      { name: "base_url", label: "URL", placeholder: "https://your-tunnel.trycloudflare.com" },
       { name: "model", label: "Model", placeholder: "llama3.1" },
     ],
   },
@@ -78,11 +86,15 @@ export function ConnectionsForm({
   specs = SERVICE_SPECS,
   initial,
   onSaved,
+  onEssentialsReady,
   saveLabel = "Save connections",
 }: {
   specs?: ServiceSpec[];
   initial: Connections;
   onSaved?: (c: Connections) => void;
+  // Fired once, the moment both Plex and Radarr have tested green — their values are
+  // auto-saved so the caller (the wizard) can start the first scan in the background.
+  onEssentialsReady?: () => void;
   saveLabel?: string;
 }) {
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -90,6 +102,11 @@ export function ConnectionsForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiMode, setAiMode] = useState<string>(
+    typeof initial.ai?.mode === "string" ? (initial.ai.mode as string) : "tandem",
+  );
+  const [anthropicModels, setAnthropicModels] = useState<string[]>([]);
+  const essentialsFired = useRef(false);
 
   function set(svc: string, field: string, v: string) {
     setVals((p) => ({ ...p, [`${svc}.${field}`]: v }));
@@ -120,16 +137,46 @@ export function ConnectionsForm({
 
   async function test(spec: ServiceSpec) {
     setTests((t) => ({ ...t, [spec.key]: "testing" }));
+    let res: ServiceHealth;
     try {
-      const res = await api.testConfig(spec.key, serviceValues(spec));
-      setTests((t) => ({ ...t, [spec.key]: res }));
+      res = await api.testConfig(spec.key, serviceValues(spec));
     } catch {
-      setTests((t) => ({
-        ...t,
-        [spec.key]: { service: spec.key, ok: false, detail: "test failed", latency_ms: null },
-      }));
+      res = { service: spec.key, ok: false, detail: "test failed", latency_ms: null };
+    }
+    setTests((t) => ({ ...t, [spec.key]: res }));
+    if (spec.key === "anthropic" && res.ok && res.models?.length) {
+      setAnthropicModels(res.models);
+      // Materialise the picker's value so Save persists what the dropdown shows —
+      // including when a previously saved model isn't in the fetched list anymore.
+      const current = vals["anthropic.model"] || (initial.anthropic?.model as string) || "";
+      if (!current || !res.models.includes(current)) {
+        set("anthropic", "model", res.models[0]);
+      }
     }
   }
+
+  // The moment Plex + Radarr have both tested green, quietly persist everything
+  // entered so far and let the wizard kick off the first scan in the background.
+  // An effect (not test()'s closure) so it reads fresh state: concurrent Test
+  // clicks or edits made while a request was in flight can't lose the trigger.
+  useEffect(() => {
+    const ok = (key: string) => (tests[key] as ServiceHealth | undefined)?.ok === true;
+    if (!onEssentialsReady || essentialsFired.current || !ok("plex") || !ok("radarr")) return;
+    essentialsFired.current = true;
+    const payload: Record<string, Record<string, unknown>> = {};
+    for (const s of specs) {
+      const values = serviceValues(s);
+      if (Object.keys(values).length > 0) payload[s.key] = values;
+    }
+    void api
+      .saveConfig(payload)
+      .then(() => onEssentialsReady())
+      .catch(() => {
+        essentialsFired.current = false; // let a later test retry
+      });
+    // vals/specs are read at the commit where tests changed — intentionally not deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tests]);
 
   async function save() {
     setSaving(true);
@@ -137,6 +184,7 @@ export function ConnectionsForm({
     try {
       const connections: Record<string, Record<string, unknown>> = {};
       for (const spec of specs) connections[spec.key] = serviceValues(spec);
+      connections.ai = { mode: aiMode };
       const res = await api.saveConfig(connections);
       setSaved(true);
       setVals({}); // clear typed secrets; saved state now reflects *_set flags
@@ -148,12 +196,46 @@ export function ConnectionsForm({
     }
   }
 
+  const hasAi = specs.some((s) => s.key === "ollama" || s.key === "anthropic");
+
   return (
     <div className="flex flex-col gap-4">
       {specs.map((spec) => {
         const t = tests[spec.key];
         return (
-          <div key={spec.key} className="panel p-4">
+          <div key={spec.key} className="contents">
+          {hasAi && spec.key === "ollama" && (
+            <div className="panel p-4">
+              <span className="font-display text-sm font-bold">AI engine</span>
+              <p className="text-xs text-fg3">
+                How Sift uses AI. Advisory only — AI never decides what gets removed.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {AI_MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => {
+                      setAiMode(m.value);
+                      setSaved(false);
+                    }}
+                    title={m.hint}
+                    className={`rounded-pill border px-3 py-1.5 text-xs font-semibold ${
+                      aiMode === m.value
+                        ? "border-accent-line bg-accent-soft text-accent"
+                        : "border-line text-fg2 hover:bg-bg2"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-fg3">
+                {AI_MODES.find((m) => m.value === aiMode)?.hint}
+              </p>
+            </div>
+          )}
+          <div className="panel p-4">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <span className="font-display text-sm font-bold">{spec.label}</span>
@@ -171,21 +253,43 @@ export function ConnectionsForm({
               {spec.fields.map((f) => {
                 const savedFlag = Boolean(initial[spec.key]?.[`${f.name}_set`]);
                 const warn = localhostWarning(spec.key, f.name);
+                // Once the Anthropic key is verified, the model becomes a picker
+                // over the models that key can actually use.
+                const modelPicker =
+                  spec.key === "anthropic" && f.name === "model" && anthropicModels.length > 0;
                 return (
                   <label key={f.name} className="text-xs text-fg3">
                     {f.label}
-                    <input
-                      type={f.secret ? "password" : "text"}
-                      value={vals[`${spec.key}.${f.name}`] ?? ""}
-                      onChange={(e) => set(spec.key, f.name, e.target.value)}
-                      placeholder={
-                        f.secret && savedFlag
-                          ? "•••••••• saved (leave blank to keep)"
-                          : (initial[spec.key]?.[f.name] as string) || f.placeholder || ""
-                      }
-                      autoComplete="off"
-                      className="mt-1 w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
-                    />
+                    {modelPicker ? (
+                      <select
+                        value={
+                          vals["anthropic.model"] ||
+                          (initial.anthropic?.model as string) ||
+                          anthropicModels[0]
+                        }
+                        onChange={(e) => set("anthropic", "model", e.target.value)}
+                        className="mt-1 w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
+                      >
+                        {anthropicModels.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={f.secret ? "password" : "text"}
+                        value={vals[`${spec.key}.${f.name}`] ?? ""}
+                        onChange={(e) => set(spec.key, f.name, e.target.value)}
+                        placeholder={
+                          f.secret && savedFlag
+                            ? "•••••••• saved (leave blank to keep)"
+                            : (initial[spec.key]?.[f.name] as string) || f.placeholder || ""
+                        }
+                        autoComplete="off"
+                        className="mt-1 w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
+                      />
+                    )}
                     {warn && (
                       <span className="mt-1 block text-[11px]" style={{ color: "var(--borderline)" }}>
                         {warn}
@@ -204,6 +308,7 @@ export function ConnectionsForm({
                 {t.detail}
               </p>
             )}
+          </div>
           </div>
         );
       })}

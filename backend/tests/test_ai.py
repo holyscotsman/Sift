@@ -30,12 +30,84 @@ def test_registry_uses_ui_entered_key(settings, monkeypatch):
     assert isinstance(build_llm_provider(settings), AnthropicProvider)
 
 
+def _configure_both(settings, monkeypatch):
+    from pydantic import SecretStr
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    settings.ai.anthropic_api_key = SecretStr("sk-x")
+    settings.ai.local_enabled = True
+
+
+def test_engine_mode_tandem_builds_both(settings, monkeypatch):
+    from sift.ai.registry import build_providers
+
+    _configure_both(settings, monkeypatch)
+    settings.ai.mode = "tandem"
+    local, remote = build_providers(settings)
+    assert local is not None and remote is not None
+
+
+def test_engine_mode_anthropic_suppresses_local(settings, monkeypatch):
+    from sift.ai.anthropic import AnthropicProvider
+    from sift.ai.registry import build_providers
+
+    _configure_both(settings, monkeypatch)
+    settings.ai.mode = "anthropic"
+    local, remote = build_providers(settings)
+    assert local is None and remote is not None
+    assert isinstance(build_llm_provider(settings), AnthropicProvider)
+
+
+def test_engine_mode_ollama_suppresses_anthropic_and_answers_ask(settings, monkeypatch):
+    # Local-only mode: even with a key present, everything (Ask included) stays local.
+    from sift.ai.ollama import OllamaProvider
+    from sift.ai.registry import build_providers
+
+    _configure_both(settings, monkeypatch)
+    settings.ai.mode = "ollama"
+    local, remote = build_providers(settings)
+    assert remote is None and local is not None
+    assert isinstance(build_llm_provider(settings), OllamaProvider)
+    assert ai_configured(settings) is True
+
+
+def test_engine_mode_ollama_without_local_is_unconfigured(settings, monkeypatch):
+    from pydantic import SecretStr
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    settings.ai.anthropic_api_key = SecretStr("sk-x")
+    settings.ai.local_enabled = False
+    settings.ai.mode = "ollama"
+    assert ai_configured(settings) is False
+    assert isinstance(build_llm_provider(settings), StubProvider)
+
+
 async def test_stub_completion_is_deterministic():
     p = StubProvider()
     a = await p.complete(system="s", prompt="p")
     b = await p.complete(system="s", prompt="p2")
     assert a.text == b.text
-    assert "ANTHROPIC_API_KEY" in a.text
+    assert "Settings" in a.text  # points at the in-app Connections, not an env var
+
+
+def test_ask_degrades_instead_of_500_when_provider_errors(settings, factory, monkeypatch):
+    # A saved-but-dead provider (e.g. an unreachable Ollama URL) must not turn Ask
+    # into a 500 — the route falls back to grounded sources with a plain message.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.ai.local_enabled = True
+    settings.ai.local_base_url = "http://127.0.0.1:1"  # nothing listens here
+    settings.ai.mode = "ollama"
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as client, factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True))
+        session.commit()
+        resp = client.post("/api/ask", json={"query": "matrix"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["provider"] == "error"
+        assert any(s["tmdb_id"] == 603 for s in body["sources"])
 
 
 def test_retrieve_matches_library_titles(factory):

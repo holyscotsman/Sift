@@ -29,6 +29,8 @@ export interface ServiceHealth {
   ok: boolean;
   detail: string;
   latency_ms: number | null;
+  // Anthropic test only: model ids the verified key can use (feeds the picker).
+  models?: string[] | null;
 }
 
 export interface HealthResponse {
@@ -184,6 +186,27 @@ export interface MissingListsResponse {
   lists: MissingList[];
 }
 
+export interface MustHaveItem {
+  id: number;
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  reason: string;
+  source: string;
+  vote_average: number | null;
+  vote_count: number | null;
+}
+
+export interface MustHaveListResponse {
+  items: MustHaveItem[];
+}
+
+export interface MustHaveRunResponse {
+  added: number;
+  considered: number;
+  provider: string;
+}
+
 export interface RecommendedMovie {
   tmdb_id: number;
   title: string;
@@ -259,6 +282,7 @@ export interface SiftScore {
 export interface MovieDetail extends Movie {
   overview: string | null;
   keywords: string[];
+  keep_override: boolean;
   ratings: RatingOut[];
   watch_history: WatchOut[];
   sift_score: SiftScore | null;

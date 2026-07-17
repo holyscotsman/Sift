@@ -6,23 +6,25 @@ Resume point + working decisions. Read after `CLAUDE.md`.
 
 ## Where we are
 
-**Full MVP + owner upgrades: code-complete.** Ingestion, deterministic analysis,
-live action execution, **username/password login + Setup Wizard + in-app config**,
-poster cache, Library A–Z jump, **smarter junk classification**, **curated
-cult/IMDb lists**, **Ollama↔Anthropic AI review**, **add/monitor/remove wired into
-the UI**, and **deterministic taste recommendations**. Hosted on Render (optional
-Postgres); PR #1 open on `claude/sift-webapp-setup-2qmxsn`.
+**MVP merged (PR #1); refinement wave in flight on PR #2** (branch
+`claude/sift-webapp-setup-2qmxsn`, restarted from main post-merge). This wave adds:
+**AI engine modes** (tandem / Claude only / local only; `registry.build_providers`
+is the single source), **verified-key Anthropic model picker**, the **Must-Have
+catalog** (AI proposes canon titles, deterministic TMDB gates decide — migration
+0005), **login-first front door**, **silent wizard first scan** + idempotent
+`POST /api/scan`, scan phases Plex→Radarr→Tautulli→TMDB→finalize→score→**AI
+analysis**, and **persistent keep-overrides** (migration 0006).
 
 Green gates (run from `backend/` in the venv at `../.venv`):
 
 ```bash
 # from backend/ :
 ruff check .            # clean
-../.venv/bin/mypy sift  # strict, clean (69 files)
-../.venv/bin/pytest -q  # 121 passed
+../.venv/bin/mypy sift  # strict, clean (73 files)
+../.venv/bin/pytest -q  # 139 passed
 npm --prefix ../frontend run build   # clean (tsc --noEmit && vite build)
 # from the repo root (alembic.ini lives there; script_location=backend/sift/db/migrations):
-./.venv/bin/alembic upgrade head     # 0001→0004, idempotent over create_all
+./.venv/bin/alembic upgrade head     # 0001→0006, idempotent over create_all
 ```
 
 The delete-safety test is mutation-verified: disabling the guard in

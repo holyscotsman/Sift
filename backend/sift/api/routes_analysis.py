@@ -34,7 +34,11 @@ from .schemas import (
     UpgradesResponse,
 )
 
-_LIST_LABELS = {"cult": "Cult classics", "imdb_top": "IMDb top-ranked"}
+_LIST_LABELS = {
+    "cult": "Cult classics",
+    "imdb_top": "IMDb top-ranked",
+    "criterion": "Criterion-caliber classics",
+}
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[AuthDep])
 

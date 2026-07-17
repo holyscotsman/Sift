@@ -37,9 +37,9 @@ class StubProvider:
 
     async def complete(self, *, system: str, prompt: str) -> Completion:
         text = (
-            "AI answers aren't configured yet — add an ANTHROPIC_API_KEY to enable them. "
-            "In the meantime, the titles below are the closest matches in your library "
-            "for that question."
+            "AI answers aren't configured yet — connect Anthropic or a local Ollama in "
+            "Settings › Connections to enable them. In the meantime, the titles below "
+            "are the closest matches in your library for that question."
         )
         return Completion(text=text, provider="stub", model=self.model, latency_ms=0.0)
 

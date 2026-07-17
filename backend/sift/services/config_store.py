@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+from ..ai.registry import MODES
 from ..config import Settings
 from ..db.models import Setting
 
@@ -32,6 +33,8 @@ _ALLOWED: dict[str, set[str]] = {
     "tmdb": {"api_key", "language"},
     "ollama": {"base_url", "model"},
     "anthropic": {"api_key", "model"},
+    # The AI engine mode: tandem (both), anthropic, or ollama.
+    "ai": {"mode"},
 }
 
 
@@ -144,5 +147,10 @@ def apply_to_settings(
         eff.ai.local_enabled = True
     if _s(ollama.get("model")):
         eff.ai.local_model = ollama["model"]
+
+    ai = config.get("ai") or {}
+    mode = _s(ai.get("mode"))
+    if mode and mode.lower() in MODES:
+        eff.ai.mode = mode.lower()
 
     return eff

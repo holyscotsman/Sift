@@ -13,6 +13,8 @@ import type {
   MissingListsResponse,
   MovieDetail,
   MovieListResponse,
+  MustHaveListResponse,
+  MustHaveRunResponse,
   ProfileResponse,
   ProfileWeights,
   RecommendationsResponse,
@@ -135,6 +137,11 @@ export const api = {
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),
+  setKeepOverride: (tmdbId: number, keep: boolean) =>
+    request<{ tmdb_id: number; keep_override: boolean }>(`/api/movies/${tmdbId}/keep`, {
+      method: "POST",
+      body: JSON.stringify({ keep }),
+    }),
   scanStart: (resumeId?: number) =>
     request<ScanStartResponse>(`/api/scan${resumeId ? `?resume_id=${resumeId}` : ""}`, {
       method: "POST",
@@ -151,6 +158,11 @@ export const api = {
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
   missingRecommendations: () =>
     request<RecommendationsResponse>("/api/missing/recommendations"),
+  mustHaveList: () => request<MustHaveListResponse>("/api/musthave"),
+  mustHaveRun: (limit = 20) =>
+    request<MustHaveRunResponse>(`/api/musthave/run?limit=${limit}`, { method: "POST" }),
+  mustHaveDismiss: (id: number) =>
+    request<unknown>(`/api/musthave/${id}/dismiss`, { method: "POST" }),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   getProfile: () => request<ProfileResponse>("/api/profile"),
   saveWeights: (w: ProfileWeights) =>

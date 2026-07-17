@@ -27,7 +27,22 @@ async def ask(
     provider = _get_llm(request)
     settings = get_settings(request)
     with factory() as session:
-        result = await ai_query.answer(session, provider, body.query)
+        try:
+            result = await ai_query.answer(session, provider, body.query)
+        except Exception:  # noqa: BLE001 - a dead provider degrades, never 500s
+            movies = ai_query.retrieve(session, body.query)
+            return AskResponse(
+                answer=(
+                    "The AI provider didn't answer — check your connection in "
+                    "Settings › Connections. The closest matches in your library "
+                    "are listed below."
+                ),
+                provider="error",
+                model=provider.model,
+                latency_ms=0.0,
+                ai_configured=ai_configured(settings),
+                sources=[AskSource(tmdb_id=m.tmdb_id, title=m.title, year=m.year) for m in movies],
+            )
     return AskResponse(
         answer=result.answer,
         provider=result.provider,

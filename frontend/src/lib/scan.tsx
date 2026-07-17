@@ -1,21 +1,29 @@
 // Scan controller: starts a scan, streams /ws/scan/{id} progress, and shares the
 // live state between the header status pill and the floating scan panel.
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
 import { api, scanSocketUrl } from "./api";
 import type { ScanEvent } from "./types";
 
-// Backend pipeline phases (order matters) mapped to friendly labels. Taste-profile
-// and scoring phases arrive with Phase 1–2 of the backend.
+// Backend pipeline phases (order matters — must mirror ingest/pipeline.PHASES).
 export const SCAN_PHASES: { key: string; label: string }[] = [
-  { key: "radarr", label: "Fetching Radarr catalog" },
-  { key: "plex", label: "Reading Plex library" },
+  { key: "plex", label: "Reading Plex catalog" },
+  { key: "radarr", label: "Reading Radarr catalog" },
   { key: "tautulli", label: "Pulling Tautulli history" },
-  { key: "tmdb", label: "Enriching TMDB metadata" },
+  { key: "tmdb", label: "Grabbing TMDB metadata" },
   { key: "finalize", label: "Finalizing snapshot" },
   { key: "score", label: "Scoring library" },
+  { key: "ai", label: "AI analysis" },
 ];
 
 export type PhaseState = "idle" | "active" | "done";
@@ -26,7 +34,7 @@ interface ScanCtx {
   phaseStates: Record<string, PhaseState>;
   panelOpen: boolean;
   error: string | null;
-  start: () => Promise<void>;
+  start: (opts?: { silent?: boolean }) => Promise<void>;
   setPanelOpen: (open: boolean) => void;
 }
 
@@ -46,6 +54,19 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   const pollRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
 
+  const silentRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  // Provider teardown (logout, app unmount) must not leave a zombie poller or a
+  // half-open socket behind.
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+      socketRef.current?.close();
+    };
+  }, []);
+
   const finish = useCallback(
     (status: string, err?: string | null) => {
       if (finishedRef.current) return;
@@ -56,24 +77,38 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
       socketRef.current = null;
       setPct(100);
       setScanning(false);
-      if (status !== "completed") setError(err || status);
+      if (status !== "completed" && !silentRef.current) setError(err || status);
       onComplete?.();
-      window.setTimeout(() => setPanelOpen(false), 1400);
+      closeTimerRef.current = window.setTimeout(() => setPanelOpen(false), 1400);
     },
     [onComplete],
   );
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
     if (scanning) {
-      setPanelOpen(true);
+      if (!silent) {
+        // Joining a scan that started silently: the user is watching now, so
+        // failures must surface like any other scan's.
+        silentRef.current = false;
+        setPanelOpen(true);
+      }
       return;
     }
+    // A leftover auto-close from the previous scan must not shut this one's panel.
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    silentRef.current = silent;
     finishedRef.current = false;
     setError(null);
     setPct(0);
     setPhaseStates(initialPhases());
     setScanning(true);
-    setPanelOpen(true);
+    // Silent mode (wizard auto-scan): work in the background, no panel, no toasts —
+    // the header pill still reflects progress for anyone who looks.
+    if (!silent) setPanelOpen(true);
     try {
       const { scan_run_id } = await api.scanStart();
 

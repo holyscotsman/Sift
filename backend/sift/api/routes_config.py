@@ -12,6 +12,8 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..ai import anthropic as anthropic_ai
+from ..ai.registry import anthropic_key
 from ..services import config_store, reset, runtime
 from ..services.health import check_service
 from .deps import AuthDep, get_session_factory, get_state
@@ -112,14 +114,31 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
             return ServiceHealth(service="ollama", ok=False, detail=detail, latency_ms=None)
 
     if service == "anthropic":
-        # A live call would cost tokens; treat a present key as configured. The real
-        # provider swaps in on save and any auth error surfaces on first use.
-        ok = trial.ai.anthropic_api_key is not None
+        key = anthropic_key(trial)
+        if not key:
+            return ServiceHealth(service="anthropic", ok=False, detail="no key", latency_ms=None)
+        try:
+            models = await anthropic_ai.list_models(key)
+        except httpx.HTTPStatusError as exc:
+            detail = (
+                "key rejected (401) — check it and try again."
+                if exc.response.status_code == 401
+                else f"Anthropic returned HTTP {exc.response.status_code}."
+            )
+            return ServiceHealth(service="anthropic", ok=False, detail=detail, latency_ms=None)
+        except Exception:  # noqa: BLE001 - a raw exception could echo request details
+            return ServiceHealth(
+                service="anthropic",
+                ok=False,
+                detail="couldn't reach Anthropic — network problem on the Sift server.",
+                latency_ms=None,
+            )
         return ServiceHealth(
             service="anthropic",
-            ok=ok,
-            detail="key set" if ok else "no key",
+            ok=True,
+            detail=f"key verified ({len(models)} model(s) available)",
             latency_ms=None,
+            models=models,
         )
 
     raise HTTPException(status_code=404, detail=f"unknown service {service!r}")

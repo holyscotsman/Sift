@@ -54,9 +54,12 @@ audited); deletes may not. Never weaken this without a louder test.
   score; the LLM only *explains* it and is forbidden from overriding it.
 - **Kids guardrail:** items in children's libraries are never auto-flagged for
   removal on adult-rating grounds; they carry a visible guard chip.
-- **LLM:** provider abstraction (Local Ollama + Anthropic) with three modes
-  (route-by-task / compare / race-fallback) and a separate embedding slot. AI is
-  **never** used to decide correctness of a delete or a key fact.
+- **LLM:** provider abstraction (Local Ollama + Anthropic) with three engine modes
+  — **tandem** (local drafts, Anthropic refines — default), **anthropic**, or
+  **ollama** — chosen in Settings › Connections. *(Owner revision of the original
+  route-by-task / compare / race-fallback trio; the unused embedding slot was
+  dropped with it.)* AI is **never** used to decide correctness of a delete or a
+  key fact.
 - **Version scheme:** `YYMM.major.patch`.
 
 ---
