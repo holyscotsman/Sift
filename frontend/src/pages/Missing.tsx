@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { CheckIcon, SparkleIcon } from "@/components/icons";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { CollectionGap, MissingList, RecommendedMovie } from "@/lib/types";
+import type { CollectionGap, MissingList, MustHaveItem, RecommendedMovie } from "@/lib/types";
 
 // Titles here aren't in the library (that's the point), so the library drawer would
 // 404. Link out to TMDB to preview a title before adding it — the affordance Radarr /
@@ -123,12 +123,144 @@ export function Missing() {
         )}
       </section>
 
+      <MustHaveSection />
+
       {lists.map((list) => (
         <ListSection key={list.name} list={list} />
       ))}
 
       <RecommendationsSection />
     </div>
+  );
+}
+
+// Must-have picks: the AI proposes canon titles, deterministic TMDB gates decide
+// what's allowed in (vote floor, rating floor, feature runtime, released, not
+// adult) — so nothing fringe or invented can appear here.
+function MustHaveSection() {
+  const [items, setItems] = useState<MustHaveItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function refresh() {
+    try {
+      const r = await api.mustHaveList();
+      setItems(r.items);
+    } catch {
+      setItems([]);
+    }
+  }
+
+  useEffect(() => {
+    void refresh().finally(() => setLoading(false));
+  }, []);
+
+  async function run() {
+    setRunning(true);
+    setNote(null);
+    try {
+      const r = await api.mustHaveRun();
+      setNote(
+        r.added > 0
+          ? `Found ${r.added} new must-have${r.added === 1 ? "" : "s"} (${r.provider}).`
+          : r.provider === "none"
+            ? "Connect TMDB (and optionally an AI provider) in Settings › Connections first."
+            : "No new must-haves — your canon coverage looks solid.",
+      );
+      await refresh();
+    } catch {
+      setNote("The must-have run failed — check your connections.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function dismiss(item: MustHaveItem) {
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    try {
+      await api.mustHaveDismiss(item.id);
+    } catch {
+      await refresh(); // roll back the optimistic removal
+    }
+  }
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="eyebrow">Must-have picks</span>
+          <Pill tone="accent">AI proposes · data decides</Pill>
+        </div>
+        <button
+          onClick={run}
+          disabled={running}
+          className="gradient-fill rounded-pill px-4 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
+        >
+          {running ? "Curating…" : "Find must-haves"}
+        </button>
+      </div>
+      {note && (
+        <p className="mb-2 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">{note}</p>
+      )}
+      {loading ? (
+        <div className="panel p-4">
+          <div className="flex flex-wrap gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[138px] w-[92px]" />
+            ))}
+          </div>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="panel">
+          <EmptyState
+            title="No must-have picks yet"
+            hint={
+              <span className="inline-flex items-center gap-1.5">
+                <SparkleIcon size={14} /> Run the curator — it studies your library and proposes
+                the canon you're missing. Every pick is validated against TMDB.
+              </span>
+            }
+          />
+        </div>
+      ) : (
+        <div className="panel p-4">
+          <div className="flex flex-wrap gap-3">
+            {items.map((m) => (
+              <div key={m.id} className="w-[92px]">
+                <a
+                  href={tmdbMovieUrl(m.tmdb_id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full text-left"
+                  title={`${m.reason} — view on TMDB`}
+                >
+                  <div className="relative aspect-[2/3] overflow-hidden rounded-md">
+                    <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full opacity-90" />
+                    {m.vote_average != null && m.vote_average > 0 && (
+                      <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
+                        {m.vote_average.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 truncate text-[11px] text-fg3">
+                    {m.title} {m.year ? `· ${m.year}` : ""}
+                  </p>
+                  <p className="truncate text-[10px] text-fg3/80">{m.reason}</p>
+                </a>
+                <AddButton tmdbId={m.tmdb_id} title={m.title} />
+                <button
+                  onClick={() => void dismiss(m)}
+                  className="mt-1 w-full rounded-md py-0.5 text-[11px] text-fg3 hover:text-fg"
+                >
+                  Not interested
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

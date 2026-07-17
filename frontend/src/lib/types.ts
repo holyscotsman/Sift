@@ -186,6 +186,27 @@ export interface MissingListsResponse {
   lists: MissingList[];
 }
 
+export interface MustHaveItem {
+  id: number;
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  reason: string;
+  source: string;
+  vote_average: number | null;
+  vote_count: number | null;
+}
+
+export interface MustHaveListResponse {
+  items: MustHaveItem[];
+}
+
+export interface MustHaveRunResponse {
+  added: number;
+  considered: number;
+  provider: string;
+}
+
 export interface RecommendedMovie {
   tmdb_id: number;
   title: string;

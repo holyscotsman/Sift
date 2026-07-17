@@ -312,3 +312,24 @@ class CuratedListEntry(Base):
     year: Mapped[int | None] = mapped_column(Integer)
     tmdb_id: Mapped[int | None] = mapped_column(Integer, index=True)
     review_status: Mapped[str] = mapped_column(String(16), default="pending")
+
+
+class MustHaveSuggestion(Base):
+    """A must-have title the library is missing. AI (or the curated fallback) may
+    *propose* a title, but it is only stored after passing the deterministic
+    anti-nonsense gates against TMDB — so a suggestion can never be a hallucinated
+    or fringe film. ``status`` tracks the owner's decision; ``dismissed`` titles are
+    never re-suggested."""
+
+    __tablename__ = "musthave_suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tmdb_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(32), default="curated")  # provider used
+    vote_average: Mapped[float | None] = mapped_column(Float)
+    vote_count: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="suggested", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

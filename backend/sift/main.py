@@ -31,6 +31,7 @@ from .api import (
     routes_config,
     routes_health,
     routes_movies,
+    routes_musthave,
     routes_posters,
     routes_profile,
     routes_review,
@@ -122,6 +123,7 @@ def create_app(
         routes_analysis,
         routes_ask,
         routes_review,
+        routes_musthave,
         routes_settings,
         routes_profile,
     ):

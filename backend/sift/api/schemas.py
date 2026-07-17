@@ -271,6 +271,27 @@ class MissingListsResponse(BaseModel):
     lists: list[MissingList]
 
 
+class MustHaveOut(BaseModel):
+    id: int
+    tmdb_id: int
+    title: str
+    year: int | None
+    reason: str
+    source: str
+    vote_average: float | None
+    vote_count: int | None
+
+
+class MustHaveListResponse(BaseModel):
+    items: list[MustHaveOut]
+
+
+class MustHaveRunResponse(BaseModel):
+    added: int
+    considered: int
+    provider: str
+
+
 class RecommendedMovie(BaseModel):
     tmdb_id: int
     title: str

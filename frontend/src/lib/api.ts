@@ -13,6 +13,8 @@ import type {
   MissingListsResponse,
   MovieDetail,
   MovieListResponse,
+  MustHaveListResponse,
+  MustHaveRunResponse,
   ProfileResponse,
   ProfileWeights,
   RecommendationsResponse,
@@ -151,6 +153,11 @@ export const api = {
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
   missingRecommendations: () =>
     request<RecommendationsResponse>("/api/missing/recommendations"),
+  mustHaveList: () => request<MustHaveListResponse>("/api/musthave"),
+  mustHaveRun: (limit = 20) =>
+    request<MustHaveRunResponse>(`/api/musthave/run?limit=${limit}`, { method: "POST" }),
+  mustHaveDismiss: (id: number) =>
+    request<unknown>(`/api/musthave/${id}/dismiss`, { method: "POST" }),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   getProfile: () => request<ProfileResponse>("/api/profile"),
   saveWeights: (w: ProfileWeights) =>
