@@ -57,13 +57,15 @@ export function Missing() {
         <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
           Missing
         </h1>
-        <p className="mt-1 text-sm text-fg2">Gaps in collections you already own part of.</p>
+        <p className="mt-1 text-sm text-fg2">
+          What your library is missing — collection gaps, the canon, and titles that match
+          your taste.
+        </p>
       </div>
 
       <section>
         <div className="mb-2 flex items-center gap-2">
           <span className="eyebrow">Collection gaps</span>
-          <Pill tone="accent">Deterministic</Pill>
         </div>
         {loading ? (
           <div className="panel p-4">

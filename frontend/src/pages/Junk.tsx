@@ -101,11 +101,11 @@ export function Junk() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
-            Junk — removal queue
+            Junk
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-fg2">
-            Sift never deletes on its own — every removal needs your approval. Scores are
-            deterministic; kids libraries are guarded and never listed here.
+            Every removal needs your approval. Keep is permanent; kids libraries are never
+            listed.
           </p>
         </div>
         <div className="flex items-center gap-2">
