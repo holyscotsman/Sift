@@ -137,6 +137,11 @@ export const api = {
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),
+  setKeepOverride: (tmdbId: number, keep: boolean) =>
+    request<{ tmdb_id: number; keep_override: boolean }>(`/api/movies/${tmdbId}/keep`, {
+      method: "POST",
+      body: JSON.stringify({ keep }),
+    }),
   scanStart: (resumeId?: number) =>
     request<ScanStartResponse>(`/api/scan${resumeId ? `?resume_id=${resumeId}` : ""}`, {
       method: "POST",

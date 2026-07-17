@@ -282,6 +282,7 @@ export interface SiftScore {
 export interface MovieDetail extends Movie {
   overview: string | null;
   keywords: string[];
+  keep_override: boolean;
   ratings: RatingOut[];
   watch_history: WatchOut[];
   sift_score: SiftScore | null;

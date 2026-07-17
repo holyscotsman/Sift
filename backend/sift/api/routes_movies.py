@@ -10,6 +10,8 @@ from ..analysis import scoring
 from ..db.models import Movie
 from .deps import AuthDep, get_session_factory
 from .schemas import (
+    KeepOverrideIn,
+    KeepOverrideOut,
     MovieDetail,
     MovieListResponse,
     MovieOut,
@@ -112,3 +114,20 @@ def get_movie(
                 rationale=scoring.rationale(list(payload.get("signals", [])), band),
             )
         return detail
+
+
+@router.post("/movies/{tmdb_id}/keep", response_model=KeepOverrideOut)
+def set_keep_override(
+    tmdb_id: int,
+    body: KeepOverrideIn,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> KeepOverrideOut:
+    """The owner's standing verdict: keep=true means this title is never flagged as
+    junk again (until unset). Persisted — it survives rescans."""
+    with factory() as session:
+        movie = session.get(Movie, tmdb_id)
+        if movie is None:
+            raise HTTPException(status_code=404, detail="movie not found")
+        movie.keep_override = body.keep
+        session.commit()
+        return KeepOverrideOut(tmdb_id=tmdb_id, keep_override=movie.keep_override)

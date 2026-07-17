@@ -181,6 +181,11 @@ export function MovieDrawer() {
               {movie.monitored && <Pill tone="accent">Monitored</Pill>}
               {movie.quality && <Pill>{movie.quality}</Pill>}
               {movie.is_kids && <Pill tone="borderline">Kids</Pill>}
+              {movie.keep_override && (
+                <Pill tone="keep" title="You marked this Keep — it's never flagged as junk">
+                  Protected
+                </Pill>
+              )}
             </div>
 
             <MovieActions key={movie.tmdb_id} movie={movie} />

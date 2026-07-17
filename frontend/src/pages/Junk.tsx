@@ -160,15 +160,26 @@ export function Junk() {
                   return n;
                 })
               }
-              onKeep={() => setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }))}
+              onKeep={() => {
+                // Persisted: a kept title never comes back after a rescan.
+                setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }));
+                void api.setKeepOverride(c.tmdb_id, true).catch(() => {
+                  setDecisions((d) => {
+                    const n = { ...d };
+                    delete n[c.tmdb_id];
+                    return n;
+                  });
+                });
+              }}
               onRemove={() => setModal({ candidates: [c] })}
-              onReset={() =>
+              onReset={() => {
                 setDecisions((d) => {
                   const n = { ...d };
                   delete n[c.tmdb_id];
                   return n;
-                })
-              }
+                });
+                void api.setKeepOverride(c.tmdb_id, false).catch(() => {});
+              }}
             />
           ))}
         </div>
@@ -293,7 +304,7 @@ function Row({
             <>
               <Pill tone={decision === "kept" ? "keep" : "junk"}>
                 {decision === "kept"
-                  ? "Kept"
+                  ? "Kept — won't be flagged again"
                   : decision === "removed_live"
                     ? "Removed"
                     : "Removal staged"}

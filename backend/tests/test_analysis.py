@@ -40,6 +40,38 @@ def test_candidates_exclude_good_kids_and_non_library(factory):
     assert ids == {603}  # junk only; good kept, kids guarded, wanted not in library
 
 
+def test_keep_override_removes_a_candidate_permanently(factory):
+    # The owner's Keep is a standing verdict: even a clear junk score stays hidden,
+    # and unsetting it brings the candidate back (negative control).
+    _seed_library(factory)
+    junk.compute_and_store(factory, JunkThresholds())
+    with factory() as session:
+        session.get(Movie, 603).keep_override = True
+        session.commit()
+        assert junk.candidates(session, JunkThresholds()) == []
+    # A rescan (recompute) must not resurrect it either.
+    junk.compute_and_store(factory, JunkThresholds())
+    with factory() as session:
+        assert junk.candidates(session, JunkThresholds()) == []
+        session.get(Movie, 603).keep_override = False
+        session.commit()
+        assert {m.tmdb_id for m, _ in junk.candidates(session, JunkThresholds())} == {603}
+
+
+def test_keep_endpoint_round_trip(factory, settings):
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    _seed_library(factory)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as client:
+        r = client.post("/api/movies/603/keep", json={"keep": True})
+        assert r.status_code == 200 and r.json()["keep_override"] is True
+        assert client.get("/api/movies/603").json()["keep_override"] is True
+        r = client.post("/api/movies/603/keep", json={"keep": False})
+        assert r.json()["keep_override"] is False
+        assert client.post("/api/movies/999999/keep", json={"keep": True}).status_code == 404
+
+
 def _seed_upgrades(factory):
     with factory() as session:
         session.add_all(

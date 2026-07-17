@@ -106,6 +106,11 @@ class Movie(Base):
     # meaningful only when has_file. Drives the deterministic upgrade detector.
     cutoff_unmet: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
+    # Owner's standing verdict: never flag this title as junk again. Set from the
+    # Junk screen's Keep; survives rescans (a session-only "kept" would resurface
+    # the same titles forever).
+    keep_override: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
     # Facts for the smarter-junk classifier (populated by TMDB enrichment). Absent →
     # the classifier stays neutral and the numeric score decides.
     original_language: Mapped[str | None] = mapped_column(String(8))

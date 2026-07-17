@@ -98,9 +98,19 @@ class SiftScoreOut(BaseModel):
 class MovieDetail(MovieOut):
     overview: str | None = None
     keywords: list[str] = []
+    keep_override: bool = False
     ratings: list[RatingOut] = []
     watch_history: list[WatchOut] = []
     sift_score: SiftScoreOut | None = None
+
+
+class KeepOverrideIn(BaseModel):
+    keep: bool
+
+
+class KeepOverrideOut(BaseModel):
+    tmdb_id: int
+    keep_override: bool
 
 
 class ScanRunOut(BaseModel):
