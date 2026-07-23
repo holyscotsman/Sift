@@ -74,7 +74,11 @@ export function Activity() {
         ))}
       </div>
 
-      {loading ? null : rows.length === 0 ? (
+      {loading ? (
+        <p className="sr-only" role="status" aria-busy="true">
+          Loading activity…
+        </p>
+      ) : rows.length === 0 ? (
         <div className="panel">
           <EmptyState
             title="No activity yet"

@@ -9,8 +9,10 @@ import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
 import { api, getToken, setToken } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
+import { useToast } from "@/components/Toast";
 import type {
   Connections as ConnConfig,
+  DecisionsImportResult,
   RadarrOptions,
   ServiceHealth,
   ThresholdPreview,
@@ -556,8 +558,92 @@ function StorageSection() {
           Your keep-overrides, dismissed must-haves, and tuned thresholds as JSON — the judgment
           worth saving before a redeploy on ephemeral storage.
         </p>
+        <RestoreBackup />
       </div>
     </Section>
+  );
+}
+
+// Restore is a two-step write: pick a file → the server previews what WOULD
+// change (dry-run, the default) → an explicit confirm applies it. Restoring
+// touches keep flags, must-have status, and thresholds only — never files.
+function RestoreBackup() {
+  const [backup, setBackup] = useState<Record<string, unknown> | null>(null);
+  const [preview, setPreview] = useState<DecisionsImportResult | null>(null);
+  const [done, setDone] = useState<DecisionsImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const toastError = useToast();
+
+  async function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // same file can be re-picked
+    if (!file) return;
+    setDone(null);
+    setPreview(null);
+    try {
+      const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+      setBackup(parsed);
+      setBusy(true);
+      setPreview(await api.importDecisions(parsed, true));
+    } catch {
+      setBackup(null);
+      toastError("That file doesn't look like a Sift decisions backup.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apply() {
+    if (!backup) return;
+    setBusy(true);
+    try {
+      setDone(await api.importDecisions(backup, false));
+      setPreview(null);
+      setBackup(null);
+    } catch {
+      toastError("The restore didn't apply — nothing was changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <label className="inline-block cursor-pointer rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2">
+        Restore from backup…
+        <input type="file" accept="application/json,.json" onChange={pickFile} className="hidden" />
+      </label>
+      {busy && <span className="ml-2 text-xs text-fg3">Working…</span>}
+      {preview && (
+        <div className="mt-2 rounded-md border border-line bg-bg2 p-3 text-xs text-fg2">
+          <p>
+            Would restore <span className="font-semibold text-fg">{preview.keeps_applied}</span>{" "}
+            keep-override{preview.keeps_applied === 1 ? "" : "s"}
+            {preview.keeps_unknown > 0 && (
+              <span className="text-fg3"> ({preview.keeps_unknown} unknown titles skipped)</span>
+            )}
+            , re-dismiss{" "}
+            <span className="font-semibold text-fg">{preview.dismissals_applied}</span> must-have
+            {preview.dismissals_applied === 1 ? "" : "s"}
+            {preview.thresholds_restored ? ", and restore your thresholds." : "."}
+          </p>
+          <button
+            onClick={() => void apply()}
+            disabled={busy}
+            className="gradient-fill mt-2 rounded-md px-3 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
+          >
+            Apply restore
+          </button>
+        </div>
+      )}
+      {done && (
+        <p className="mt-2 text-xs" style={{ color: "var(--keep)" }}>
+          Restored {done.keeps_applied} keep-override{done.keeps_applied === 1 ? "" : "s"} and{" "}
+          {done.dismissals_applied} dismissal{done.dismissals_applied === 1 ? "" : "s"}
+          {done.thresholds_restored ? " (thresholds included)" : ""}.
+        </p>
+      )}
+    </div>
   );
 }
 

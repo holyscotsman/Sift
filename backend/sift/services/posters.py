@@ -32,6 +32,10 @@ log = logging.getLogger("sift.posters")
 # for retina posters.
 _TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w342"
 
+# The cache serves thumbnails, not archives: cap it so a huge library on a small
+# disk can't fill the volume poster by poster. A constant until someone needs a knob.
+_MAX_CACHE_BYTES = 500 * 1024 * 1024
+
 
 class PosterCache:
     def __init__(
@@ -130,4 +134,23 @@ class PosterCache:
         self._dir.mkdir(parents=True, exist_ok=True)
         path = self.path_for(tmdb_id)
         path.write_bytes(content)
+        self._evict_over_cap(just_written=path)
         return path
+
+    def _evict_over_cap(self, *, just_written: Path) -> None:
+        """Oldest-first eviction once the cache exceeds the cap. The file just
+        written is never a candidate — evicting it would defeat the fetch."""
+        try:
+            others = [f for f in self._dir.glob("*.img") if f != just_written]
+            total = sum(f.stat().st_size for f in others) + just_written.stat().st_size
+            if total <= _MAX_CACHE_BYTES:
+                return
+            others.sort(key=lambda f: f.stat().st_mtime)
+            for f in others:
+                if total <= _MAX_CACHE_BYTES:
+                    break
+                size = f.stat().st_size
+                f.unlink()
+                total -= size
+        except OSError as exc:
+            log.debug("poster cache eviction hiccup: %s", exc)

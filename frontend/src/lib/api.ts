@@ -7,6 +7,7 @@ import type {
   AskResponse,
   AuthStatus,
   ConnectionsResponse,
+  DecisionsImportResult,
   HealthResponse,
   JunkResponse,
   MissingCollectionsResponse,
@@ -178,11 +179,20 @@ export const api = {
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
   missingRecommendations: () =>
     request<RecommendationsResponse>("/api/missing/recommendations"),
-  mustHaveList: () => request<MustHaveListResponse>("/api/musthave"),
+  mustHaveList: (status: "suggested" | "dismissed" = "suggested") =>
+    request<MustHaveListResponse>(`/api/musthave?status=${status}`),
   mustHaveRun: (limit = 20) =>
     request<MustHaveRunResponse>(`/api/musthave/run?limit=${limit}`, { method: "POST" }),
   mustHaveDismiss: (id: number) =>
     request<unknown>(`/api/musthave/${id}/dismiss`, { method: "POST" }),
+  mustHaveRestore: (id: number) =>
+    request<unknown>(`/api/musthave/${id}/restore`, { method: "POST" }),
+  movieSections: () => request<string[]>("/api/movies/sections"),
+  importDecisions: (backup: Record<string, unknown>, dryRun: boolean) =>
+    request<DecisionsImportResult>("/api/import/decisions", {
+      method: "POST",
+      body: JSON.stringify({ ...backup, dry_run: dryRun }),
+    }),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
   getProfile: () => request<ProfileResponse>("/api/profile"),
   saveWeights: (w: ProfileWeights) =>

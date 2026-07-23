@@ -191,3 +191,28 @@ def test_clearing_a_connection_with_empty_strings(client):
     base = load_settings(config_path=None)
     eff = apply_to_settings(base, {"ollama": {"base_url": "", "model": ""}})
     assert eff.ai.local_enabled is False
+
+
+def test_base_urls_are_normalized_on_save(factory):
+    from sift.services import config_store
+
+    with factory() as session:
+        cfg = config_store.set_config(
+            session,
+            {
+                "radarr": {"base_url": " radarr.local:7878/ "},
+                "plex": {"base_url": "https://plex.local:32400//"},
+            },
+        )
+    # Missing scheme → http:// added; trailing slashes trimmed; https preserved.
+    assert cfg["radarr"]["base_url"] == "http://radarr.local:7878"
+    assert cfg["plex"]["base_url"] == "https://plex.local:32400"
+
+
+def test_stale_stored_urls_normalize_on_overlay(settings):
+    from sift.services import config_store
+
+    eff = config_store.apply_to_settings(
+        settings, {"tautulli": {"base_url": "tautulli.local:8181/", "api_key": "k"}}
+    )
+    assert eff.tautulli.base_url == "http://tautulli.local:8181"

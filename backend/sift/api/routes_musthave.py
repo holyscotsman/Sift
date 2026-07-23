@@ -33,6 +33,7 @@ async def run(
 
 @router.get("", response_model=MustHaveListResponse)
 def list_suggestions(
+    status: str = Query(default="suggested", pattern="^(suggested|dismissed)$"),
     factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> MustHaveListResponse:
     with factory() as session:
@@ -45,7 +46,7 @@ def list_suggestions(
         )
         rows = session.scalars(
             select(MustHaveSuggestion)
-            .where(MustHaveSuggestion.status == "suggested", ~now_owned)
+            .where(MustHaveSuggestion.status == status, ~now_owned)
             .order_by(MustHaveSuggestion.vote_count.desc().nulls_last())
         ).all()
         items = [MustHaveOut.model_validate(s) for s in rows]
@@ -65,4 +66,22 @@ def dismiss(
         row.status = "dismissed"
         session.commit()
         counts_cache.invalidate()  # the pending count must drop on the next poll
+        return MustHaveOut.model_validate(row)
+
+
+@router.post("/{suggestion_id}/restore", response_model=MustHaveOut)
+def restore(
+    suggestion_id: int,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    counts_cache: CountsCache = Depends(get_counts_cache),
+) -> MustHaveOut:
+    """Un-dismiss: the title re-enters the same gated suggestion pool it came
+    from — a mis-click is no longer forever."""
+    with factory() as session:
+        row = session.get(MustHaveSuggestion, suggestion_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="suggestion not found")
+        row.status = "suggested"
+        session.commit()
+        counts_cache.invalidate()
         return MustHaveOut.model_validate(row)

@@ -2,6 +2,16 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.8.0 — Optimization Cycle 08
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_08.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): decisions restore with preview-by-default apply
+flow, a 500 MB poster-cache ceiling with oldest-first eviction, a Library
+section filter, persisted view/sort preferences, Esc-cancellable Ask,
+connection-URL normalization (scheme + trailing slashes), restorable dismissed
+must-haves, reduced-motion-aware gauges, dated backup filenames, and announced
+loading states.
+
 ## 2607.7.0 — Optimization Cycle 07
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_07.md`, log:

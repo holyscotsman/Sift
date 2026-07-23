@@ -365,6 +365,23 @@ class ThresholdPreview(BaseModel):
     total: int
 
 
+class DecisionsImportIn(BaseModel):
+    # Preview is the default: the real apply requires the explicit flag from the
+    # confirm step — an accidental POST can never mutate state.
+    dry_run: bool = True
+    keep_overrides: list[dict[str, Any]] = []
+    dismissed_musthaves: list[dict[str, Any]] = []
+    thresholds: dict[str, Any] | None = None
+
+
+class DecisionsImportOut(BaseModel):
+    dry_run: bool
+    keeps_applied: int
+    keeps_unknown: int
+    dismissals_applied: int
+    thresholds_restored: bool
+
+
 class QualityProfileOut(BaseModel):
     id: int
     name: str

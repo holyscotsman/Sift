@@ -37,13 +37,32 @@ export function Library() {
   const [params, setParams] = useSearchParams();
   const { start: startScan } = useScan();
   const q = params.get("q") ?? "";
-  const [view, setView] = useState<View>("grid");
+  // View and sort survive navigation — read once, written on change.
+  const [view, setViewState] = useState<View>(() =>
+    localStorage.getItem("sift.library.view") === "table" ? "table" : "grid",
+  );
+  const setView = (v: View) => {
+    localStorage.setItem("sift.library.view", v);
+    setViewState(v);
+  };
   // Seed the quick filter from a deep-link (e.g. Dashboard → ?filter=upgrades).
   const seeded = params.get("filter") as Quick | null;
   const [quick, setQuick] = useState<Quick>(
     seeded && QUICK_ORDER.includes(seeded) ? seeded : "plex",
   );
-  const [sort, setSort] = useState("title");
+  const [sort, setSortState] = useState(() => {
+    const stored = localStorage.getItem("sift.library.sort");
+    return stored && ["title", "year", "added_at", "file_size"].includes(stored)
+      ? stored
+      : "title";
+  });
+  const setSort = (s: string) => {
+    localStorage.setItem("sift.library.sort", s);
+    setSortState(s);
+  };
+  // Plex sections for the section filter; the control hides when there's ≤1.
+  const [sections, setSections] = useState<string[]>([]);
+  const [section, setSection] = useState("");
   // null = the field's natural direction (title A→Z, everything else newest/biggest
   // first). Clicking a table header on the active field flips it.
   const [order, setOrder] = useState<"asc" | "desc" | null>(null);
@@ -79,8 +98,8 @@ export function Library() {
   );
 
   const filterKey = useMemo(
-    () => JSON.stringify({ q, quick, sort, effectiveOrder, pageSize, activeLetter }),
-    [q, quick, sort, effectiveOrder, pageSize, activeLetter],
+    () => JSON.stringify({ q, quick, sort, effectiveOrder, pageSize, activeLetter, section }),
+    [q, quick, sort, effectiveOrder, pageSize, activeLetter, section],
   );
 
   const buildQuery = useCallback(
@@ -93,13 +112,21 @@ export function Library() {
       is_kids: quick === "kids" ? true : undefined,
       cutoff_unmet: quick === "upgrades" ? true : undefined,
       starts_with: activeLetter ?? undefined,
+      section: section || undefined,
       sort,
       order: effectiveOrder,
       page,
       page_size: pageSize,
     }),
-    [q, quick, sort, effectiveOrder, pageSize, activeLetter],
+    [q, quick, sort, effectiveOrder, pageSize, activeLetter, section],
   );
+
+  useEffect(() => {
+    api
+      .movieSections()
+      .then(setSections)
+      .catch(() => setSections([]));
+  }, []);
 
   const fetchPage = useCallback(
     async (page: number, replace: boolean) => {
@@ -224,6 +251,23 @@ export function Library() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2 text-sm">
+          {sections.length > 1 && (
+            <>
+              <label className="text-fg3">Section</label>
+              <select
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                className="rounded-md border border-line bg-panel px-2 py-1 text-sm text-fg"
+              >
+                <option value="">All</option>
+                {sections.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
           <label className="text-fg3">Sort</label>
           <select
             value={sort}
@@ -250,7 +294,12 @@ export function Library() {
       </div>
 
       {firstLoad ? (
-        <LoadingState view={view} />
+        <div aria-busy="true">
+          <span className="sr-only" role="status">
+            Loading library…
+          </span>
+          <LoadingState view={view} />
+        </div>
       ) : items.length === 0 ? (
         <div className="panel">
           <EmptyState

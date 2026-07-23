@@ -131,3 +131,33 @@ def test_poster_stats_and_clear_endpoints(settings, factory, tmp_path):
             "count": 0,
             "bytes": 0,
         }
+
+
+async def test_poster_cache_evicts_oldest_over_cap(settings, factory, tmp_path, monkeypatch):
+    import os
+
+    import httpx
+
+    from sift.db.models import Movie
+    from sift.services import posters as posters_mod
+    from sift.services.posters import PosterCache
+
+    settings.posters.cache_dir = tmp_path / "cache"
+    with factory() as session:
+        for i in (1, 2, 3):
+            session.add(Movie(tmdb_id=i, title=f"M{i}", in_plex=True, poster_url="http://img/x"))
+        session.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 600)
+
+    cache = PosterCache(settings, factory, transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(posters_mod, "_MAX_CACHE_BYTES", 1500)  # fits two, not three
+
+    assert await cache.get(1) is not None
+    os.utime(cache.path_for(1), (1, 1))  # make 1 clearly the oldest
+    assert await cache.get(2) is not None
+    assert await cache.get(3) is not None  # pushes past the cap → evict oldest
+
+    assert cache.cached(1) is None  # oldest evicted
+    assert cache.cached(3) is not None  # the file just written always survives

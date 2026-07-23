@@ -136,7 +136,8 @@ export function RingGauge({
           strokeLinecap="round"
           strokeDasharray={circ}
           strokeDashoffset={circ * (1 - pct)}
-          style={{ transition: "stroke-dashoffset .6s var(--ease-spring)" }}
+          // Rides --dur so reduced-motion (which zeroes it) stills the gauge too.
+          style={{ transition: "stroke-dashoffset var(--dur, .6s) var(--ease-spring)" }}
         />
         <text
           x="50%"

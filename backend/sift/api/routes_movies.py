@@ -121,6 +121,22 @@ def list_movies(
     )
 
 
+@router.get("/movies/sections", response_model=list[str])
+def list_sections(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> list[str]:
+    """Distinct Plex sections in the snapshot — feeds the Library's section filter.
+    Declared before /movies/{tmdb_id} so 'sections' never parses as an id."""
+    with factory() as session:
+        rows = session.execute(
+            select(Movie.library_section)
+            .where(Movie.library_section.is_not(None))
+            .distinct()
+            .order_by(Movie.library_section.asc())
+        )
+        return [str(section) for (section,) in rows]
+
+
 @router.get("/movies/{tmdb_id}", response_model=MovieDetail)
 def get_movie(
     tmdb_id: int, factory: sessionmaker[Session] = Depends(get_session_factory)

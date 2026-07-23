@@ -221,3 +221,21 @@ def test_musthave_endpoints_list_and_dismiss(client, factory):
     assert client.post(f"/api/musthave/{sid}/dismiss").status_code == 200
     assert client.get("/api/musthave").json()["items"] == []
     assert client.post("/api/musthave/999/dismiss").status_code == 404
+
+
+def test_dismiss_then_restore_roundtrip(client, factory):
+    from sift.db.models import MustHaveSuggestion
+
+    c = client
+    with factory() as session:
+        session.add(MustHaveSuggestion(tmdb_id=500, title="Changed My Mind", status="suggested"))
+        session.commit()
+        sid = session.query(MustHaveSuggestion).filter_by(tmdb_id=500).one().id
+
+    c.post(f"/api/musthave/{sid}/dismiss")
+    assert [i["id"] for i in c.get("/api/musthave?status=dismissed").json()["items"]] == [sid]
+    assert c.get("/api/musthave").json()["items"] == []
+
+    c.post(f"/api/musthave/{sid}/restore")
+    assert [i["id"] for i in c.get("/api/musthave").json()["items"]] == [sid]
+    assert c.get("/api/musthave?status=dismissed").json()["items"] == []

@@ -7,6 +7,57 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.8.0 — Cycle 08
+
+**Plan:** `docs/optimization/CYCLE_08.md` (10/10 approved after change review, 4 amended).
+
+1. **Decisions restore** — the other half of Cycle 7's backup. `POST
+   /api/import/decisions` previews by DEFAULT ("would set 1 keep-override, 1
+   unknown skipped…") and applies only on the explicit confirm flag; unknown
+   tmdb ids are counted and skipped, never invented; thresholds go through the
+   validated store; the counts cache invalidates on apply. Settings › Storage
+   gains the file-picker → preview → confirm flow. Restore touches keep flags,
+   must-have status, and thresholds only — never files, never Radarr.
+2. **Poster cache ceiling** — 500 MB cap enforced after each write, oldest-first
+   eviction that never touches the file just written (test-pinned).
+3. **Library section filter** — new `GET /api/movies/sections` + a dropdown
+   (hidden with ≤1 section); the CSV export inherits the filter for free.
+4. **The UI remembers your view** — Library grid/table + sort and Junk's sort
+   persist to localStorage, with invalid stored values falling back safely.
+5. **Esc cancels a thinking Ask** — keyboard parity with the Cancel button.
+6. **Connection URLs normalize** — trailing slashes trimmed, missing schemes get
+   `http://`, https always preserved; applied on save AND on overlay so stale
+   stored values heal too (test-pinned).
+7. **Dismissed must-haves can come back** — "Dismissed (N)" strip with per-title
+   Restore (`POST /api/musthave/{id}/restore`); a mis-click is no longer forever.
+8. **Ring gauges respect reduced motion** — the stroke transition rides `--dur`.
+9. **Backups carry their date** — `sift-decisions-2026-07-23.json`,
+   `sift-library-2026-07-23.csv` (test-pinned pattern).
+10. **Loading states announce themselves** — `aria-busy` + polite hidden
+    "Loading…" on Library, Junk, and Activity.
+
+**QA:** 176 backend tests green (7 new — import preview-vs-apply with
+unknown-id skipping and threshold restore, sections endpoint, dated filenames,
+URL normalization on save + overlay, poster eviction with newest-survives,
+dismiss/restore roundtrip). ruff + bandit ruleset + mypy strict clean; tsc +
+build + npm audit clean. Live seeded-server: sections, import preview leaving
+state untouched, dated Content-Disposition, and the Settings backup/restore UI
+verified by screenshot.
+
+**Security review:** the import is the cycle's one new write surface and was
+reviewed as such — preview-by-default, explicit apply flag, field-by-field
+validation, can only touch keep flags/must-have status/thresholds (never files,
+never Radarr), same auth as every gated route; eviction deletes only inside the
+cache dir; URL normalization never downgrades https.
+
+**Bug review:** cycle diff re-read line-by-line; caught pre-merge: the sections
+route had to be declared before `/movies/{tmdb_id}` so "sections" never parses
+as an id; the musthave test fixture yields a bare client (unlike test_api's
+tuple) — test fixed to take `factory` separately; `DecisionsImportResult`
+missing from api.ts imports (tsc caught it).
+
+---
+
 ## 2607.7.0 — Cycle 07
 
 **Plan:** `docs/optimization/CYCLE_07.md` (10/10 approved after change review, 4 amended).

@@ -229,6 +229,8 @@ export function Missing() {
 // adult) — so nothing fringe or invented can appear here.
 function MustHaveSection() {
   const [items, setItems] = useState<MustHaveItem[]>([]);
+  const [dismissed, setDismissed] = useState<MustHaveItem[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -240,6 +242,12 @@ function MustHaveSection() {
       setItems(r.items);
     } catch {
       setItems([]);
+    }
+    try {
+      const d = await api.mustHaveList("dismissed");
+      setDismissed(d.items);
+    } catch {
+      setDismissed([]);
     }
   }
 
@@ -272,11 +280,27 @@ function MustHaveSection() {
     // itself fail during the same network blip and wipe the whole list).
     const snapshot = items;
     setItems((prev) => prev.filter((i) => i.id !== item.id));
+    setDismissed((prev) => [item, ...prev]);
     try {
       await api.mustHaveDismiss(item.id);
     } catch {
       setItems(snapshot);
+      setDismissed((prev) => prev.filter((i) => i.id !== item.id));
       toastError(`Couldn't dismiss “${item.title}” — it's back in the list.`);
+    }
+  }
+
+  async function restore(item: MustHaveItem) {
+    // A mis-click isn't forever: the title re-enters the gated suggestion pool.
+    const snapshot = dismissed;
+    setDismissed((prev) => prev.filter((i) => i.id !== item.id));
+    setItems((prev) => [item, ...prev]);
+    try {
+      await api.mustHaveRestore(item.id);
+    } catch {
+      setDismissed(snapshot);
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      toastError(`Couldn't restore “${item.title}”.`);
     }
   }
 
@@ -340,6 +364,35 @@ function MustHaveSection() {
               />
             ))}
           </div>
+        </div>
+      )}
+      {dismissed.length > 0 && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowDismissed((v) => !v)}
+            aria-expanded={showDismissed}
+            className="text-xs font-semibold text-fg3 hover:text-fg"
+          >
+            {showDismissed ? "Hide dismissed" : `Dismissed (${dismissed.length})`}
+          </button>
+          {showDismissed && (
+            <ul className="mt-2 divide-y divide-line rounded-md border border-line">
+              {dismissed.map((m) => (
+                <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="truncate text-fg2">
+                    {m.title}
+                    {m.year ? ` · ${m.year}` : ""}
+                  </span>
+                  <button
+                    onClick={() => void restore(m)}
+                    className="ml-auto shrink-0 text-xs font-semibold text-accent hover:underline"
+                  >
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>
