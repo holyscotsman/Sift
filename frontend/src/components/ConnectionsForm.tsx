@@ -48,6 +48,15 @@ export const SERVICE_SPECS: ServiceSpec[] = [
     ],
   },
   {
+    key: "overseerr",
+    label: "Overseerr",
+    hint: "Optional — when connected, add-requests go through Overseerr's approval pipeline instead of straight to Radarr.",
+    fields: [
+      { name: "base_url", label: "URL", placeholder: "http://host:5055" },
+      { name: "api_key", label: "API key", secret: true },
+    ],
+  },
+  {
     key: "tmdb",
     label: "TMDB",
     hint: "Metadata, posters, and discovery.",

@@ -29,6 +29,7 @@ _SECRET_FIELDS = {"token", "api_key"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
+    "overseerr": {"base_url", "api_key"},
     "tautulli": {"base_url", "api_key", "kids_accounts"},
     "tmdb": {"api_key", "language"},
     "ollama": {"base_url", "model"},
@@ -143,6 +144,13 @@ def apply_to_settings(
     profile_id = radarr.get("quality_profile_id")
     if isinstance(profile_id, int | str) and str(profile_id).strip().isdigit():
         eff.radarr.default_quality_profile_id = int(profile_id)
+
+    overseerr = config.get("overseerr") or {}
+    if _url(overseerr.get("base_url")):
+        eff.overseerr.base_url = _url(overseerr["base_url"])
+    if _s(overseerr.get("api_key")):
+        eff.overseerr.api_key = SecretStr(overseerr["api_key"])
+        eff.overseerr.enabled = True
 
     tautulli = config.get("tautulli") or {}
     if _url(tautulli.get("base_url")):

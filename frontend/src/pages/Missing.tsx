@@ -1,502 +1,149 @@
-// Missing — collection gaps (deterministic) + taste recommendations (AI, next).
+// Missing — theatrical-scale films the PLEX library doesn't have. The backend
+// keeps a private canon (TMDB top-rated + blockbusters + curated lists + gated
+// curator picks) and this page shows only the difference: canon minus Plex.
+// Radarr is deliberately ignored — wanted-but-not-downloaded still counts as
+// missing. Requests route through Overseerr when configured, Radarr otherwise.
 
 import { useEffect, useState } from "react";
 
-import { CheckIcon, SparkleIcon } from "@/components/icons";
+import { RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
-import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
+import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { CollectionGap, MissingList, MustHaveItem, RecommendedMovie } from "@/lib/types";
+import type { CanonMovieItem } from "@/lib/types";
 
-// Titles here aren't in the library (that's the point), so the library drawer would
-// 404. Link out to TMDB to preview a title before adding it — the affordance Radarr /
-// Overseerr use for the same "not-yet-owned" case.
-const tmdbMovieUrl = (tmdbId: number) => `https://www.themoviedb.org/movie/${tmdbId}`;
-
-// The one poster-card used by every not-yet-owned section on this page (must-have,
-// curated lists, recommendations) — one place to fix sizing/links/badges.
-function PosterCard({
-  tmdbId,
-  title,
-  year,
-  subtitle,
-  voteAverage,
-  footer,
-}: {
-  tmdbId: number;
-  title: string;
-  year: number | null;
-  subtitle?: string;
-  voteAverage?: number | null;
-  footer?: React.ReactNode;
-}) {
-  return (
-    <div className="w-[92px]">
-      <a
-        href={tmdbMovieUrl(tmdbId)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block w-full text-left"
-        title={`${subtitle ? `${subtitle} — ` : ""}view on TMDB`}
-      >
-        <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-          <Poster tmdbId={tmdbId} alt="" label={title} className="h-full w-full opacity-90" />
-          {voteAverage != null && voteAverage > 0 && (
-            <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
-              {voteAverage.toFixed(1)}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 truncate text-[11px] text-fg3">
-          {title} {year ? `· ${year}` : ""}
-        </p>
-        {subtitle && <p className="truncate text-[10px] text-fg3/80">{subtitle}</p>}
-      </a>
-      <AddButton tmdbId={tmdbId} title={title} />
-      {footer}
-    </div>
-  );
-}
-
-// Fill a collection in one click: walks the per-title add action sequentially
-// (same staging/dry-run semantics as a single add) with visible progress; a
-// failure stops the walk and names the title.
-function AddAllButton({ items }: { items: { tmdb_id: number; title: string }[] }) {
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
-  const [label, setLabel] = useState("");
-  const toastError = useToast();
-  if (items.length < 2 || state === "done") {
-    return state === "done" ? (
-      <span className="ml-auto text-xs font-semibold text-fg3">{label}</span>
-    ) : null;
-  }
-  async function addAll() {
-    setState("busy");
-    let added = 0;
-    for (const item of items) {
-      setLabel(`Adding ${added + 1}/${items.length}…`);
-      try {
-        await api.addMovie(item.tmdb_id, item.title);
-        added += 1;
-      } catch {
-        toastError(`Adding “${item.title}” failed — ${added} of ${items.length} were sent.`);
-        break;
-      }
-    }
-    setLabel(added === items.length ? `All ${added} staged/added ✓` : `${added} added`);
-    setState("done");
-  }
-  return (
-    <button
-      onClick={() => void addAll()}
-      disabled={state === "busy"}
-      className="ml-auto rounded-pill border border-line px-3 py-1 text-xs font-semibold text-accent hover:bg-bg2 disabled:opacity-70"
-    >
-      {state === "busy" ? label : `Add all missing (${items.length})`}
-    </button>
-  );
-}
-
-// Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
-function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
-  const [label, setLabel] = useState("+ Add");
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
-  async function add(e: React.MouseEvent) {
-    e.stopPropagation();
-    setState("busy");
-    try {
-      const a = await api.addMovie(tmdbId, title);
-      setState("done");
-      setLabel(a.dry_run ? "Add staged" : "Added ✓");
-    } catch {
-      setState("idle");
-      setLabel("Retry");
-    }
-  }
-  return (
-    <button
-      onClick={add}
-      disabled={state !== "idle"}
-      className="mt-1 w-full rounded-md border border-line py-1 text-[11px] font-semibold text-accent hover:bg-bg2 disabled:opacity-70"
-    >
-      {state === "busy" ? "…" : label}
-    </button>
-  );
-}
+const FOLD = 30;
 
 export function Missing() {
-  const [gaps, setGaps] = useState<CollectionGap[]>([]);
-  const [lists, setLists] = useState<MissingList[]>([]);
+  const [items, setItems] = useState<CanonMovieItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      api.missingCollections().then((r) => setGaps(r.collections)).catch(() => setGaps([])),
-      api.missingLists().then((r) => setLists(r.lists)).catch(() => setLists([])),
-    ]).finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div className="page-enter flex flex-col gap-5">
-      <div>
-        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
-          Missing
-        </h1>
-        <p className="mt-1 text-sm text-fg2">
-          What your library is missing — collection gaps, the canon, and titles that match
-          your taste.
-        </p>
-      </div>
-
-      <section>
-        <div className="mb-2 flex items-center gap-2">
-          <span className="eyebrow">Collection gaps</span>
-        </div>
-        {loading ? (
-          <div className="panel p-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="mb-2 h-16" />
-            ))}
-          </div>
-        ) : gaps.length === 0 ? (
-          <div className="panel">
-            <EmptyState
-              title="No collection gaps"
-              hint="Every collection you own part of is complete — or no collections were found yet."
-            />
-          </div>
-        ) : (
-          <div className="panel divide-y divide-line">
-            {gaps.map((g) => (
-              <div key={g.collection_id} className="p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="font-display text-base font-bold">{g.name}</span>
-                  <span className="text-sm text-fg3">
-                    {g.owned_count}/{g.total_count} owned
-                  </span>
-                  <AddAllButton
-                    items={g.members.filter((m) => !m.owned)}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {g.members.map((m) => (
-                    <div key={m.tmdb_id} className="w-[92px]">
-                      <div
-                        className="relative aspect-[2/3] overflow-hidden rounded-md"
-                        style={m.owned ? undefined : { border: "1.5px dashed var(--line-2)" }}
-                      >
-                        <Poster
-                          tmdbId={m.tmdb_id}
-                          alt=""
-                          className={`h-full w-full ${m.owned ? "" : "opacity-40 grayscale"}`}
-                        />
-                        {m.owned ? (
-                          <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full" style={{ background: "var(--keep)" }}>
-                            <CheckIcon size={11} className="text-[color:var(--accent-fg)]" />
-                          </span>
-                        ) : (
-                          <span className="absolute inset-x-1 bottom-1 rounded-sm bg-black/50 py-0.5 text-center text-[10px] font-semibold text-white backdrop-blur">
-                            missing
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 truncate text-[11px] text-fg3">
-                        {m.title} {m.year ? `· ${m.year}` : ""}
-                      </p>
-                      {!m.owned && <AddButton tmdbId={m.tmdb_id} title={m.title} />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <MustHaveSection />
-
-      {lists.map((list) => (
-        <ListSection key={list.name} list={list} />
-      ))}
-
-      <RecommendationsSection />
-    </div>
-  );
-}
-
-// Must-have picks: the AI proposes canon titles, deterministic TMDB gates decide
-// what's allowed in (vote floor, rating floor, feature runtime, released, not
-// adult) — so nothing fringe or invented can appear here.
-function MustHaveSection() {
-  const [items, setItems] = useState<MustHaveItem[]>([]);
-  const [dismissed, setDismissed] = useState<MustHaveItem[]>([]);
-  const [showDismissed, setShowDismissed] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const toastError = useToast();
 
-  async function refresh() {
-    try {
-      const r = await api.mustHaveList();
-      setItems(r.items);
-    } catch {
-      setItems([]);
-    }
-    try {
-      const d = await api.mustHaveList("dismissed");
-      setDismissed(d.items);
-    } catch {
-      setDismissed([]);
-    }
+  function load() {
+    return api
+      .canonMissing()
+      .then((r) => {
+        setItems(r.items);
+        setTotal(r.total);
+      })
+      .catch(() => setItems([]));
   }
 
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
+    void load().finally(() => setLoading(false));
   }, []);
 
-  async function run() {
-    setRunning(true);
+  async function refresh() {
+    setRefreshing(true);
     setNote(null);
     try {
-      const r = await api.mustHaveRun();
+      const r = await api.canonRefresh();
       setNote(
-        r.added > 0
-          ? `Found ${r.added} new must-have${r.added === 1 ? "" : "s"} (${r.provider}).`
-          : r.provider === "none"
-            ? "Connect TMDB (and optionally an AI provider) in Settings › Connections first."
-            : "No new must-haves — your canon coverage looks solid.",
+        `Catalog refreshed — ${r.canon_written.toLocaleString()} titles in the canon` +
+          (r.curator_added > 0 ? `, ${r.curator_added} new curator picks` : "") +
+          `; ${r.missing_total.toLocaleString()} missing from your Plex library.`,
       );
-      await refresh();
+      await load();
     } catch {
-      setNote("The must-have run failed — check your connections.");
+      toastError("The catalog refresh failed — check the TMDB connection.");
     } finally {
-      setRunning(false);
+      setRefreshing(false);
     }
   }
 
-  async function dismiss(item: MustHaveItem) {
-    // Optimistic removal; on failure restore the snapshot (a refetch here could
-    // itself fail during the same network blip and wipe the whole list).
-    const snapshot = items;
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-    setDismissed((prev) => [item, ...prev]);
-    try {
-      await api.mustHaveDismiss(item.id);
-    } catch {
-      setItems(snapshot);
-      setDismissed((prev) => prev.filter((i) => i.id !== item.id));
-      toastError(`Couldn't dismiss “${item.title}” — it's back in the list.`);
-    }
-  }
-
-  async function restore(item: MustHaveItem) {
-    // A mis-click isn't forever: the title re-enters the gated suggestion pool.
-    const snapshot = dismissed;
-    setDismissed((prev) => prev.filter((i) => i.id !== item.id));
-    setItems((prev) => [item, ...prev]);
-    try {
-      await api.mustHaveRestore(item.id);
-    } catch {
-      setDismissed(snapshot);
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      toastError(`Couldn't restore “${item.title}”.`);
-    }
-  }
+  const visible = showAll ? items : items.slice(0, FOLD);
 
   return (
-    <section>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="eyebrow">Must-have picks</span>
-          <Pill tone="accent">AI proposes · data decides</Pill>
+    <div className="page-enter">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
+            Missing
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-fg2">
+            Widely received theatrical films your Plex library doesn&rsquo;t have — blockbusters,
+            cult classics, criterion-caliber picks, top-rated and award-winning titles.
+            {total > 0 && (
+              <span className="font-semibold text-fg"> {total.toLocaleString()} missing.</span>
+            )}
+          </p>
         </div>
         <button
-          onClick={run}
-          disabled={running}
-          className="gradient-fill rounded-pill px-4 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          className="gradient-fill shrink-0 rounded-pill px-4 py-1.5 text-sm font-bold shadow-glow disabled:opacity-60"
         >
-          {running ? "Curating…" : "Find must-haves"}
+          {refreshing ? "Refreshing catalog…" : "Refresh catalog"}
         </button>
       </div>
       {note && (
-        <p className="mb-2 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">{note}</p>
-      )}
-      {loading ? (
-        <div className="panel p-4">
-          <div className="flex flex-wrap gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[138px] w-[92px]" />
-            ))}
-          </div>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="panel">
-          <EmptyState
-            title="No must-have picks yet"
-            hint={
-              <span className="inline-flex items-center gap-1.5">
-                <SparkleIcon size={14} /> Run the curator — it studies your library and proposes
-                the canon you're missing. Every pick is validated against TMDB.
-              </span>
-            }
-          />
-        </div>
-      ) : (
-        <div className="panel p-4">
-          <div className="flex flex-wrap gap-3">
-            {items.map((m) => (
-              <PosterCard
-                key={m.id}
-                tmdbId={m.tmdb_id}
-                title={m.title}
-                year={m.year}
-                subtitle={m.reason}
-                voteAverage={m.vote_average}
-                footer={
-                  <button
-                    onClick={() => void dismiss(m)}
-                    className="mt-1 w-full rounded-md py-0.5 text-[11px] text-fg3 hover:text-fg"
-                  >
-                    Not interested
-                  </button>
-                }
-              />
-            ))}
-          </div>
-        </div>
-      )}
-      {dismissed.length > 0 && (
-        <div className="mt-2">
-          <button
-            onClick={() => setShowDismissed((v) => !v)}
-            aria-expanded={showDismissed}
-            className="text-xs font-semibold text-fg3 hover:text-fg"
-          >
-            {showDismissed ? "Hide dismissed" : `Dismissed (${dismissed.length})`}
-          </button>
-          {showDismissed && (
-            <ul className="mt-2 divide-y divide-line rounded-md border border-line">
-              {dismissed.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="truncate text-fg2">
-                    {m.title}
-                    {m.year ? ` · ${m.year}` : ""}
-                  </span>
-                  <button
-                    onClick={() => void restore(m)}
-                    className="ml-auto shrink-0 text-xs font-semibold text-accent hover:underline"
-                  >
-                    Restore
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// Taste-based suggestions: TMDB's discovery graph seeded by your highest-rated titles.
-// Lazy — only fetched when the section mounts, since it fans out to TMDB.
-function RecommendationsSection() {
-  const [items, setItems] = useState<RecommendedMovie[]>([]);
-  const [note, setNote] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .missingRecommendations()
-      .then((r) => {
-        setItems(r.items);
-        setNote(r.note);
-      })
-      .catch(() => setNote("Recommendations are unavailable right now."))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-2">
-        <span className="eyebrow">Recommended for you</span>
-        <Pill tone="accent">Taste graph</Pill>
-      </div>
-      {loading ? (
-        <div className="panel p-4">
-          <div className="flex flex-wrap gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[138px] w-[92px]" />
-            ))}
-          </div>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="panel">
-          <EmptyState
-            title="No recommendations yet"
-            hint={
-              <span className="inline-flex items-center gap-1.5">
-                <SparkleIcon size={14} />
-                {note ?? "Run a scan and connect TMDB to surface titles that match your taste."}
-              </span>
-            }
-          />
-        </div>
-      ) : (
-        <div className="panel p-4">
-          <div className="flex flex-wrap gap-3">
-            {items.map((m) => (
-              <PosterCard
-                key={m.tmdb_id}
-                tmdbId={m.tmdb_id}
-                title={m.title}
-                year={m.year}
-                subtitle={m.reason}
-                voteAverage={m.vote_average}
-              />
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-fg3">
-            Grounded in your highest-rated titles via TMDB — Sift ranks and explains, it
-            never invents.
-          </p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-const LIST_FOLD = 12;
-
-function ListSection({ list }: { list: MissingList }) {
-  const [showAll, setShowAll] = useState(false);
-  if (list.items.length === 0) return null;
-  const visible = showAll ? list.items : list.items.slice(0, LIST_FOLD);
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-2">
-        <span className="eyebrow">{list.label} you don't own</span>
-        <Pill tone="borderline">{list.items.length}</Pill>
-      </div>
-      <div className="panel p-4">
-        <div className="flex flex-wrap gap-3">
-          {visible.map((m) => (
-            <PosterCard key={m.tmdb_id} tmdbId={m.tmdb_id} title={m.title} year={m.year} />
-          ))}
-        </div>
-        {list.items.length > LIST_FOLD && (
-          <button
-            onClick={() => setShowAll((v) => !v)}
-            className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
-          >
-            {showAll ? "Show fewer" : `Show all (${list.items.length})`}
-          </button>
-        )}
-        <p className="mt-3 text-xs text-fg3">
-          Starter list, pending human review — expand or correct it anytime.
+        <p className="mt-3 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">
+          {note}
         </p>
+      )}
+
+      <div className="mt-4">
+        {loading ? (
+          <div className="panel p-4" aria-busy="true">
+            <span className="sr-only" role="status">
+              Loading the missing list…
+            </span>
+            <div className="flex flex-wrap gap-3">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-[162px] w-[108px]" />
+              ))}
+            </div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="panel">
+            <EmptyState
+              title="No catalog yet"
+              hint="Refresh builds the canon from TMDB (top-rated + blockbusters) and the curated lists, then compares it against your Plex library."
+              action={
+                <button
+                  onClick={() => void refresh()}
+                  disabled={refreshing}
+                  className="gradient-fill rounded-md px-4 py-2 text-sm font-bold shadow-glow disabled:opacity-60"
+                >
+                  {refreshing ? "Refreshing…" : "Build the catalog"}
+                </button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="panel p-4">
+            <div className="flex flex-wrap gap-3">
+              {visible.map((m) => (
+                <RequestCard
+                  key={m.tmdb_id}
+                  tmdbId={m.tmdb_id}
+                  title={m.title}
+                  year={m.year}
+                  subtitle={m.sources.join(" · ")}
+                  voteAverage={m.vote_average}
+                />
+              ))}
+            </div>
+            {items.length > FOLD && (
+              <button
+                onClick={() => setShowAll((v) => !v)}
+                className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+              >
+                {showAll ? "Show fewer" : `Show all (${items.length})`}
+              </button>
+            )}
+            <p className="mt-3 text-xs text-fg3">
+              The catalog itself lives in the backend — built deterministically from TMDB charts
+              and the curated lists; the AI curator can propose, but every title passes the same
+              gates before it counts.
+            </p>
+          </div>
+        )}
       </div>
-    </section>
+    </div>
   );
 }

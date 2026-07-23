@@ -6,6 +6,8 @@ import type {
   ActionType,
   AskResponse,
   AuthStatus,
+  CanonMissingResponse,
+  CanonRefreshResponse,
   ConnectionsResponse,
   DecisionsImportResult,
   HealthResponse,
@@ -237,6 +239,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ tmdb_id: tmdbId, title }),
     }),
+  // Requests route through Overseerr when configured, else fall back to Radarr.
+  requestMovie: (tmdbId: number, title: string) =>
+    request<ActionRecord>("/api/actions/request", {
+      method: "POST",
+      body: JSON.stringify({ tmdb_id: tmdbId, title }),
+    }),
+  canonMissing: (limit = 500) =>
+    request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
+  canonRefresh: () =>
+    request<CanonRefreshResponse>("/api/missing/canon/refresh", { method: "POST" }),
 };
 
 // Server-resolved, cached poster for any title (works for Plex-only movies with no

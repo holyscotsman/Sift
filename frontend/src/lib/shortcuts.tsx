@@ -63,9 +63,13 @@ export function Shortcuts() {
         chordTimer.current = null;
       }
     };
+    // The header menu can open the overlay too (no keyboard needed).
+    const onOpen = () => setHelp(true);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("sift:shortcuts", onOpen);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("sift:shortcuts", onOpen);
       if (chordTimer.current) window.clearTimeout(chordTimer.current);
     };
   }, [navigate]);

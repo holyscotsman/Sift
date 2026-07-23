@@ -224,6 +224,8 @@ class JunkCandidate(BaseModel):
     tmdb_id: int
     title: str
     year: int | None
+    # For the one-click "check it on IMDb" link; None when the id was never resolved.
+    imdb_id: str | None = None
     poster_url: str | None
     library_section: str | None
     quality: str | None
@@ -319,6 +321,27 @@ class MustHaveRunResponse(BaseModel):
     added: int
     considered: int
     provider: str
+
+
+class CanonMovieOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None
+    vote_average: float | None
+    vote_count: int | None
+    # Why it's canon: e.g. ["top rated", "blockbuster", "cult classic"].
+    sources: list[str] = []
+
+
+class CanonMissingResponse(BaseModel):
+    items: list[CanonMovieOut]
+    total: int
+
+
+class CanonRefreshResponse(BaseModel):
+    canon_written: int
+    curator_added: int
+    missing_total: int
 
 
 class RecommendedMovie(BaseModel):

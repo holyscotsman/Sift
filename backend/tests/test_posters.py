@@ -161,3 +161,37 @@ async def test_poster_cache_evicts_oldest_over_cap(settings, factory, tmp_path, 
 
     assert cache.cached(1) is None  # oldest evicted
     assert cache.cached(3) is not None  # the file just written always survives
+
+
+async def test_dead_stored_poster_url_heals_via_tmdb(settings, factory, tmp_path):
+    import httpx
+    from pydantic import SecretStr
+
+    from sift.db.models import Movie
+    from sift.services.posters import PosterCache
+
+    settings.posters.cache_dir = tmp_path / "cache"
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    with factory() as session:
+        session.add(
+            Movie(tmdb_id=603, title="The Matrix", in_plex=True,
+                  poster_url="https://dead.example/poster.jpg")
+        )
+        session.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "dead.example":
+            return httpx.Response(404)  # the stored URL is a corpse
+        if request.url.path.endswith("/movie/603"):
+            return httpx.Response(200, json={"poster_path": "/m.jpg"})
+        if request.url.path.endswith("/m.jpg"):
+            return httpx.Response(200, content=b"poster-bytes")
+        return httpx.Response(404)
+
+    cache = PosterCache(settings, factory, transport=httpx.MockTransport(handler))
+    path = await cache.get(603)
+    assert path is not None and path.read_bytes() == b"poster-bytes"
+    # The stored corpse was healed to the TMDB URL for next time.
+    with factory() as session:
+        assert "image.tmdb.org" in session.get(Movie, 603).poster_url

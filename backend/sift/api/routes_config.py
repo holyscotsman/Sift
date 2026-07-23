@@ -81,7 +81,7 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
     # Probe the *unsaved* values by overlaying them on the base config.
     trial = config_store.apply_to_settings(state.base_settings, {service: body.values})
 
-    if service in ("plex", "radarr", "tautulli", "tmdb"):
+    if service in ("plex", "radarr", "overseerr", "tautulli", "tmdb"):
         status = await check_service(trial, service)
         return ServiceHealth(
             service=status.service, ok=status.ok, detail=status.detail, latency_ms=status.latency_ms

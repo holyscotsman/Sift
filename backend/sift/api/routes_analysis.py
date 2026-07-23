@@ -10,15 +10,19 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..ai import musthave
 from ..analysis import collections as coll_analysis
 from ..analysis import junk as junk_analysis
 from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
-from ..services import curated_lists, settings_store
+from ..services import canon, curated_lists, settings_store
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
+    CanonMissingResponse,
+    CanonMovieOut,
+    CanonRefreshResponse,
     CollectionGap,
     CollectionMemberOut,
     JunkCandidate,
@@ -73,6 +77,7 @@ def junk(
                     tmdb_id=movie.tmdb_id,
                     title=movie.title,
                     year=movie.year,
+                    imdb_id=movie.imdb_id,
                     poster_url=movie.poster_url,
                     library_section=movie.library_section,
                     quality=movie.quality,
@@ -111,6 +116,55 @@ def upgrades(
             for c in rows
         ],
         total=total,
+    )
+
+
+@router.get("/missing/canon", response_model=CanonMissingResponse)
+def canon_missing(
+    limit: int = 500,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> CanonMissingResponse:
+    """Canon titles absent from the PLEX library. Radarr is ignored on purpose —
+    monitored-but-not-downloaded still reads as missing."""
+    with factory() as session:
+        rows, total = canon.missing(session, limit=max(1, min(limit, 1000)))
+        return CanonMissingResponse(
+            items=[
+                CanonMovieOut(
+                    tmdb_id=r.tmdb_id,
+                    title=r.title,
+                    year=r.year,
+                    vote_average=r.vote_average,
+                    vote_count=r.vote_count,
+                    sources=list(r.sources or []),
+                )
+                for r in rows
+            ],
+            total=total,
+        )
+
+
+@router.post("/missing/canon/refresh", response_model=CanonRefreshResponse)
+async def canon_refresh(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    settings: Settings = Depends(get_settings),
+) -> CanonRefreshResponse:
+    """Rebuild the canon: run the AI curator first (best-effort — its proposals
+    still pass the deterministic gates before storage), then the TMDB sweeps and
+    curated merges. The canon itself stays backend-only."""
+    curator_added = 0
+    try:
+        result = await musthave.run_musthave(factory, settings, limit=20)
+        curator_added = int(result.get("added", 0))
+    except Exception:  # noqa: BLE001 - a dead AI provider must not block the sweep
+        curator_added = 0
+    stats = await canon.refresh(factory, settings)
+    with factory() as session:
+        _, missing_total = canon.missing(session, limit=1)
+    return CanonRefreshResponse(
+        canon_written=stats.get("written", 0),
+        curator_added=curator_added,
+        missing_total=missing_total,
     )
 
 

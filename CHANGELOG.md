@@ -2,6 +2,40 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.9.0 — Missing redesign, Overseerr, theatrical junk rules
+
+Owner-requested batch:
+
+- **Missing, rebuilt.** The backend now keeps a private canon of theatrical-scale
+  films worth owning — TMDB's top-rated chart, a revenue-sorted blockbuster
+  sweep, the curated lists (cult / IMDb top / criterion), and gated curator
+  picks. The Missing page shows only the difference against the **Plex library**
+  (Radarr is deliberately ignored) as a poster grid with per-title Request
+  buttons and a "Refresh catalog" action. The canon itself stays backend-only.
+- **Collections is its own page** (nav item between Missing and Junk) with the
+  same gap view as before plus one-click "Request all missing".
+- **Overseerr integration.** New connection (Settings › Connections + wizard +
+  health dot). When configured, every add-request routes through Overseerr's
+  approval pipeline; otherwise it falls back to a direct Radarr add. The server
+  dry-run floor applies to both paths, and every request is recorded in the
+  audit trail with its route.
+- **Junk keeps theatrical-scale releases.** The protection now covers US
+  theatrical runs, major-studio releases (Disney, Amazon, Netflix, …) even when
+  streaming-only, and studio-scale budgets (≥ $20M) — famously bad big films are
+  kept on purpose. Junk stays aimed at low-budget, independent, and non-theatrical
+  international titles. Takes full effect after the next scan re-enriches. All
+  flagged candidates now start **selected for removal** by default (nothing is
+  sent until Approve + confirm), and every row carries an **IMDb ↗** link.
+- **Thumbnails fixed.** Radarr-relative poster paths (/MediaCover/…) are no
+  longer stored, stored-but-dead poster URLs now fall back to a TMDB lookup and
+  heal themselves, so artwork resolves for every title with TMDB connected.
+- **Header polish.** A bigger, sharper Sift wordmark, and the previously-dead
+  three-line button is now a real menu (row spacing, theme, keyboard shortcuts,
+  changelog, sign out). Taste-graph recommendations moved to the Taste Profile
+  page.
+- **Dependency security:** react-router upgraded v6 → v7.18 to clear
+  CVE-2025-68470-adjacent advisories; `npm audit` clean again.
+
 ## 2607.8.0 — Optimization Cycle 08
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_08.md`, log:

@@ -85,10 +85,9 @@ class PosterCache:
             movie = session.get(Movie, tmdb_id)
             return movie.poster_url if movie else None
 
-    async def _resolve_url(self, tmdb_id: int) -> str | None:
-        stored = self._stored_url(tmdb_id)
-        if stored:
-            return stored
+    async def _tmdb_url(self, tmdb_id: int, *, heal: bool = False) -> str | None:
+        """Resolve artwork from TMDB by id and persist it. ``heal=True`` also
+        overwrites a stored-but-broken URL (dead remoteUrl, old relative path)."""
         if not self._settings.tmdb.enabled or self._settings.tmdb.api_key is None:
             return None
         client = TmdbClient(self._settings.tmdb, transport=self._transport)
@@ -106,10 +105,30 @@ class PosterCache:
         # Persist so we never look it up twice (and a later scan keeps it).
         with self._factory() as session:
             movie = session.get(Movie, tmdb_id)
-            if movie is not None and not movie.poster_url:
+            if movie is not None and (heal or not movie.poster_url):
                 movie.poster_url = url
                 session.commit()
         return url
+
+    async def _resolve_url(self, tmdb_id: int) -> str | None:
+        stored = self._stored_url(tmdb_id)
+        # Stored relative paths (old scans stored Radarr's /MediaCover/…) are
+        # unfetchable — ignore them so the TMDB fallback gets its chance.
+        if stored and stored.startswith(("http://", "https://")):
+            return stored
+        return await self._tmdb_url(tmdb_id, heal=bool(stored))
+
+    async def _download(self, url: str) -> bytes | None:
+        try:
+            async with httpx.AsyncClient(
+                timeout=15.0, follow_redirects=True, transport=self._transport
+            ) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                return resp.content or None
+        except Exception as exc:  # noqa: BLE001 - network hiccup → placeholder
+            log.info("poster fetch failed from %s: %s", url, exc)
+            return None
 
     async def get(self, tmdb_id: int) -> Path | None:
         """Return a path to the cached poster bytes, fetching + caching if needed."""
@@ -119,17 +138,14 @@ class PosterCache:
         url = await self._resolve_url(tmdb_id)
         if not url:
             return None
-        try:
-            async with httpx.AsyncClient(
-                timeout=15.0, follow_redirects=True, transport=self._transport
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                content = resp.content
-        except Exception as exc:  # noqa: BLE001 - network hiccup → placeholder
-            log.info("poster fetch failed for %s: %s", tmdb_id, exc)
-            return None
-        if not content:
+        content = await self._download(url)
+        if content is None and not url.startswith(_TMDB_IMG_BASE):
+            # The stored URL is dead (stale remoteUrl, moved host). Re-resolve via
+            # TMDB and heal the stored value so the next request skips the corpse.
+            retry_url = await self._tmdb_url(tmdb_id, heal=True)
+            if retry_url and retry_url != url:
+                content = await self._download(retry_url)
+        if content is None:
             return None
         self._dir.mkdir(parents=True, exist_ok=True)
         path = self.path_for(tmdb_id)

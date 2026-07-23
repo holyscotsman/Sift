@@ -51,7 +51,13 @@ def normalize_radarr_movie(raw: dict[str, Any]) -> dict[str, Any]:
     poster_url = None
     for image in raw.get("images", []) or []:
         if image.get("coverType") == "poster":
-            poster_url = image.get("remoteUrl") or image.get("url")
+            # Only an absolute URL is fetchable by the poster cache. Radarr's
+            # ``url`` is a Radarr-relative path (/MediaCover/…) — storing it broke
+            # thumbnails for titles without a remoteUrl; skip it and let the
+            # cache's TMDB-by-id fallback resolve artwork instead.
+            candidate = image.get("remoteUrl") or image.get("url")
+            if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
+                poster_url = candidate
             break
 
     quality = None
@@ -231,14 +237,23 @@ _ADULT_KEYWORDS = ("pornographic", "hardcore", "softcore", "adult film", "erotic
 
 
 def _us_theatrical(raw: dict[str, Any]) -> bool:
-    """True if TMDB lists a US theatrical (type 2/3) release date."""
+    """Theatrical-SCALE release, not merely a theater booking.
+
+    True when TMDB lists a US theatrical (type 2/3) release date, OR a major
+    studio is attached, OR the budget is studio-scale (≥ $20M). The owner's
+    rule: a big-studio film (Disney's Snow White, Amazon's War of the Worlds)
+    is kept even when it scored badly — people watch those *because* they're
+    bad. Junk stays aimed at low-budget/independent/non-theatrical fare."""
     for entry in ((raw.get("release_dates") or {}).get("results") or []):
         if entry.get("iso_3166_1") != "US":
             continue
         for rel in entry.get("release_dates", []) or []:
             if rel.get("type") in (2, 3):  # 2 = limited theatrical, 3 = theatrical
                 return True
-    return False
+    companies = [str(c.get("name", "")).lower() for c in (raw.get("production_companies") or [])]
+    if any(any(m in name for m in _MAJOR_STUDIOS) for name in companies):
+        return True
+    return (_int_or_none(raw.get("budget")) or 0) >= 20_000_000
 
 
 def _is_independent(raw: dict[str, Any]) -> bool:

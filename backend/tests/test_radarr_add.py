@@ -108,3 +108,68 @@ async def test_resolve_add_options_prefers_saved_defaults():
         "/data/movies",
         6,
     )
+
+
+def test_request_falls_back_to_staged_radarr_add_without_overseerr(client):
+    # No Overseerr configured + dry-run floor on → identical to the staged add path.
+    resp = client.post("/api/actions/request", json={"tmdb_id": 605, "title": "Reloaded"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "add" and body["dry_run"] is True
+    assert body["payload"]["result"]["sent"] is False
+
+
+def test_request_routes_through_overseerr_when_configured(settings, factory, monkeypatch):
+    from pydantic import SecretStr
+
+    from sift.api import routes_actions
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.actions.dry_run = False  # live writes enabled by the operator
+    settings.overseerr.base_url = "http://overseerr.test"
+    settings.overseerr.api_key = SecretStr("k")
+
+    calls: list[int] = []
+
+    class FakeOverseerr:
+        def __init__(self, config):
+            pass
+
+        async def request_movie(self, tmdb_id: int):
+            calls.append(tmdb_id)
+            return {"id": 42, "status": 1}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(routes_actions, "OverseerrClient", FakeOverseerr)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        body = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"}).json()
+    assert calls == [27205]  # the request went to Overseerr, not Radarr
+    assert body["status"] == "executed" and body["dry_run"] is False
+    assert body["payload"]["via"] == "overseerr"
+    assert body["payload"]["request_id"] == 42
+
+
+def test_request_stays_staged_under_dry_run_even_with_overseerr(settings, factory, monkeypatch):
+    # The dry-run floor beats Overseerr: nothing may leave Sift while staging is on.
+    from pydantic import SecretStr
+
+    from sift.api import routes_actions
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.overseerr.base_url = "http://overseerr.test"
+    settings.overseerr.api_key = SecretStr("k")
+
+    def explode(*a, **k):
+        raise AssertionError("Overseerr must not be contacted in dry-run")
+
+    monkeypatch.setattr(routes_actions, "OverseerrClient", explode)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        body = c.post("/api/actions/request", json={"tmdb_id": 605, "title": "Reloaded"}).json()
+    assert body["dry_run"] is True
+    assert body["payload"]["result"]["sent"] is False

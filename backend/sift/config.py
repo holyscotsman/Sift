@@ -86,6 +86,15 @@ class RadarrConfig(BaseModel):
     default_quality_profile_id: int | None = None
 
 
+class OverseerrConfig(BaseModel):
+    """Optional request front-door. When configured, add-requests go through
+    Overseerr (its own approval/quality pipeline) instead of straight to Radarr."""
+
+    enabled: bool = True
+    base_url: str | None = None
+    api_key: SecretStr | None = None
+
+
 class TautulliConfig(BaseModel):
     enabled: bool = True
     base_url: str | None = None
@@ -163,6 +172,7 @@ class Settings(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
     radarr: RadarrConfig = Field(default_factory=RadarrConfig)
+    overseerr: OverseerrConfig = Field(default_factory=OverseerrConfig)
     tautulli: TautulliConfig = Field(default_factory=TautulliConfig)
     tmdb: TmdbConfig = Field(default_factory=TmdbConfig)
     junk: JunkThresholds = Field(default_factory=JunkThresholds)
