@@ -324,3 +324,26 @@ def test_csv_export_matches_filters_and_requires_token(settings, factory):
         assert len(lines) == 2  # header + the single in-Plex row: filters respected
         assert '"Comma, ""Quoted"""' in lines[1]  # proper CSV escaping
         assert "2.00" in lines[1]  # bytes rendered as GB
+
+
+def test_decisions_backup_export(settings, factory):
+    from sift.db.models import MustHaveSuggestion
+
+    settings.server.api_token = SecretStr("tok")
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        with factory() as session:
+            session.add(Movie(tmdb_id=1, title="Protected Gem", in_plex=True, keep_override=True))
+            session.add(Movie(tmdb_id=2, title="Ordinary", in_plex=True))
+            session.add(MustHaveSuggestion(tmdb_id=500, title="Not For Me", status="dismissed"))
+            session.add(MustHaveSuggestion(tmdb_id=501, title="Still Pending", status="suggested"))
+            session.commit()
+        # Negative control: no token → refused.
+        assert c.get("/api/export/decisions.json").status_code == 401
+        body = c.get("/api/export/decisions.json", params={"token": "tok"}).json()
+        assert [k["tmdb_id"] for k in body["keep_overrides"]] == [1]
+        assert [d["tmdb_id"] for d in body["dismissed_musthaves"]] == [500]
+        assert "junk_cutoff" in body["thresholds"]
+        assert body["sift_version"]

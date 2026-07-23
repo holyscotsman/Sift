@@ -29,6 +29,8 @@ function fmtSize(bytes: number | null): string {
 
 export function Junk() {
   const [items, setItems] = useState<JunkCandidate[]>([]);
+  // Server-reported total; when it exceeds what we fetched, say so (no silent cap).
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
@@ -64,7 +66,10 @@ export function Junk() {
   useEffect(() => {
     api
       .junk()
-      .then((r) => setItems(r.items))
+      .then((r) => {
+        setItems(r.items);
+        setTotal(r.total);
+      })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
     // Learn whether the server will actually issue deletes or only stage them, so
@@ -250,7 +255,7 @@ export function Junk() {
         </div>
       ) : (
         <>
-          <div className="mb-2 flex items-center gap-1 text-xs">
+          <div className="mb-2 flex flex-wrap items-center gap-1 text-xs">
             <span className="mr-1 text-fg3">Sort by</span>
             {(["score", "size"] as const).map((k) => (
               <button
@@ -263,6 +268,16 @@ export function Junk() {
                 {k}
               </button>
             ))}
+            <button
+              onClick={() =>
+                setExpanded((s) =>
+                  s.size === items.length ? new Set() : new Set(items.map((c) => c.tmdb_id)),
+                )
+              }
+              className="ml-auto rounded-pill px-2.5 py-1 font-semibold text-fg2 hover:bg-bg2"
+            >
+              {expanded.size === items.length ? "Collapse all breakdowns" : "Show all breakdowns"}
+            </button>
           </div>
         <div className="panel divide-y divide-line">
           {sortedItems.map((c) => (
@@ -307,6 +322,27 @@ export function Junk() {
             />
           ))}
         </div>
+        {total > items.length && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-fg3">
+            Showing {items.length} of {total.toLocaleString()} flagged titles.
+            <button
+              onClick={() => {
+                setLoading(true);
+                api
+                  .junk(Math.min(total, 1000))
+                  .then((r) => {
+                    setItems(r.items);
+                    setTotal(r.total);
+                  })
+                  .catch(() => toastError("Couldn't load the full queue — try again."))
+                  .finally(() => setLoading(false));
+              }}
+              className="font-semibold text-accent hover:underline"
+            >
+              Load all
+            </button>
+          </p>
+        )}
         </>
       )}
 

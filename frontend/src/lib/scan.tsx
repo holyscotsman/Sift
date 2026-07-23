@@ -32,6 +32,8 @@ interface ScanCtx {
   scanning: boolean;
   pct: number;
   phaseStates: Record<string, PhaseState>;
+  // Latest streamed counts per phase (e.g. plex → {plex_items: 1234}).
+  phaseCounts: Record<string, Record<string, number>>;
   panelOpen: boolean;
   error: string | null;
   start: (opts?: { silent?: boolean }) => Promise<void>;
@@ -48,6 +50,7 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   const [scanning, setScanning] = useState(false);
   const [pct, setPct] = useState(0);
   const [phaseStates, setPhaseStates] = useState<Record<string, PhaseState>>(initialPhases);
+  const [phaseCounts, setPhaseCounts] = useState<Record<string, Record<string, number>>>({});
   const [panelOpen, setPanelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -105,6 +108,7 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
     setError(null);
     setPct(0);
     setPhaseStates(initialPhases());
+    setPhaseCounts({});
     setScanning(true);
     // Silent mode (wizard auto-scan): work in the background, no panel, no toasts —
     // the header pill still reflects progress for anyone who looks.
@@ -125,6 +129,9 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
             else if (evt.status === "done" || evt.status === "skipped") next[evt.phase] = "done";
             return next;
           });
+          if (evt.counts && Object.keys(evt.counts).length > 0) {
+            setPhaseCounts((prev) => ({ ...prev, [evt.phase]: evt.counts }));
+          }
           const done = evt.status === "done" || evt.status === "skipped";
           const p = Math.round(((evt.phase_index + (done ? 1 : 0.4)) / total) * 100);
           setPct((prev) => Math.min(100, Math.max(prev, p)));
@@ -144,6 +151,16 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
         try {
           const run = await api.scanGet(scan_run_id);
           const cps = run.checkpoints || {};
+          // Counts also arrive via checkpoints, so the panel stays informative
+          // even when the websocket is blocked.
+          setPhaseCounts((prev) => {
+            const next = { ...prev };
+            for (const ph of SCAN_PHASES) {
+              const counts = cps[ph.key]?.counts;
+              if (counts && Object.keys(counts).length > 0) next[ph.key] = counts;
+            }
+            return next;
+          });
           let done = 0;
           setPhaseStates((prev) => {
             const next = { ...prev };
@@ -175,8 +192,8 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
   }, [scanning, finish]);
 
   const value = useMemo<ScanCtx>(
-    () => ({ scanning, pct, phaseStates, panelOpen, error, start, setPanelOpen }),
-    [scanning, pct, phaseStates, panelOpen, error, start],
+    () => ({ scanning, pct, phaseStates, phaseCounts, panelOpen, error, start, setPanelOpen }),
+    [scanning, pct, phaseStates, phaseCounts, panelOpen, error, start],
   );
 
   return <ScanContext.Provider value={value}>{children}</ScanContext.Provider>;

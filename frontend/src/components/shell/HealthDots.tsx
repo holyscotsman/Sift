@@ -1,6 +1,8 @@
 // Connection-health dots for Plex / Radarr / Tautulli / TMDB / Model.
 // green=ok, amber=warn, red=offline, grey=not configured. Hover shows detail.
 
+import { Link } from "react-router-dom";
+
 import { useHealth } from "@/lib/hooks";
 import type { ServiceHealth } from "@/lib/types";
 
@@ -28,7 +30,14 @@ export function HealthDots() {
   const order = ["plex", "radarr", "tautulli", "tmdb", "model"];
 
   return (
-    <div className="flex items-center gap-1.5" role="group" aria-label="connection health">
+    // A red dot should lead to the fix, not just diagnose — the group opens
+    // Settings › Connections.
+    <Link
+      to="/settings"
+      title="Connection health — open Settings"
+      aria-label="Connection health — open settings"
+      className="flex items-center gap-1.5 rounded-pill px-1.5 py-1 hover:bg-bg2"
+    >
       {order.map((name) => {
         const s = byName.get(name);
         const title = s
@@ -46,6 +55,6 @@ export function HealthDots() {
           />
         );
       })}
-    </div>
+    </Link>
   );
 }
