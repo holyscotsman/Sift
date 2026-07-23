@@ -2,6 +2,17 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.3.0 — Optimization Cycle 03
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_03.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): auditable health score with named deductions,
+cached status queue counts with exact write-path invalidation, login
+brute-force guard (per-account 429 + Retry-After), mid-session sign-out on dead
+tokens, sortable table columns (+ Size column), junk reclaimable-disk totals,
+shared error toasts on failed mutations, snapshot freshness + stale hint,
+route-level code splitting (272 kB → 216 kB main bundle), and multi-select
+toolbar accessibility.
+
 ## 2607.2.0 — Optimization Cycle 02
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_02.md`, log:

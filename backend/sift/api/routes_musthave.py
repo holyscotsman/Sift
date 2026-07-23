@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import musthave
 from ..db.models import Movie, MustHaveSuggestion
-from .deps import AuthDep, get_session_factory, get_state
+from ..services.counts_cache import CountsCache
+from .deps import AuthDep, get_counts_cache, get_session_factory, get_state
 from .schemas import MustHaveListResponse, MustHaveOut, MustHaveRunResponse
 
 router = APIRouter(prefix="/api/musthave", tags=["musthave"], dependencies=[AuthDep])
@@ -24,6 +25,7 @@ async def run(
 ) -> MustHaveRunResponse:
     state = get_state(request)
     result = await musthave.run_musthave(state.session_factory, state.settings, limit=limit)
+    state.counts_cache.invalidate()  # new suggestions change the pending count
     return MustHaveRunResponse(
         added=result["added"], considered=result["considered"], provider=result["provider"]
     )
@@ -52,7 +54,9 @@ def list_suggestions(
 
 @router.post("/{suggestion_id}/dismiss", response_model=MustHaveOut)
 def dismiss(
-    suggestion_id: int, factory: sessionmaker[Session] = Depends(get_session_factory)
+    suggestion_id: int,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    counts_cache: CountsCache = Depends(get_counts_cache),
 ) -> MustHaveOut:
     with factory() as session:
         row = session.get(MustHaveSuggestion, suggestion_id)
@@ -60,4 +64,5 @@ def dismiss(
             raise HTTPException(status_code=404, detail="suggestion not found")
         row.status = "dismissed"
         session.commit()
+        counts_cache.invalidate()  # the pending count must drop on the next poll
         return MustHaveOut.model_validate(row)

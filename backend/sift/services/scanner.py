@@ -60,6 +60,8 @@ def launch_scan(app: Any, scan_run_id: int, *, resume: bool = False) -> None:
     def _done(t: asyncio.Task[None]) -> None:
         tasks.discard(t)
         active.discard(scan_run_id)
+        # A finished scan (however it ended) may have changed both status queues.
+        state.counts_cache.invalidate()
 
     task.add_done_callback(_done)
 

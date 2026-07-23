@@ -1,14 +1,29 @@
 // The persistent shell around every route: aurora backdrop, floating header +
-// top-nav, the scan panel, and the routed page content.
+// top-nav, the scan panel, and the routed page content. Pages are lazy chunks —
+// the Suspense boundary sits around the outlet so the shell never flashes away
+// while a chunk loads.
 
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 
 import { Aurora } from "@/components/Aurora";
 import { MovieDrawer } from "@/components/MovieDrawer";
+import { Skeleton } from "@/components/ui";
 
 import { Header } from "./Header";
 import { ScanPanel } from "./ScanPanel";
 import { TopNav } from "./TopNav";
+
+function PageFallback() {
+  return (
+    <div className="page-enter">
+      <Skeleton className="mb-4 h-8 w-48" />
+      <div className="panel p-6">
+        <Skeleton className="h-40" />
+      </div>
+    </div>
+  );
+}
 
 export function AppShell() {
   return (
@@ -18,7 +33,9 @@ export function AppShell() {
         <Header />
         <TopNav />
         <main className="pt-3">
-          <Outlet />
+          <Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <ScanPanel />

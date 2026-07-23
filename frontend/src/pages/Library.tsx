@@ -44,6 +44,9 @@ export function Library() {
     seeded && QUICK_ORDER.includes(seeded) ? seeded : "plex",
   );
   const [sort, setSort] = useState("title");
+  // null = the field's natural direction (title A→Z, everything else newest/biggest
+  // first). Clicking a table header on the active field flips it.
+  const [order, setOrder] = useState<"asc" | "desc" | null>(null);
   // A–Z rail jump (only meaningful when ordered by title). null = no letter filter.
   const [letter, setLetter] = useState<string | null>(null);
   const pageSize = view === "grid" ? 36 : 60;
@@ -60,10 +63,24 @@ export function Library() {
   // the accumulated list and reloads from page 1.
   // Letter jump only applies when sorted by title; ignore it otherwise.
   const activeLetter = sort === "title" ? letter : null;
+  const effectiveOrder: "asc" | "desc" = order ?? (sort === "title" ? "asc" : "desc");
+
+  // Header click: same field flips direction, a new field starts at its natural one.
+  const sortBy = useCallback(
+    (field: string) => {
+      if (field === sort) {
+        setOrder(effectiveOrder === "asc" ? "desc" : "asc");
+      } else {
+        setSort(field);
+        setOrder(null);
+      }
+    },
+    [sort, effectiveOrder],
+  );
 
   const filterKey = useMemo(
-    () => JSON.stringify({ q, quick, sort, pageSize, activeLetter }),
-    [q, quick, sort, pageSize, activeLetter],
+    () => JSON.stringify({ q, quick, sort, effectiveOrder, pageSize, activeLetter }),
+    [q, quick, sort, effectiveOrder, pageSize, activeLetter],
   );
 
   const buildQuery = useCallback(
@@ -77,11 +94,11 @@ export function Library() {
       cutoff_unmet: quick === "upgrades" ? true : undefined,
       starts_with: activeLetter ?? undefined,
       sort,
-      order: sort === "title" ? "asc" : "desc",
+      order: effectiveOrder,
       page,
       page_size: pageSize,
     }),
-    [q, quick, sort, pageSize, activeLetter],
+    [q, quick, sort, effectiveOrder, pageSize, activeLetter],
   );
 
   const fetchPage = useCallback(
@@ -182,7 +199,10 @@ export function Library() {
           <label className="text-fg3">Sort</label>
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value)}
+            onChange={(e) => {
+              setSort(e.target.value);
+              setOrder(null);
+            }}
             className="rounded-md border border-line bg-panel px-2 py-1 text-sm text-fg"
           >
             <option value="title">Title</option>
@@ -234,7 +254,7 @@ export function Library() {
           ))}
         </div>
       ) : (
-        <TableView items={items} />
+        <TableView items={items} sort={sort} order={effectiveOrder} onSort={sortBy} />
       )}
 
       {/* A–Z rail: jump straight to a letter when ordered by title. Portaled to
@@ -328,17 +348,80 @@ function GridTile({ movie }: { movie: Movie }) {
   );
 }
 
-function TableView({ items }: { items: Movie[] }) {
+function SortableTh({
+  field,
+  sort,
+  order,
+  onSort,
+  children,
+  className = "",
+}: {
+  field: string;
+  sort: string;
+  order: "asc" | "desc";
+  onSort: (field: string) => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const active = sort === field;
+  return (
+    <th
+      className={`py-3 font-semibold ${className}`}
+      aria-sort={active ? (order === "asc" ? "ascending" : "descending") : undefined}
+    >
+      <button
+        onClick={() => onSort(field)}
+        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-fg ${
+          active ? "text-accent" : ""
+        }`}
+      >
+        {children}
+        {active && <span aria-hidden>{order === "asc" ? "↑" : "↓"}</span>}
+      </button>
+    </th>
+  );
+}
+
+function TableView({
+  items,
+  sort,
+  order,
+  onSort,
+}: {
+  items: Movie[];
+  sort: string;
+  order: "asc" | "desc";
+  onSort: (field: string) => void;
+}) {
   const { open } = useDrawer();
   return (
     <div className="panel overflow-x-auto">
       <table className="movie-table w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg3">
-            <th className="px-4 py-3 font-semibold">Title</th>
-            <th className="hidden px-3 py-3 font-semibold md:table-cell">Year</th>
+            <SortableTh field="title" sort={sort} order={order} onSort={onSort} className="px-4">
+              Title
+            </SortableTh>
+            <SortableTh
+              field="year"
+              sort={sort}
+              order={order}
+              onSort={onSort}
+              className="hidden px-3 md:table-cell"
+            >
+              Year
+            </SortableTh>
             <th className="px-3 py-3 font-semibold">Library</th>
             <th className="hidden px-3 py-3 font-semibold md:table-cell">Quality</th>
+            <SortableTh
+              field="file_size"
+              sort={sort}
+              order={order}
+              onSort={onSort}
+              className="hidden px-3 md:table-cell"
+            >
+              Size
+            </SortableTh>
             <th className="px-3 py-3 font-semibold">In Plex</th>
             <th className="hidden px-3 py-3 font-semibold md:table-cell">Monitored</th>
           </tr>
@@ -365,6 +448,9 @@ function TableView({ items }: { items: Movie[] }) {
                     </Pill>
                   )}
                 </span>
+              </td>
+              <td className="hidden px-3 text-fg2 md:table-cell">
+                {m.file_size ? `${(m.file_size / 1e9).toFixed(1)} GB` : "—"}
               </td>
               <td className="px-3">
                 {m.in_plex ? <Pill tone="keep">Yes</Pill> : <span className="text-fg3">—</span>}

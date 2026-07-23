@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { CheckIcon, SparkleIcon } from "@/components/icons";
+import { useToast } from "@/components/Toast";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { CollectionGap, MissingList, MustHaveItem, RecommendedMovie } from "@/lib/types";
@@ -189,6 +190,7 @@ function MustHaveSection() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const toastError = useToast();
 
   async function refresh() {
     try {
@@ -232,6 +234,7 @@ function MustHaveSection() {
       await api.mustHaveDismiss(item.id);
     } catch {
       setItems(snapshot);
+      toastError(`Couldn't dismiss “${item.title}” — it's back in the list.`);
     }
   }
 

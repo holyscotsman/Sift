@@ -7,6 +7,65 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.3.0 — Cycle 03
+
+**Plan:** `docs/optimization/CYCLE_03.md` (10/10 approved after change review, 5 amended).
+
+1. **Auditable library health** — the placeholder score is gone. Health now starts
+   at 100 and subtracts *named* deductions (junk backlog and quality-cutoff share
+   scaled to the library, small fixed hits for missing integrations), each shown
+   under the orb. Deterministic; no AI involvement.
+2. **Status polls stopped re-scoring the library** — the queue counts behind
+   `/api/status` (polled every 8 s) are cached in-process (30 s TTL as a backstop)
+   and explicitly invalidated on keep-overrides, threshold saves, must-have
+   runs/dismissals, and scan completion — a Keep click still drops the count on
+   the very next poll (test-pinned).
+3. **Login brute-force guard** — >5 failed attempts on an account within 60 s →
+   429 with `Retry-After`; keyed by username (not IP — proxies collapse those),
+   cleared by a successful sign-in. Live-verified: 401×5 → 429, other accounts
+   unaffected.
+4. **Mid-session sign-out** — a dead token now drops the app to the login screen
+   (the API client clears it and signals the auth gate) instead of leaving every
+   page silently broken. Login endpoints excluded, so a wrong password can't loop.
+5. **Table-view column sorting** — Title/Year/Size headers sort (click to flip),
+   with `aria-sort` and a direction arrow, synced with the sort dropdown; the
+   table also gained a Size column.
+6. **What pruning is worth** — the Junk header shows the flagged queue's total
+   reclaimable disk ("~184 GB reclaimable"); the selection bar shows the size of
+   the current selection.
+7. **Errors you can see** — a shared one-at-a-time error toast; failed Keep saves
+   now roll the row back and say so, failed removals/dismissals/weight-saves
+   report instead of failing silently. Errors only — success stays visible as
+   state change.
+8. **Snapshot freshness** — the Dashboard subhead says when the data was last
+   refreshed and flags a stale snapshot once it outlives 2× the rescan interval.
+9. **Route-level code splitting** — each page is a lazy chunk behind a Suspense
+   boundary *inside* the shell (nav never flashes away); the main bundle dropped
+   272 kB → 216 kB.
+10. **Multi-select accessibility** — the Junk action bar is a labeled toolbar
+    with a polite live region for the selection count (row checkboxes already
+    carried accessible names).
+
+**QA:** 161 backend tests green (3 new — rate-limit trip incl. right-password
+lockout + per-account isolation + success reset, cache invalidation via keep and
+dismiss writes). ruff + bandit ruleset + mypy strict clean; tsc + build clean
+(9 lazy chunks); npm audit clean. Live seeded-server sweep verified the limiter
+(401×5 → 429 with Retry-After 60), cache invalidation end-to-end in both
+directions, and screenshots verified health deductions, freshness, table
+sorting, and junk totals.
+
+**Security review:** rate limiter fails closed per-account and cannot lock out a
+legitimate owner permanently (60 s window, success clears); 401 handling never
+fires on auth endpoints (no redirect loops); cache holds only two integers (no
+user data); no new endpoints; headers/gzip posture unchanged.
+
+**Bug review:** cycle diff re-read line-by-line; issues caught and fixed
+pre-merge: Suspense originally wrapped the whole router (shell flashed away on
+chunk loads — moved inside the shell); Toast import/mount mismatch; removal loop
+had no failure surface (errors now toast and leave remaining rows undecided).
+
+---
+
 ## 2607.2.0 — Cycle 02
 
 **Plan:** `docs/optimization/CYCLE_02.md` (10/10 approved after change review, 4 amended).

@@ -234,6 +234,29 @@ def test_status_actionable_queue_counts(client):
     assert counts["musthave_pending"] == 1
 
 
+def test_queue_counts_cached_but_invalidated_on_writes(client):
+    # The queue counts are cached (30 s TTL) so /api/status polls don't re-score
+    # the library — but a keep-override or dismissal must show on the NEXT poll,
+    # proving the write paths invalidate rather than waiting out the TTL.
+    from sift.db.models import MustHaveSuggestion, Score
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="Junky", in_plex=True))
+        session.add(Score(movie_id=1, junk_score=99.0))
+        session.add(MustHaveSuggestion(tmdb_id=500, title="Missing gem", status="suggested"))
+        session.commit()
+    counts = c.get("/api/status").json()["counts"]
+    assert counts["junk_flagged"] == 1 and counts["musthave_pending"] == 1
+
+    c.post("/api/movies/1/keep", json={"keep": True})
+    assert c.get("/api/status").json()["counts"]["junk_flagged"] == 0
+
+    suggestion_id = c.get("/api/musthave").json()["items"][0]["id"]
+    c.post(f"/api/musthave/{suggestion_id}/dismiss")
+    assert c.get("/api/status").json()["counts"]["musthave_pending"] == 0
+
+
 def test_movie_list_reports_filtered_total_size(client):
     from sift.db.models import Movie
 

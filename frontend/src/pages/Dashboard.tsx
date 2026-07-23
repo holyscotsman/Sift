@@ -11,14 +11,44 @@ import { EmptyState, Pill, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useActivity, useHealth, useStatus } from "@/lib/hooks";
 import { useScan } from "@/lib/scan";
+import { hoursSince, relativeTime } from "@/lib/time";
 import type { Counts, SettingsResponse } from "@/lib/types";
 
-function healthScore(c: Counts | undefined): number {
-  if (!c || c.movies === 0) return 0;
-  // Placeholder health: share of the catalog that is owned & not pending review.
-  const owned = c.owned / c.movies;
-  const clean = 1 - Math.min(1, c.actions_pending / Math.max(c.movies, 1));
-  return Math.round((owned * 0.6 + clean * 0.4) * 100);
+interface Deduction {
+  label: string;
+  points: number;
+}
+
+// Deterministic, auditable health: start at 100 and subtract named deductions —
+// junk backlog and quality-cutoff share (scaled to the library), plus a small
+// fixed hit per missing integration. Every point lost is shown under the orb.
+function healthBreakdown(
+  c: Counts | undefined,
+  s: SettingsResponse | null,
+): { score: number; deductions: Deduction[] } {
+  if (!c || c.owned === 0) return { score: 0, deductions: [] };
+  const deductions: Deduction[] = [];
+  const junkPts = Math.min(40, Math.round((c.junk_flagged / c.owned) * 80));
+  if (junkPts > 0)
+    deductions.push({
+      label: `${c.junk_flagged} junk candidate${c.junk_flagged === 1 ? "" : "s"}`,
+      points: junkPts,
+    });
+  const upgradePts = Math.min(20, Math.round((c.upgrades / c.owned) * 40));
+  if (upgradePts > 0)
+    deductions.push({
+      label: `${c.upgrades} below quality cutoff`,
+      points: upgradePts,
+    });
+  const unconfigured = (svc: string) => {
+    const conn = s?.connections.find((x) => x.service === svc);
+    return conn ? !conn.ok && ["disabled", "not configured"].includes(conn.detail) : false;
+  };
+  if (unconfigured("tmdb")) deductions.push({ label: "TMDB not connected", points: 5 });
+  if (unconfigured("tautulli")) deductions.push({ label: "Tautulli not connected", points: 5 });
+  if (s && !s.ai_configured) deductions.push({ label: "No AI provider", points: 5 });
+  const score = Math.max(0, 100 - deductions.reduce((sum, d) => sum + d.points, 0));
+  return { score, deductions };
 }
 
 function Segment({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -111,11 +141,17 @@ export function Dashboard() {
     };
   }, []);
 
-  const score = healthScore(c);
+  const { score, deductions } = healthBreakdown(c, settings);
   const band = score >= 80 ? "Excellent" : score >= 55 ? "Good" : score > 0 ? "Needs work" : "No data";
   const missing = c ? Math.max(0, c.monitored - c.owned) : 0;
   const pending = activity?.filter((a) => a.status === "proposed") ?? [];
   const attention = buildAttention(c, settings);
+
+  // Snapshot freshness: how old the data on this screen is, and a stale hint when
+  // it has outlived twice the configured rescan interval.
+  const finished = status?.last_scan_finished_at ?? null;
+  const interval = settings?.scan_interval_hours ?? 0;
+  const stale = finished != null && interval > 0 && hoursSince(finished) > interval * 2;
 
   return (
     <div className="page-enter">
@@ -130,6 +166,15 @@ export function Dashboard() {
               : c && c.movies > 0
                 ? `${c.movies.toLocaleString()} titles in the snapshot · ${online}/${total} sources online`
                 : "No snapshot yet — run a scan to build one."}
+            {!loading && finished && (
+              <span className="text-fg3" title={new Date(finished).toLocaleString()}>
+                {" "}
+                · refreshed {relativeTime(finished)}
+                {stale && (
+                  <span style={{ color: "var(--borderline)" }}> · snapshot may be stale</span>
+                )}
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -145,12 +190,26 @@ export function Dashboard() {
                 <span className="font-display text-xl font-extrabold">{band} standing</span>
                 <Pill tone={score >= 55 ? "keep" : "borderline"}>{band}</Pill>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
-                <Factor label="In Plex" value={c?.owned ?? 0} dot="var(--keep)" />
-                <Factor label="Indexed" value={c?.movies ?? 0} dot="var(--accent)" />
-                <Factor label="Monitored" value={c?.monitored ?? 0} dot="var(--borderline)" />
-                <Factor label="Collections" value={c?.collections ?? 0} dot="var(--accent2)" />
-              </div>
+              {/* The score is auditable: every point lost is named here. */}
+              {score > 0 && deductions.length === 0 ? (
+                <p className="mt-3 text-[13px] text-fg3">
+                  No deductions — nothing flagged, nothing missing.
+                </p>
+              ) : (
+                <div className="mt-3 flex flex-col gap-1 text-[13px]">
+                  {deductions.slice(0, 4).map((d) => (
+                    <div key={d.label} className="flex items-center gap-2">
+                      <span className="font-mono font-semibold" style={{ color: "var(--borderline)" }}>
+                        −{d.points}
+                      </span>
+                      <span className="text-fg3">{d.label}</span>
+                    </div>
+                  ))}
+                  {score === 0 && deductions.length === 0 && (
+                    <span className="text-fg3">Run a scan to measure library health.</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </Segment>
@@ -247,15 +306,6 @@ export function Dashboard() {
   );
 }
 
-function Factor({ label, value, dot }: { label: string; value: number; dot: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="h-2 w-2 rounded-pill" style={{ background: dot }} />
-      <span className="text-fg3">{label}</span>
-      <span className="ml-auto font-semibold text-fg">{value.toLocaleString()}</span>
-    </div>
-  );
-}
 function Bar({ value, total, color }: { value: number; total: number; color: string }) {
   return <div style={{ width: `${(value / total) * 100}%`, background: color }} />;
 }

@@ -47,6 +47,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     void check();
   }, [check]);
 
+  // Mid-session token death (secret rotation, DB reset): the API client clears
+  // the token and fires this event — drop to the login screen instead of letting
+  // every page fail silently.
+  useEffect(() => {
+    const onUnauthorized = () => setPhase("login");
+    window.addEventListener("sift:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("sift:unauthorized", onUnauthorized);
+  }, []);
+
   async function login(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) return;
@@ -61,7 +70,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       setError(
         err instanceof ApiError && err.status === 401
           ? "Wrong username or password."
-          : "Couldn't reach Sift.",
+          : err instanceof ApiError && err.status === 429
+            ? "Too many failed attempts — wait a minute and try again."
+            : "Couldn't reach Sift.",
       );
     } finally {
       setBusy(false);
