@@ -2,6 +2,16 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.7.0 — Optimization Cycle 07
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_07.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): live per-phase scan counts in the panel, poster
+fallbacks labeled with the title's initial, a decisions backup download
+(keep-overrides + dismissals + thresholds), a vendor chunk (app bundle 222 kB →
+59 kB), junk cap disclosure with bounded Load-all, expand-all signal
+breakdowns, folding curated lists, cancellable Ask requests, health dots
+linking to Settings, and accessible gauge labels.
+
 ## 2607.6.0 — Optimization Cycle 06
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_06.md`, log:

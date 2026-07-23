@@ -358,7 +358,7 @@ const GridTile = memo(function GridTile({ movie }: { movie: Movie }) {
   return (
     <button className="group text-left" onClick={() => open(movie.tmdb_id)}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-        <Poster tmdbId={movie.tmdb_id} alt="" className="h-full w-full" />
+        <Poster tmdbId={movie.tmdb_id} alt="" label={movie.title} className="h-full w-full" />
         {movie.quality && (
           <span className="absolute left-1.5 top-1.5 rounded-sm bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
             {movie.quality}

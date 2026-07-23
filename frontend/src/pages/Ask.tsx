@@ -58,6 +58,7 @@ export function Ask() {
   const { open: openDrawer } = useDrawer();
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,8 +87,14 @@ export function Ask() {
     setInput("");
     setThread((t) => [...t, { role: "user", text: query }]);
     setThinking(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res: AskResponse = await api.ask(query, compare ? "compare" : "single");
+      const res: AskResponse = await api.ask(
+        query,
+        compare ? "compare" : "single",
+        controller.signal,
+      );
       setThread((t) => [
         ...t,
         {
@@ -101,21 +108,29 @@ export function Ask() {
           alternate: res.alternate,
         },
       ]);
-    } catch {
-      setThread((t) => [
-        ...t,
-        {
-          role: "assistant",
-          answer: "Sorry — I couldn't reach the server for that.",
-          provider: "error",
-          model: "",
-          latency: 0,
-          aiConfigured: false,
-          sources: [],
-          alternate: null,
-        },
-      ]);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // The user cancelled: drop their pending bubble and give the question
+        // back to the input, ready to edit or resend.
+        setThread((t) => t.slice(0, -1));
+        setInput(query);
+      } else {
+        setThread((t) => [
+          ...t,
+          {
+            role: "assistant",
+            answer: "Sorry — I couldn't reach the server for that.",
+            provider: "error",
+            model: "",
+            latency: 0,
+            aiConfigured: false,
+            sources: [],
+            alternate: null,
+          },
+        ]);
+      }
     } finally {
+      abortRef.current = null;
       setThinking(false);
       // Follow-ups shouldn't need a click — the conversation stays in the keyboard.
       inputRef.current?.focus();
@@ -222,11 +237,17 @@ export function Ask() {
           )}
           {thinking && (
             <div className="max-w-[85%]">
-              <div className="panel px-4 py-3 text-sm text-fg3">
+              <div className="panel flex items-center gap-3 px-4 py-3 text-sm text-fg3">
                 <span className="inline-flex items-center gap-1">
                   Thinking
                   <span style={{ animation: "sift-pulse 1s infinite" }}>…</span>
                 </span>
+                <button
+                  onClick={() => abortRef.current?.abort()}
+                  className="rounded-pill border border-line px-2.5 py-1 text-xs font-semibold text-fg2 hover:bg-bg2"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}

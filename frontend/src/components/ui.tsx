@@ -12,21 +12,36 @@ export function posterGradient(id: number): string {
 }
 
 // A poster image resolved through the server cache, with a graceful gradient
-// fallback when no artwork exists. Memoized — props are primitives, and long
-// grids re-render their parents on every infinite-scroll append.
+// fallback when no artwork exists — labeled with the title's initial when the
+// caller provides one, so a wall of fallbacks is still navigable. Memoized —
+// props are primitives, and long grids re-render their parents on every
+// infinite-scroll append.
 export const Poster = memo(function Poster({
   tmdbId,
   alt = "",
+  label,
   className = "",
 }: {
   tmdbId: number;
   alt?: string;
+  label?: string;
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [tmdbId]);
   if (failed) {
-    return <div className={className} style={{ background: posterGradient(tmdbId) }} aria-hidden />;
+    const initial = label?.trim().charAt(0).toUpperCase();
+    return (
+      <div
+        className={`${className} grid place-items-center`}
+        style={{ background: posterGradient(tmdbId) }}
+        aria-hidden
+      >
+        {initial && (
+          <span className="font-display text-2xl font-extrabold text-white/60">{initial}</span>
+        )}
+      </div>
+    );
   }
   return (
     <img
@@ -103,7 +118,13 @@ export function RingGauge({
   const pct = max > 0 ? Math.min(1, value / max) : 0;
   return (
     <div className="flex flex-col items-center gap-1">
-      <svg width={size} height={size} className="-rotate-90">
+      <svg
+        width={size}
+        height={size}
+        className="-rotate-90"
+        role="img"
+        aria-label={caption ? `${caption}: ${value} of ${max}` : `${value} of ${max}`}
+      >
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-3)" strokeWidth={stroke} />
         <circle
           cx={size / 2}

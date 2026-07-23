@@ -7,7 +7,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { ConnectionsForm } from "@/components/ConnectionsForm";
 import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
-import { api, setToken } from "@/lib/api";
+import { api, getToken, setToken } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 import type {
   Connections as ConnConfig,
@@ -544,8 +544,28 @@ function StorageSection() {
       <p className="mt-2 text-xs text-fg3">
         Clearing never touches your library data — posters re-download as they're viewed.
       </p>
+      <div className="mt-4 border-t border-line pt-3">
+        <a
+          href={decisionsBackupHref()}
+          download
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+        >
+          Download decisions backup
+        </a>
+        <p className="mt-2 text-xs text-fg3">
+          Your keep-overrides, dismissed must-haves, and tuned thresholds as JSON — the judgment
+          worth saving before a redeploy on ephemeral storage.
+        </p>
+      </div>
     </Section>
   );
+}
+
+// A download link can't send auth headers — token rides the query string, same
+// as the poster and CSV routes.
+function decisionsBackupHref(): string {
+  const token = getToken();
+  return `/api/export/decisions.json${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 }
 
 const SLIDERS: { key: keyof Thresholds; label: string; min: number; max: number; step: number }[] = [

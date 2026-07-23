@@ -124,6 +124,7 @@ export function GlobalSearch() {
               >
                 <Poster
                   tmdbId={m.tmdb_id}
+                  label={m.title}
                   className="h-8 w-6 shrink-0 overflow-hidden rounded-sm"
                 />
                 <span className="truncate text-sm text-fg">{m.title}</span>

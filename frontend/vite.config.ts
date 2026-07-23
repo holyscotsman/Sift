@@ -23,5 +23,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Framework bytes change only on dependency bumps — a separate vendor
+        // chunk stays cached across app deploys.
+        manualChunks: {
+          vendor: ["react", "react-dom", "react-router-dom"],
+        },
+      },
+    },
   },
 });

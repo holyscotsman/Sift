@@ -5,8 +5,18 @@ import { CheckIcon } from "@/components/icons";
 import { useMotionAllowed } from "@/lib/prefs";
 import { SCAN_PHASES, useScan } from "@/lib/scan";
 
+// "plex_items 1234 · collections 12" — the phase's latest streamed counts.
+function fmtCounts(counts: Record<string, number> | undefined): string | null {
+  if (!counts) return null;
+  const parts = Object.entries(counts).map(
+    ([k, v]) => `${k.replace(/_/g, " ")} ${v.toLocaleString()}`,
+  );
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export function ScanPanel() {
-  const { panelOpen, scanning, pct, phaseStates, error, setPanelOpen, start } = useScan();
+  const { panelOpen, scanning, pct, phaseStates, phaseCounts, error, setPanelOpen, start } =
+    useScan();
   const motion = useMotionAllowed();
   if (!panelOpen) return null;
 
@@ -70,10 +80,11 @@ export function ScanPanel() {
       <ul className="flex flex-col gap-1.5">
         {SCAN_PHASES.map((p) => {
           const st = phaseStates[p.key];
+          const counts = st !== "idle" ? fmtCounts(phaseCounts[p.key]) : null;
           return (
             <li key={p.key} className="flex items-center gap-2.5 text-[13px]">
               <span
-                className="grid h-4 w-4 place-items-center rounded-full"
+                className="grid h-4 w-4 shrink-0 place-items-center rounded-full"
                 style={{
                   background:
                     st === "done" ? "var(--keep)" : st === "active" ? "var(--accent)" : "var(--bg-3)",
@@ -84,7 +95,10 @@ export function ScanPanel() {
               >
                 {st === "done" && <CheckIcon size={11} className="text-[color:var(--accent-fg)]" />}
               </span>
-              <span className={st === "idle" ? "text-fg3" : "text-fg"}>{p.label}</span>
+              <span className={`truncate ${st === "idle" ? "text-fg3" : "text-fg"}`}>
+                {p.label}
+                {counts && <span className="text-fg3"> · {counts}</span>}
+              </span>
             </li>
           );
         })}

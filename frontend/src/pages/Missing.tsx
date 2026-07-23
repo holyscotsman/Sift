@@ -40,7 +40,7 @@ function PosterCard({
         title={`${subtitle ? `${subtitle} — ` : ""}view on TMDB`}
       >
         <div className="relative aspect-[2/3] overflow-hidden rounded-md">
-          <Poster tmdbId={tmdbId} alt="" className="h-full w-full opacity-90" />
+          <Poster tmdbId={tmdbId} alt="" label={title} className="h-full w-full opacity-90" />
           {voteAverage != null && voteAverage > 0 && (
             <span className="absolute right-1 top-1 rounded-sm bg-black/60 px-1 text-[10px] font-semibold text-white backdrop-blur">
               {voteAverage.toFixed(1)}
@@ -414,8 +414,12 @@ function RecommendationsSection() {
   );
 }
 
+const LIST_FOLD = 12;
+
 function ListSection({ list }: { list: MissingList }) {
+  const [showAll, setShowAll] = useState(false);
   if (list.items.length === 0) return null;
+  const visible = showAll ? list.items : list.items.slice(0, LIST_FOLD);
   return (
     <section>
       <div className="mb-2 flex items-center gap-2">
@@ -424,10 +428,18 @@ function ListSection({ list }: { list: MissingList }) {
       </div>
       <div className="panel p-4">
         <div className="flex flex-wrap gap-3">
-          {list.items.map((m) => (
+          {visible.map((m) => (
             <PosterCard key={m.tmdb_id} tmdbId={m.tmdb_id} title={m.title} year={m.year} />
           ))}
         </div>
+        {list.items.length > LIST_FOLD && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            {showAll ? "Show fewer" : `Show all (${list.items.length})`}
+          </button>
+        )}
         <p className="mt-3 text-xs text-fg3">
           Starter list, pending human review — expand or correct it anytime.
         </p>

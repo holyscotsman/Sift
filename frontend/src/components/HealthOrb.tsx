@@ -9,6 +9,8 @@ export function HealthOrb({ score, size = 96 }: { score: number; size?: number }
   return (
     <div
       className="relative grid shrink-0 place-items-center rounded-full"
+      role="img"
+      aria-label={`Library health ${score} of 100`}
       style={{
         width: size,
         height: size,

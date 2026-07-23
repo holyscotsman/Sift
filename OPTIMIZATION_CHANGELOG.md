@@ -7,6 +7,56 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.7.0 — Cycle 07
+
+**Plan:** `docs/optimization/CYCLE_07.md` (10/10 approved after change review, 4 amended).
+
+1. **The scan panel shows what it's counting** — the streamed per-phase counts
+   ("Reading Plex catalog · plex items 1,234") render inline on active/done
+   phases; the polling fallback carries them too, so a blocked websocket loses
+   nothing.
+2. **Poster fallbacks say which film they are** — the gradient placeholder
+   shows the title's initial; grids, search rows, and Missing cards pass it.
+3. **Decisions backup** — `GET /api/export/decisions.json` downloads
+   keep-overrides, dismissed must-haves, and tuned thresholds (with titles, so
+   the file reads as a document), token-in-query like the CSV. Settings ›
+   Storage gains the button. Export only — restore is a write surface for a
+   future reviewed cycle.
+4. **Vendor chunk** — React/router split into an immutable `vendor` chunk;
+   the app chunk dropped 222 kB → 59 kB, so app deploys no longer invalidate
+   framework bytes.
+5. **Junk discloses its cap** — "Showing 200 of N flagged titles" with a
+   bounded "Load all" (≤1000) when the fetch cap bit; no more silent
+   truncation.
+6. **Expand all breakdowns** — one toggle audits every candidate's signals.
+7. **Long curated lists fold** — first 12 with "Show all (N)".
+8. **Ask can be cancelled** — the thinking bubble gains Cancel (AbortController
+   through the API client); cancelling drops the pending bubble and returns
+   the question to the input.
+9. **Health dots lead to the fix** — the header dot group opens Settings.
+10. **Gauges get accessible names** — `role="img"` + labels on RingGauge and
+    HealthOrb.
+
+**QA:** 169 backend tests green (1 new — decisions export incl. 401-without-token
+negative control, keep/dismissed filtering, thresholds presence). ruff + bandit
+ruleset + mypy strict clean; tsc + build + npm audit clean; vendor split
+verified in build output. Live seeded-server: decisions export verified (401
+without token, correct payload shape); screenshots verified the junk toolbar
+(sort + expand-all with breakdowns open) and the Settings backup button.
+
+**Security review:** the new export uses the same explicit token auth as the
+CSV (pinned 401 without it) and contains only the owner's own decisions — no
+secrets, no connection details; no new write surfaces (import deliberately
+deferred); abort handling cannot leave orphaned UI state (finally clears the
+controller).
+
+**Bug review:** cycle diff re-read line-by-line; caught pre-merge: the poll
+fallback needed to populate phase counts too (websocket-only would go blank
+behind proxies); the expand-all toggle had to compare against `items`, not
+`pending`, so decided rows don't strand the button in the wrong state.
+
+---
+
 ## 2607.6.0 — Cycle 06
 
 **Plan:** `docs/optimization/CYCLE_06.md` (10/10 approved after change review, 4 amended).
