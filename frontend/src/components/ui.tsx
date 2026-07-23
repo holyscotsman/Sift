@@ -32,6 +32,7 @@ export function Poster({
       src={posterUrl(tmdbId)}
       alt={alt}
       loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
       className={`${className} object-cover`}
     />
@@ -150,11 +151,22 @@ export function Skeleton({ className = "" }: { className?: string }) {
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: ReactNode }) {
+export function EmptyState({
+  title,
+  hint,
+  action,
+}: {
+  title: string;
+  hint?: ReactNode;
+  // Optional way forward — a button/link rendered under the hint so an empty
+  // screen always offers the next step, not just a description of the void.
+  action?: ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
       <p className="font-display text-lg font-bold text-fg2">{title}</p>
       {hint && <p className="text-sm text-fg3">{hint}</p>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

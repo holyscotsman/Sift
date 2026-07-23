@@ -187,6 +187,53 @@ def test_settings_reports_dry_run(client):
     assert c.get("/api/settings").json()["actions_dry_run"] is True
 
 
+def test_security_headers_on_every_response(client):
+    c, _ = client
+    headers = c.get("/api/version").headers
+    assert headers["X-Content-Type-Options"] == "nosniff"
+    assert headers["X-Frame-Options"] == "DENY"
+    assert headers["Referrer-Policy"] == "same-origin"
+    # Negative control: CSP is deliberately deferred (inline-styled SPA) — pin its
+    # absence so adding one later is a conscious decision, not middleware drift.
+    assert "Content-Security-Policy" not in headers
+
+
+def test_gzip_only_for_large_responses(client):
+    c, factory = client
+    with factory() as session:
+        for i in range(60):
+            title = f"A film with a longish title number {i}"
+            session.add(Movie(tmdb_id=1000 + i, title=title, in_plex=True))
+        session.commit()
+    big = c.get("/api/movies", headers={"Accept-Encoding": "gzip"})
+    assert big.headers.get("content-encoding") == "gzip"
+    # Negative control: tiny payloads stay uncompressed (below minimum_size).
+    small = c.get("/api/version", headers={"Accept-Encoding": "gzip"})
+    assert small.headers.get("content-encoding") != "gzip"
+
+
+def test_status_actionable_queue_counts(client):
+    from sift.db.models import MustHaveSuggestion, Score
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="Junky", in_plex=True))
+        # Negative control: same score but the owner said Keep — never counted.
+        session.add(Movie(tmdb_id=2, title="Kept junk", in_plex=True, keep_override=True))
+        session.add(Movie(tmdb_id=3, title="Clean", in_plex=True))
+        session.add(Score(movie_id=1, junk_score=99.0))
+        session.add(Score(movie_id=2, junk_score=99.0))
+        session.add(Score(movie_id=3, junk_score=0.0))
+        session.add(MustHaveSuggestion(tmdb_id=500, title="Missing gem", status="suggested"))
+        # Negative controls: dismissed, and suggested-but-meanwhile-owned.
+        session.add(MustHaveSuggestion(tmdb_id=501, title="Dismissed", status="dismissed"))
+        session.add(MustHaveSuggestion(tmdb_id=3, title="Clean", status="suggested"))
+        session.commit()
+    counts = c.get("/api/status").json()["counts"]
+    assert counts["junk_flagged"] == 1
+    assert counts["musthave_pending"] == 1
+
+
 def test_movie_list_reports_filtered_total_size(client):
     from sift.db.models import Movie
 

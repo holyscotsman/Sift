@@ -1,6 +1,6 @@
 // Taste Profile — aggregated breakdown of the library (genres/keywords/people/eras)
-// plus editable emphasis weights. Weights persist and will steer recommendations
-// once the embeddings layer lands.
+// plus editable emphasis weights. The genre and era weights steer the
+// Recommended-for-you ranking (bounded reorder — they never gate a title out).
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -135,7 +135,8 @@ export function TasteProfile() {
         <div className="lg:sticky lg:top-4 lg:self-start">
           <Card title="Emphasis">
             <p className="mb-3 text-sm text-fg2">
-              You favor <span className="font-semibold text-accent">{favors}</span>.
+              You favor <span className="font-semibold text-accent">{favors}</span>. Genre and
+              era emphasis reorder the Missing page&rsquo;s recommendations.
             </p>
             <div className="flex flex-col gap-3">
               {WEIGHT_LABELS.map((w) => (

@@ -50,9 +50,60 @@ class Candidate:
     year: int | None
     vote_average: float
     poster_path: str | None
+    genre_ids: tuple[int, ...] = ()
     score: float = 0.0
     # (anchor_title, contribution) — used to explain *why* this was surfaced.
     sources: list[tuple[str, float]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Taste:
+    """The library's dominant genres/eras + the owner's emphasis sliders. Only ever
+    *reorders* candidates (bounded ≤1.5×); with sliders at zero the multiplier is
+    exactly 1, reproducing the unweighted ordering."""
+
+    top_genres: frozenset[str]
+    top_eras: frozenset[str]
+    genre_weight: float
+    era_weight: float
+
+    def multiplier(self, cand: Candidate) -> float:
+        boost = 0.0
+        if self.top_genres and cand.genre_ids:
+            from ..data.tmdb_genres import TMDB_GENRES
+
+            names = {TMDB_GENRES.get(g) for g in cand.genre_ids} - {None}
+            if names:
+                overlap = len(names & self.top_genres) / len(names)
+                boost += 0.35 * self.genre_weight * overlap
+        if self.top_eras and cand.year:
+            if f"{(cand.year // 10) * 10}s" in self.top_eras:
+                boost += 0.15 * self.era_weight
+        return min(1.5, 1.0 + boost)
+
+
+def _read_taste(session: Session) -> Taste:
+    from . import profile as profile_analysis
+
+    weights = profile_analysis.get_weights(session)
+    genre_counts: dict[str, int] = {}
+    era_counts: dict[str, int] = {}
+    for (genres, year) in session.execute(
+        select(Movie.genres, Movie.year).where(Movie.in_plex.is_(True))
+    ):
+        for g in genres or []:
+            genre_counts[g] = genre_counts.get(g, 0) + 1
+        if year:
+            era = f"{(year // 10) * 10}s"
+            era_counts[era] = era_counts.get(era, 0) + 1
+    top_genres = sorted(genre_counts, key=lambda g: -genre_counts[g])[:5]
+    top_eras = sorted(era_counts, key=lambda e: -era_counts[e])[:3]
+    return Taste(
+        top_genres=frozenset(top_genres),
+        top_eras=frozenset(top_eras),
+        genre_weight=float(weights.get("genre", 0.5)),
+        era_weight=float(weights.get("era", 0.5)),
+    )
 
 
 def _read_context(session: Session) -> tuple[list[Anchor], set[int]]:
@@ -128,12 +179,16 @@ async def _collect(
             contribution = anchor.weight * position_weight
             cand = candidates.get(rid)
             if cand is None:
+                raw_genres = item.get("genre_ids")
                 cand = Candidate(
                     tmdb_id=rid,
                     title=str(item.get("title") or item.get("name") or "Untitled"),
                     year=_year_of(item),
                     vote_average=float(item.get("vote_average") or 0.0),
                     poster_path=item.get("poster_path"),
+                    genre_ids=tuple(g for g in raw_genres if isinstance(g, int))
+                    if isinstance(raw_genres, list)
+                    else (),
                 )
                 candidates[rid] = cand
             cand.score += contribution
@@ -179,7 +234,12 @@ async def recommendations(
             ),
         }
 
-    ranked = sorted(candidates.values(), key=lambda c: c.score, reverse=True)[:limit]
+    # The Taste Profile's emphasis sliders reorder (never gate) the ranking:
+    # bounded multiplier over the anchor-derived score.
+    taste = await asyncio.to_thread(_run, session_factory, _read_taste)
+    ranked = sorted(
+        candidates.values(), key=lambda c: c.score * taste.multiplier(c), reverse=True
+    )[:limit]
     items = [
         {
             "tmdb_id": c.tmdb_id,

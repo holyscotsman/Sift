@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { SearchIcon } from "@/components/icons";
+import { Poster } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
@@ -15,6 +16,9 @@ export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Monotonic request id — a slow early response must never overwrite the
+  // results of a later keystroke (latest-wins).
+  const seqRef = useRef(0);
   const navigate = useNavigate();
   const { open: openDrawer } = useDrawer();
 
@@ -35,20 +39,25 @@ export function GlobalSearch() {
   // Debounced query against the snapshot.
   useEffect(() => {
     if (value.trim().length < 2) {
+      seqRef.current += 1;
       setResults([]);
       setOpen(false);
       return;
     }
     const t = window.setTimeout(() => {
+      const seq = ++seqRef.current;
       api
-        .movies({ q: value.trim(), page_size: 6 })
+        .movies({ q: value.trim(), page_size: 5 })
         .then((r) => {
+          if (seq !== seqRef.current) return; // stale response — a newer query is in flight
           setResults(r.items);
           setActive(0);
           setOpen(true);
         })
-        .catch(() => setResults([]));
-    }, 180);
+        .catch(() => {
+          if (seq === seqRef.current) setResults([]);
+        });
+    }, 250);
     return () => window.clearTimeout(t);
   }, [value]);
 
@@ -60,10 +69,6 @@ export function GlobalSearch() {
     } else if (value.trim()) {
       navigate(`/library?q=${encodeURIComponent(value.trim())}`);
     }
-  }
-
-  function posterGradient(hue: number): string {
-    return `linear-gradient(155deg, hsl(${hue} 44% 32%), hsl(${(hue + 38) % 360} 40% 15%))`;
   }
 
   return (
@@ -109,9 +114,9 @@ export function GlobalSearch() {
                 role="option"
                 aria-selected={i === active}
               >
-                <span
-                  className="h-8 w-6 shrink-0 rounded-sm"
-                  style={{ background: posterGradient((m.tmdb_id * 47) % 360) }}
+                <Poster
+                  tmdbId={m.tmdb_id}
+                  className="h-8 w-6 shrink-0 overflow-hidden rounded-sm"
                 />
                 <span className="truncate text-sm text-fg">{m.title}</span>
                 {m.year && <span className="ml-auto text-xs text-fg3">{m.year}</span>}

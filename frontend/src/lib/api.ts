@@ -153,6 +153,7 @@ export const api = {
       method: "POST",
     }),
   scanGet: (id: number) => request<ScanRun>(`/api/scan/${id}`),
+  scanList: (limit = 5) => request<ScanRun[]>(`/api/scan?limit=${limit}`),
   ask: (query: string, mode = "single") =>
     request<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, mode }) }),
   junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),

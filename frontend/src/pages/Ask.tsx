@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { SparkleIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
-import type { AskResponse, AskSource } from "@/lib/types";
+import type { AskResponse, AskSource, ProfileResponse } from "@/lib/types";
 
 interface UserMsg {
   role: "user";
@@ -24,18 +24,46 @@ interface AssistantMsg {
 }
 type Msg = UserMsg | AssistantMsg;
 
-const SUGGESTIONS = [
+const STATIC_SUGGESTIONS = [
   "What sci-fi movies do I have from the 90s?",
   "Which Christopher Nolan films are in my library?",
   "Do I have any low-rated action movies?",
 ];
 
+// Chips grounded in what the user actually owns — top genre/director/era from the
+// taste profile. An empty profile (pre-scan) falls back to the static examples.
+function buildSuggestions(p: ProfileResponse): string[] {
+  const out: string[] = [];
+  const genre = p.genres[0]?.name;
+  const director = p.directors[0]?.name;
+  // Eras arrive chronologically sorted — take the biggest bucket, not the earliest.
+  const era = [...p.eras].sort((a, b) => b.count - a.count)[0]?.name;
+  if (genre) out.push(`What are my highest-rated ${genre.toLowerCase()} movies?`);
+  if (director) out.push(`Which ${director} films do I have?`);
+  if (era) out.push(`What do I have from the ${era}?`);
+  return out.length ? out : STATIC_SUGGESTIONS;
+}
+
 export function Ask() {
   const [thread, setThread] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>(STATIC_SUGGESTIONS);
   const { open: openDrawer } = useDrawer();
   const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getProfile()
+      .then((p) => {
+        if (!cancelled) setSuggestions(buildSuggestions(p));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [thread, thinking]);
 
@@ -92,7 +120,7 @@ export function Ask() {
             <SparkleIcon size={28} className="text-accent" />
             <p className="text-sm text-fg2">Ask anything about your library.</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => send(s)}

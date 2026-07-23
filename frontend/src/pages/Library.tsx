@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
+import { useScan } from "@/lib/scan";
 import type { Movie } from "@/lib/types";
 
 type View = "grid" | "table";
@@ -34,6 +35,7 @@ function fmtBytes(bytes: number): string {
 
 export function Library() {
   const [params, setParams] = useSearchParams();
+  const { start: startScan } = useScan();
   const q = params.get("q") ?? "";
   const [view, setView] = useState<View>("grid");
   // Seed the quick filter from a deep-link (e.g. Dashboard → ?filter=upgrades).
@@ -206,6 +208,23 @@ export function Library() {
           <EmptyState
             title="No movies match these filters"
             hint={q ? "Try a different search or clear filters." : "Run a scan to populate the library."}
+            action={
+              q ? (
+                <button
+                  onClick={() => setParams({})}
+                  className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <button
+                  onClick={() => void startScan()}
+                  className="gradient-fill rounded-md px-4 py-2 text-sm font-bold shadow-glow"
+                >
+                  Run scan
+                </button>
+              )
+            }
           />
         </div>
       ) : view === "grid" ? (

@@ -31,6 +31,10 @@ class Counts(BaseModel):
     watch_records: int
     actions_pending: int
     upgrades: int
+    # The two actionable queues: matches the Junk page (keep-overrides respected)
+    # and the Missing page's suggested (not dismissed, not now-owned) picks.
+    junk_flagged: int = 0
+    musthave_pending: int = 0
 
 
 class StatusResponse(BaseModel):

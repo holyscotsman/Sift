@@ -4,6 +4,7 @@
 // dry-run switch (SIFT_ACTIONS__DRY_RUN) — the UI reflects whichever is in effect.
 
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ChevronDown, ChevronRight } from "@/components/icons";
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -196,6 +197,14 @@ export function Junk() {
           <EmptyState
             title="All caught up"
             hint="Nothing is flagged for removal. Run a scan (with ratings) to refresh."
+            action={
+              <Link
+                to="/settings"
+                className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+              >
+                Adjust scoring thresholds
+              </Link>
+            }
           />
         </div>
       ) : (
