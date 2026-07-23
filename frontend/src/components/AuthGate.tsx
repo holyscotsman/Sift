@@ -89,7 +89,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         </div>
         <h1 className="mt-4 font-display text-lg font-bold">Sign in</h1>
         <p className="mt-1 text-sm text-fg2">Enter your Sift username and password.</p>
+        {/* id + name matter: password managers key on them — without them most
+            browsers never offer to save the login. */}
         <input
+          id="username"
+          name="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username"
@@ -98,6 +102,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           className="mt-4 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
         />
         <input
+          id="password"
+          name="password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

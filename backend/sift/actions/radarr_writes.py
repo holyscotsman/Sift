@@ -65,7 +65,8 @@ class RadarrWriter:
             raise RuntimeError(
                 "RadarrWriter has no Radarr connection configured for a live write"
             )
-        assert self._config is not None  # narrowed by _live_capable
+        if self._config is None:  # narrowed by _live_capable; explicit for -O runs
+            raise RuntimeError("no Radarr config for a live write")
         async with RadarrClient(self._config, transport=self._transport) as client:
             response = await client.request(method, path, params=params, json=json)
         return WriteResult(

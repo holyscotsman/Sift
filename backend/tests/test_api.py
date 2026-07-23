@@ -185,3 +185,17 @@ def test_execute_approved_delete_is_staged_in_dry_run(client):
 def test_settings_reports_dry_run(client):
     c, _ = client
     assert c.get("/api/settings").json()["actions_dry_run"] is True
+
+
+def test_movie_list_reports_filtered_total_size(client):
+    from sift.db.models import Movie
+
+    client, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="A", in_plex=True, file_size=1_000))
+        session.add(Movie(tmdb_id=2, title="B", in_plex=True, file_size=2_000))
+        session.add(Movie(tmdb_id=3, title="C", in_plex=False, file_size=4_000))
+        session.commit()
+    body = client.get("/api/movies?in_plex=true").json()
+    assert body["total_size"] == 3_000  # only the filtered set counts
+    assert client.get("/api/movies").json()["total_size"] == 7_000

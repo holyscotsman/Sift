@@ -168,9 +168,11 @@ function Account() {
   const [username, setUsername] = useState<string | null>(null);
   const [modal, setModal] = useState<null | { keepThumbs: boolean }>(null);
   const [busy, setBusy] = useState(false);
+  const [ephemeral, setEphemeral] = useState(false);
 
   useEffect(() => {
     api.authStatus().then((s) => setUsername(s.username)).catch(() => setUsername(null));
+    api.getSettings().then((s) => setEphemeral(s.ephemeral_risk)).catch(() => {});
   }, []);
 
   async function doReset(keepThumbs: boolean) {
@@ -187,6 +189,18 @@ function Account() {
 
   return (
     <>
+      {ephemeral && (
+        <div
+          className="mb-4 rounded-lg border p-4 text-sm"
+          style={{ borderColor: "var(--borderline)", color: "var(--borderline)" }}
+        >
+          <strong>Your login and settings reset on redeploy.</strong> This instance runs
+          on SQLite on a host with an ephemeral disk. Connect a free Postgres (set
+          <code className="mx-1 rounded bg-bg2 px-1">SIFT_DATABASE__URL</code>, see
+          docs/DEPLOY.md) and everything — login included — survives.
+        </div>
+      )}
+
       <Section title="Account">
         <p className="text-sm text-fg2">
           Signed in as <span className="font-semibold text-fg">{username ?? "—"}</span>.
@@ -201,6 +215,9 @@ function Account() {
           Sign out
         </button>
       </Section>
+
+      <PasswordSection />
+      <StorageSection />
 
       <Section title="Reset">
         <p className="text-sm text-fg2">
@@ -243,6 +260,189 @@ function Account() {
         }
       />
     </>
+  );
+}
+
+// Automatic rescans: keeps the snapshot fresh without remembering to click Run
+// scan. The backend anchors to the last completed scan, never double-runs.
+const RESCAN_CHOICES = [
+  { hours: 0, label: "Off" },
+  { hours: 6, label: "Every 6h" },
+  { hours: 12, label: "Every 12h" },
+  { hours: 24, label: "Daily" },
+];
+
+function RescanSection() {
+  const [interval, setIntervalHours] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getSettings().then((s) => setIntervalHours(s.scan_interval_hours)).catch(() => {});
+  }, []);
+
+  async function choose(hours: number) {
+    const prev = interval;
+    setIntervalHours(hours);
+    try {
+      await api.saveScanSchedule(hours);
+    } catch {
+      setIntervalHours(prev);
+    }
+  }
+
+  return (
+    <Section title="Automatic rescan">
+      <p className="text-sm text-fg2">
+        Refresh the snapshot on a schedule. A rescan only starts when no scan is already
+        running and Plex is connected.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {RESCAN_CHOICES.map((c) => (
+          <button
+            key={c.hours}
+            onClick={() => void choose(c.hours)}
+            disabled={interval === null}
+            className={`rounded-pill border px-3 py-1.5 text-xs font-semibold ${
+              interval === c.hours
+                ? "border-accent-line bg-accent-soft text-accent"
+                : "border-line text-fg2 hover:bg-bg2"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+// Change the password in place — no more factory reset just to rotate it.
+// Existing sessions (including this one) stay signed in.
+function PasswordSection() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [msg, setMsg] = useState<null | { ok: boolean; text: string }>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (next.length < 8) return setMsg({ ok: false, text: "New password needs 8+ characters." });
+    if (next !== confirm) return setMsg({ ok: false, text: "New passwords don't match." });
+    setBusy(true);
+    try {
+      await api.changePassword(current, next);
+      setMsg({ ok: true, text: "Password changed. Your sessions stay signed in." });
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+    } catch (err) {
+      setMsg({
+        ok: false,
+        text: err instanceof Error && err.message ? err.message : "Couldn't change the password.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field =
+    "mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]";
+  return (
+    <Section title="Password">
+      <form onSubmit={submit} className="grid max-w-md grid-cols-1 gap-3">
+        <label className="text-xs text-fg3">
+          Current password
+          <input
+            type="password"
+            name="current-password"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs text-fg3">
+          New password (8+ characters)
+          <input
+            type="password"
+            name="new-password"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="text-xs text-fg3">
+          Confirm new password
+          <input
+            type="password"
+            name="confirm-new-password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className={field}
+          />
+        </label>
+        {msg && (
+          <p className="text-sm" style={{ color: msg.ok ? "var(--keep)" : "var(--junk)" }}>
+            {msg.text}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={busy || !current || !next}
+          className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
+        >
+          {busy ? "Changing…" : "Change password"}
+        </button>
+      </form>
+    </Section>
+  );
+}
+
+// Poster-cache footprint + a clear button; the cache refills on demand.
+function StorageSection() {
+  const [stats, setStats] = useState<null | { count: number; bytes: number }>(null);
+  const [clearing, setClearing] = useState(false);
+
+  const load = useCallback(() => {
+    api.posterStats().then(setStats).catch(() => setStats(null));
+  }, []);
+  useEffect(load, [load]);
+
+  async function clear() {
+    setClearing(true);
+    try {
+      await api.clearPosterCache();
+      load();
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  const mb = stats ? (stats.bytes / 1e6).toFixed(0) : "—";
+  return (
+    <Section title="Storage">
+      <div className="flex flex-wrap items-center gap-3 text-sm text-fg2">
+        <span>
+          Poster cache:{" "}
+          <span className="font-semibold text-fg">
+            {stats ? `${stats.count} file(s) · ${mb} MB` : "—"}
+          </span>
+        </span>
+        <button
+          onClick={clear}
+          disabled={clearing || !stats || stats.count === 0}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
+        >
+          {clearing ? "Clearing…" : "Clear"}
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-fg3">
+        Clearing never touches your library data — posters re-download as they're viewed.
+      </p>
+    </Section>
   );
 }
 
@@ -382,6 +582,8 @@ function Autonomy() {
         )}
         {dryRun === null && <p className="mt-2 text-xs text-fg3">Loading…</p>}
       </Section>
+
+      <RescanSection />
 
       <Section title="Autonomy tiers">
         <div className="divide-y divide-line">

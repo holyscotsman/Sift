@@ -107,6 +107,41 @@ export function ConnectionsForm({
   );
   const [anthropicModels, setAnthropicModels] = useState<string[]>([]);
   const essentialsFired = useRef(false);
+  // Which service's Clear button is in its "Really clear?" confirm step.
+  const [confirmClear, setConfirmClear] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (confirmClear === null) return;
+    const t = window.setTimeout(() => setConfirmClear(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirmClear]);
+
+  function hasSaved(spec: ServiceSpec): boolean {
+    const saved = initial[spec.key] ?? {};
+    return Object.values(saved).some((v) => v === true || (typeof v === "string" && v !== ""));
+  }
+
+  // Empty string means "clear this field" server-side (blank inputs mean "keep",
+  // so this is the only way to remove a dead URL or key from the UI).
+  async function doClear(spec: ServiceSpec) {
+    const blanks = Object.fromEntries(spec.fields.map((f) => [f.name, ""]));
+    try {
+      const res = await api.saveConfig({ [spec.key]: blanks });
+      setVals((p) => {
+        const n = { ...p };
+        for (const f of spec.fields) delete n[`${spec.key}.${f.name}`];
+        return n;
+      });
+      setTests((t) => {
+        const n = { ...t };
+        delete n[spec.key];
+        return n;
+      });
+      onSaved?.(res.connections);
+    } finally {
+      setConfirmClear(null);
+    }
+  }
 
   function set(svc: string, field: string, v: string) {
     setVals((p) => ({ ...p, [`${svc}.${field}`]: v }));
@@ -241,13 +276,32 @@ export function ConnectionsForm({
                 <span className="font-display text-sm font-bold">{spec.label}</span>
                 {spec.hint && <p className="text-xs text-fg3">{spec.hint}</p>}
               </div>
-              <button
-                onClick={() => test(spec)}
-                disabled={t === "testing"}
-                className="rounded-pill border border-line px-3 py-1 text-xs font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
-              >
-                {t === "testing" ? "Testing…" : "Test"}
-              </button>
+              <div className="flex items-center gap-2">
+                {hasSaved(spec) &&
+                  (confirmClear === spec.key ? (
+                    <button
+                      onClick={() => void doClear(spec)}
+                      className="rounded-pill px-3 py-1 text-xs font-bold"
+                      style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+                    >
+                      Really clear?
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmClear(spec.key)}
+                      className="rounded-pill px-3 py-1 text-xs font-semibold text-fg3 hover:text-fg"
+                    >
+                      Clear saved
+                    </button>
+                  ))}
+                <button
+                  onClick={() => test(spec)}
+                  disabled={t === "testing"}
+                  className="rounded-pill border border-line px-3 py-1 text-xs font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
+                >
+                  {t === "testing" ? "Testing…" : "Test"}
+                </button>
+              </div>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {spec.fields.map((f) => {

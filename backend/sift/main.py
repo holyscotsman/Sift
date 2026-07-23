@@ -7,6 +7,7 @@ settings / session factory; the CLI uses process settings.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -42,7 +43,7 @@ from .api import (
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
-from .services import config_store
+from .services import autoscan, config_store
 from .services.posters import PosterCache
 
 log = logging.getLogger("sift")
@@ -60,7 +61,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("Sift %s starting", __version__)
     app.state.scan_tasks = set()
     app.state.active_scans = set()
+    autoscan_task = asyncio.create_task(autoscan.loop(app))
     yield
+    autoscan_task.cancel()
     for task in list(app.state.scan_tasks):
         task.cancel()
     await app.state.sift.llm.aclose()

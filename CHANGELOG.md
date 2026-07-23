@@ -2,6 +2,17 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.1.0 — Optimization Cycle 01
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_01.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): password-manager-friendly login + ephemeral-host
+warning, in-place password change, per-service "clear saved values", automatic
+rescans (6/12/24h), Junk multi-select, Library title/disk totals, ~4× faster
+Must-Have validation, drawer Esc/focus accessibility, readable Activity
+(relative times, collapsed payloads), poster-cache stats + clear. Security pass:
+new endpoints gated, bandit ruleset + npm audit clean, narrowing asserts replaced
+with explicit raises.
+
 ## Unreleased
 
 ### Added — refined AI engine, Must-Have catalog, and onboarding flow

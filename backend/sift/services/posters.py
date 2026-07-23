@@ -65,6 +65,15 @@ class PosterCache:
                 count += 1
         return count
 
+    def stats(self) -> tuple[int, int]:
+        """(file count, total bytes) of the on-disk cache. Zero when absent."""
+        count = size = 0
+        if self._dir.is_dir():
+            for f in self._dir.glob("*.img"):
+                count += 1
+                size += f.stat().st_size
+        return count, size
+
     # -------------------------------------------------------------------- resolve
 
     def _stored_url(self, tmdb_id: int) -> str | None:

@@ -21,6 +21,7 @@ on their own — the owner adds or dismisses each one.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -261,18 +262,30 @@ async def run_musthave(
                 if prov is not None:
                     await prov.aclose()
 
+    # Bounded fan-out: the TMDB client's own rate limiter paces requests, so the
+    # semaphore only caps in-flight concurrency. Results come back in candidate
+    # order (gather preserves it), and dedupe happens in a single ordered pass —
+    # two concurrent candidates resolving to the same film can't both land.
     client = TmdbClient(settings.tmdb, transport=transport)
-    accepted: list[dict[str, Any]] = []
     try:
-        for cand in candidates[:_MAX_CANDIDATES]:
-            if len(accepted) >= limit:
-                break
-            ok = await _validate(client, cand, owned, seen)
-            if ok is not None:
-                seen.add(ok["tmdb_id"])  # de-dupe within the run too
-                accepted.append(ok)
+        sem = asyncio.Semaphore(6)
+
+        async def gated(cand: dict[str, Any]) -> dict[str, Any] | None:
+            async with sem:
+                return await _validate(client, cand, owned, seen)
+
+        results = await asyncio.gather(*(gated(c) for c in candidates[:_MAX_CANDIDATES]))
     finally:
         await client.aclose()
+
+    accepted: list[dict[str, Any]] = []
+    for ok in results:
+        if ok is None or ok["tmdb_id"] in seen:
+            continue
+        seen.add(ok["tmdb_id"])
+        accepted.append(ok)
+        if len(accepted) >= limit:
+            break
 
     def _store(session: Session) -> int:
         added = 0

@@ -69,6 +69,8 @@ class MovieListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    # Sum of file_size over the whole filtered set (not just this page), in bytes.
+    total_size: int = 0
 
 
 class RatingOut(BaseModel):
@@ -179,6 +181,15 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     token: str
     username: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class OkResponse(BaseModel):
+    ok: bool
 
 
 class ProposeActionIn(BaseModel):
@@ -331,6 +342,12 @@ class SettingsResponse(BaseModel):
     ai_configured: bool
     # True when writes are staged only (nothing reaches Radarr). The hosted default.
     actions_dry_run: bool
+    # "sqlite" | "postgres" — and whether that means login/config die on redeploy
+    # (SQLite on a host with an ephemeral disk, detected via the RENDER env var).
+    database_kind: str = "sqlite"
+    ephemeral_risk: bool = False
+    # Automatic rescan interval in hours; 0 = off.
+    scan_interval_hours: int = 0
 
 
 class ThresholdPreview(BaseModel):
@@ -338,6 +355,19 @@ class ThresholdPreview(BaseModel):
     borderline: int
     keep: int
     total: int
+
+
+class ScanScheduleIn(BaseModel):
+    interval_hours: int
+
+
+class ScanScheduleOut(BaseModel):
+    interval_hours: int
+
+
+class PosterCacheStats(BaseModel):
+    count: int
+    bytes: int
 
 
 class ProfileBucket(BaseModel):
