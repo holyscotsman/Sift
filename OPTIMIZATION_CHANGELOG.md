@@ -7,6 +7,55 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.4.0 — Cycle 04
+
+**Plan:** `docs/optimization/CYCLE_04.md` (10/10 approved after change review, 5 amended).
+
+1. **Health probes stopped hammering dead hosts** — the full connection sweep
+   behind `/api/health` and `/api/settings` is cached 15 s and invalidated on
+   connection saves and tests (which always probe live). Live measurement:
+   774 ms → 10 ms on the second poll.
+2. **Hidden tabs stop polling** — status/health poll ticks skip while the tab is
+   hidden; returning to the tab refetches immediately so it's never stale.
+3. **Infinite scroll without repeated aggregates** — `/api/movies` computes
+   COUNT/SUM totals only on page 1; scroll pages skip them and the client keeps
+   the page-1 header values (test-pinned).
+4. **Ring gauges that mean something** — Watched now gauges *distinct watched
+   titles* (new `watched_titles` count) against owned; Pending gauges against
+   the whole actionable queue so the ring drains as you work it.
+5. **Search admits a miss** — zero hits show "No titles match — Enter searches
+   the Library page" instead of nothing.
+6. **Failed scans offer Retry** — the scan panel's failure state gains a button
+   that relaunches (resuming from checkpoints server-side).
+7. **Keyboard navigation** — `g` + `d/l/m/j/a/t/s` jumps between pages; `?`
+   opens a shortcuts overlay. Suppressed while typing or while any dialog is
+   open; the chord decays after 1.5 s.
+8. **Honest connection states** — Settings distinguishes "Not set up" (neutral,
+   with a nudge) from configured-but-unreachable (red, with the probe detail).
+9. **Ask stays in flow** — the input keeps focus after send; "New conversation"
+   clears the thread and restores the suggestion chips.
+10. **Deeper activity history** — "Show more" grows the timeline window
+    (80 → … → 960, capped); the server now also bounds the limit (422 past
+    1000).
+
+**QA:** 162 backend tests green (2 new — page-1-only aggregates, health-cache
+hit + invalidation-on-save). ruff + bandit ruleset + mypy strict clean; tsc +
+build + npm audit clean. Live seeded-server sweep verified `watched_titles`,
+the health-cache timing, page-2 zeroed totals, and the activity bound;
+screenshots + a scripted chord-nav assertion verified the shortcuts overlay,
+g-l navigation, the no-match row, and the dashboard gauges/deductions.
+
+**Security review:** no new endpoints; the health cache stores probe summaries
+only (no secrets); activity limit now server-bounded; shortcut handler ignores
+modifier combos and never runs while typing or with a dialog open.
+
+**Bug review:** cycle diff re-read line-by-line; caught pre-merge: the page-2
+aggregate skip would have broken the client's `done` detection (it compared
+against the now-zero total — replaced with an items-length check); Escape now
+closes the help overlay even when a dialog check would otherwise suppress it.
+
+---
+
 ## 2607.3.0 — Cycle 03
 
 **Plan:** `docs/optimization/CYCLE_03.md` (10/10 approved after change review, 5 amended).

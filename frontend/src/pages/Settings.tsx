@@ -133,16 +133,32 @@ function Connections() {
     <>
       <Section title="Status">
         <div className="divide-y divide-line">
-          {rows.map((r) => (
-            <div key={r.service} className="flex items-center gap-3 py-2.5">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ background: r.ok ? "var(--keep)" : "var(--fg-3)" }}
-              />
-              <span className="w-24 text-sm font-semibold capitalize">{r.service}</span>
-              <span className="flex-1 truncate text-xs text-fg3">{r.detail}</span>
-            </div>
-          ))}
+          {rows.map((r) => {
+            // "Never set up" is a neutral state, not a failure — only a service
+            // that IS configured but can't be reached deserves the red dot.
+            const notConfigured = !r.ok && ["disabled", "not configured"].includes(r.detail);
+            return (
+              <div key={r.service} className="flex items-center gap-3 py-2.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{
+                    background: r.ok
+                      ? "var(--keep)"
+                      : notConfigured
+                        ? "var(--fg-3)"
+                        : "var(--junk)",
+                  }}
+                />
+                <span className="w-24 text-sm font-semibold capitalize">{r.service}</span>
+                <span
+                  className="flex-1 truncate text-xs"
+                  style={{ color: !r.ok && !notConfigured ? "var(--junk)" : "var(--fg-3)" }}
+                >
+                  {notConfigured ? "Not set up — add it below to unlock its features" : r.detail}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </Section>
       <span className="eyebrow">Edit connections</span>

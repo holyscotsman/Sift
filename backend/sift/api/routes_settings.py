@@ -13,8 +13,8 @@ from ..analysis import junk
 from ..config import JunkThresholds, Settings
 from ..services import curated_lists, settings_store
 from ..services.counts_cache import CountsCache
-from ..services.health import check_service, gather_health
-from .deps import AuthDep, get_counts_cache, get_session_factory, get_settings
+from ..services.health import HealthCache, check_service
+from .deps import AuthDep, get_counts_cache, get_health_cache, get_session_factory, get_settings
 from .schemas import (
     ScanScheduleIn,
     ScanScheduleOut,
@@ -45,8 +45,9 @@ def _merged(base: JunkThresholds, body: ThresholdsModel) -> JunkThresholds:
 async def get_all(
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
+    health_cache: HealthCache = Depends(get_health_cache),
 ) -> SettingsResponse:
-    health = await gather_health(settings)
+    health = await health_cache.get(settings)
     with factory() as session:
         thr = settings_store.effective_junk(session, settings)
         interval = settings_store.get_scan_interval(session)
@@ -108,10 +109,15 @@ def save_thresholds(
 
 @router.post("/test/{service}", response_model=ServiceHealth)
 async def test_connection(
-    service: str, settings: Settings = Depends(get_settings)
+    service: str,
+    settings: Settings = Depends(get_settings),
+    health_cache: HealthCache = Depends(get_health_cache),
 ) -> ServiceHealth:
     try:
-        s = await check_service(settings, service)
+        s = await check_service(settings, service)  # always a live probe, never the cache
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # The user just learned this service's real state — drop the cached sweep so
+    # the health dots agree on the next poll.
+    health_cache.invalidate()
     return ServiceHealth(service=s.service, ok=s.ok, detail=s.detail, latency_ms=s.latency_ms)

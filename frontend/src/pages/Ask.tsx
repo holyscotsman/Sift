@@ -51,6 +51,7 @@ export function Ask() {
   const [suggestions, setSuggestions] = useState<string[]>(STATIC_SUGGESTIONS);
   const { open: openDrawer } = useDrawer();
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,16 +103,32 @@ export function Ask() {
       ]);
     } finally {
       setThinking(false);
+      // Follow-ups shouldn't need a click — the conversation stays in the keyboard.
+      inputRef.current?.focus();
     }
   }
 
   return (
     <div className="page-enter flex h-[calc(100vh-190px)] flex-col">
-      <div className="mb-3">
-        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">Ask</h1>
-        <p className="mt-1 text-sm text-fg2">
-          Natural-language questions grounded in your library — answers cite the titles they used.
-        </p>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">Ask</h1>
+          <p className="mt-1 text-sm text-fg2">
+            Natural-language questions grounded in your library — answers cite the titles they used.
+          </p>
+        </div>
+        {thread.length > 0 && (
+          <button
+            onClick={() => {
+              setThread([]);
+              setInput("");
+              inputRef.current?.focus();
+            }}
+            className="shrink-0 rounded-pill border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            New conversation
+          </button>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -191,6 +208,7 @@ export function Ask() {
         className="mt-3 flex items-center gap-2"
       >
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about your library…"

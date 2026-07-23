@@ -230,9 +230,18 @@ export function Dashboard() {
         </Segment>
 
         <Segment className="flex items-center justify-around gap-2">
+          {/* Denominators that mean something: share of catalog monitored, share of
+              owned titles ever watched, and pending actions against the whole
+              actionable queue (the ring drains as the queue is worked). */}
           <RingGauge value={c?.monitored ?? 0} max={c?.movies || 1} color="var(--accent)" label={c?.monitored ?? 0} caption="Monitored" />
-          <RingGauge value={c?.watch_records ?? 0} max={Math.max(c?.movies || 1, 1)} color="var(--keep)" label={c?.watch_records ?? 0} caption="Watched" />
-          <RingGauge value={c?.actions_pending ?? 0} max={Math.max(c?.actions_pending || 1, 1)} color="var(--junk)" label={c?.actions_pending ?? 0} caption="Pending" />
+          <RingGauge value={c?.watched_titles ?? 0} max={c?.owned || 1} color="var(--keep)" label={c?.watched_titles ?? 0} caption="Watched" />
+          <RingGauge
+            value={c?.actions_pending ?? 0}
+            max={Math.max((c?.actions_pending ?? 0) + (c?.junk_flagged ?? 0) + (c?.upgrades ?? 0), 1)}
+            color="var(--junk)"
+            label={c?.actions_pending ?? 0}
+            caption="Pending"
+          />
         </Segment>
       </div>
 

@@ -37,3 +37,7 @@ async def rebuild(state: AppState) -> None:
             await old_llm.aclose()
         except Exception as exc:  # noqa: BLE001 - closing the old client is best-effort
             log.debug("old llm aclose failed: %s", exc)
+    # New connections mean the cached health sweep (and anything derived from the
+    # old settings) is stale — a freshly fixed URL must not show dead for 15 s.
+    state.health_cache.invalidate()
+    state.counts_cache.invalidate()

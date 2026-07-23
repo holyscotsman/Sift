@@ -9,6 +9,7 @@ UI can show every configured source.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -68,3 +69,28 @@ async def check_service(settings: Settings, service: str) -> HealthStatus:
     if service not in _SERVICES:
         raise ValueError(f"unknown service {service!r}")
     return await _probe(settings, service)
+
+
+class HealthCache:
+    """Short-lived cache for the full health sweep. The dashboard polls health
+    every 20 s and /api/settings probes the same hosts — with a dead host
+    configured, every poll rides a timeout for nothing. 15 s keeps the UI at
+    most one poll stale; saving or testing a connection invalidates so a fixed
+    URL shows up immediately (the per-service *test* endpoints always probe
+    live, never this cache)."""
+
+    def __init__(self, ttl_seconds: float = 15.0) -> None:
+        self._ttl = ttl_seconds
+        self._value: list[HealthStatus] | None = None
+        self._at = 0.0
+
+    async def get(self, settings: Settings) -> list[HealthStatus]:
+        now = time.monotonic()
+        if self._value is not None and now - self._at < self._ttl:
+            return self._value
+        self._value = await gather_health(settings)
+        self._at = now
+        return self._value
+
+    def invalidate(self) -> None:
+        self._value = None
