@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -121,7 +121,8 @@ async def execute_action(
 
 @router.get("/activity", response_model=list[ActionOut])
 def activity(
-    limit: int = 50, factory: sessionmaker[Session] = Depends(get_session_factory)
+    limit: int = Query(default=50, ge=1, le=1000),
+    factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> list[Action]:
     with factory() as session:
         rows = list(session.scalars(select(Action).order_by(Action.id.desc()).limit(limit)))

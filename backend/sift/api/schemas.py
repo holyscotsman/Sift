@@ -29,6 +29,8 @@ class Counts(BaseModel):
     monitored: int
     collections: int
     watch_records: int
+    # Distinct titles with any watch history (vs. watch_records = raw play rows).
+    watched_titles: int = 0
     actions_pending: int
     upgrades: int
     # The two actionable queues: matches the Junk page (keep-overrides respected)

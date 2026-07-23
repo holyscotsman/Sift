@@ -21,10 +21,14 @@ const TIER: Record<string, { label: string; tone: "keep" | "borderline" | "junk"
 };
 
 export function Activity() {
-  const { data, loading } = useActivity(80);
+  // The window grows on demand (80 → 160 → … → 960) instead of fetching a fixed
+  // slice of history; the button hides once the server has no more to give.
+  const [limit, setLimit] = useState(80);
+  const { data, loading } = useActivity(limit);
   const [filter, setFilter] = useState<Filter>("all");
   const [scans, setScans] = useState<ScanRun[]>([]);
   const rows = (data ?? []).filter((a) => filter === "all" || a.type === filter);
+  const hasMore = (data?.length ?? 0) >= limit && limit < 960;
 
   useEffect(() => {
     let cancelled = false;
@@ -85,11 +89,21 @@ export function Activity() {
           />
         </div>
       ) : (
-        <ol className="relative ml-2 border-l border-line pl-6">
-          {rows.map((a) => (
-            <TimelineEntry key={a.id} action={a} />
-          ))}
-        </ol>
+        <>
+          <ol className="relative ml-2 border-l border-line pl-6">
+            {rows.map((a) => (
+              <TimelineEntry key={a.id} action={a} />
+            ))}
+          </ol>
+          {hasMore && (
+            <button
+              onClick={() => setLimit((l) => Math.min(960, l * 2))}
+              className="ml-8 mt-1 rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+            >
+              Show more
+            </button>
+          )}
+        </>
       )}
     </div>
   );

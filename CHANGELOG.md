@@ -2,6 +2,16 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.4.0 — Optimization Cycle 04
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_04.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): cached health sweep (774 ms → 10 ms polls) with
+save/test invalidation, visibility-aware polling, page-1-only list aggregates,
+meaningful ring gauges (new `watched_titles` count), a search no-match row,
+scan-failure Retry, `g`-chord keyboard navigation + `?` shortcuts overlay,
+honest not-set-up vs unreachable connection states, Ask focus retention +
+New conversation, and a growing bounded Activity window.
+
 ## 2607.3.0 — Optimization Cycle 03
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_03.md`, log:

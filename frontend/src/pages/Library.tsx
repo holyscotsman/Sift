@@ -106,10 +106,16 @@ export function Library() {
       setLoading(true);
       try {
         const res = await api.movies(buildQuery(page));
-        setTotal(res.total);
-        setTotalSize(res.total_size ?? 0);
+        // The server only computes totals for page 1 — appended pages return
+        // zeros there, so keep the page-1 values while scrolling.
+        if (replace) {
+          setTotal(res.total);
+          setTotalSize(res.total_size ?? 0);
+        }
         setItems((prev) => (replace ? res.items : [...prev, ...res.items]));
-        setDone(page * pageSize >= res.total || res.items.length === 0);
+        setDone(
+          res.items.length < pageSize || (replace && res.total <= page * pageSize),
+        );
       } finally {
         setLoading(false);
       }

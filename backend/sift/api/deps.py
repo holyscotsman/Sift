@@ -11,6 +11,7 @@ from ..actions.engine import ActionEngine
 from ..ai.provider import LLMProvider
 from ..config import Settings
 from ..services.counts_cache import CountsCache
+from ..services.health import HealthCache
 from ..services.posters import PosterCache
 from ..services.ratelimit import LoginRateLimiter
 from ..services.scanner import ProgressHub
@@ -29,6 +30,7 @@ class AppState:
     posters: PosterCache
     counts_cache: CountsCache = field(default_factory=CountsCache)
     login_limiter: LoginRateLimiter = field(default_factory=LoginRateLimiter)
+    health_cache: HealthCache = field(default_factory=HealthCache)
 
 
 def get_state(request: Request) -> AppState:
@@ -53,6 +55,10 @@ def get_counts_cache(request: Request) -> CountsCache:
 
 def get_login_limiter(request: Request) -> LoginRateLimiter:
     return get_state(request).login_limiter
+
+
+def get_health_cache(request: Request) -> HealthCache:
+    return get_state(request).health_cache
 
 
 def presented_token(authorization: str | None, x_sift_token: str | None) -> str | None:

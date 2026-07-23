@@ -19,17 +19,20 @@ from ..db.models import (
     WatchHistory,
 )
 from ..services.counts_cache import CountsCache
-from ..services.health import gather_health
+from ..services.health import HealthCache
 from ..services.settings_store import effective_junk
-from .deps import AuthDep, get_counts_cache, get_session_factory, get_settings
+from .deps import AuthDep, get_counts_cache, get_health_cache, get_session_factory, get_settings
 from .schemas import Counts, HealthResponse, ServiceHealth, StatusResponse
 
 router = APIRouter(prefix="/api", tags=["health"], dependencies=[AuthDep])
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
-    statuses = await gather_health(settings)
+async def health(
+    settings: Settings = Depends(get_settings),
+    cache: HealthCache = Depends(get_health_cache),
+) -> HealthResponse:
+    statuses = await cache.get(settings)
     return HealthResponse(
         services=[
             ServiceHealth(service=s.service, ok=s.ok, detail=s.detail, latency_ms=s.latency_ms)
@@ -78,6 +81,11 @@ def _counts(session: Session, settings: Settings, cache: CountsCache) -> Counts:
         or 0,
         collections=session.scalar(select(func.count()).select_from(Collection)) or 0,
         watch_records=session.scalar(select(func.count()).select_from(WatchHistory)) or 0,
+        # Distinct titles with any watch history — the honest "watched" numerator.
+        watched_titles=session.scalar(
+            select(func.count(func.distinct(WatchHistory.movie_id)))
+        )
+        or 0,
         actions_pending=session.scalar(
             select(func.count())
             .select_from(Action)

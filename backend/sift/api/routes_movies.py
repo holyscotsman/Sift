@@ -76,9 +76,15 @@ def list_movies(
     stmt = stmt.order_by(column.desc() if order == "desc" else column.asc())
 
     with factory() as session:
-        sq = stmt.subquery()
-        total = session.scalar(select(func.count()).select_from(sq)) or 0
-        total_size = session.scalar(select(func.coalesce(func.sum(sq.c.file_size), 0))) or 0
+        # COUNT + SUM over the filtered set are only worth paying for once per
+        # filter change — infinite-scroll pages 2+ reuse the client's page-1
+        # totals, so skip the aggregates there.
+        total = 0
+        total_size = 0
+        if page == 1:
+            sq = stmt.subquery()
+            total = session.scalar(select(func.count()).select_from(sq)) or 0
+            total_size = session.scalar(select(func.coalesce(func.sum(sq.c.file_size), 0))) or 0
         rows = list(session.scalars(stmt.offset((page - 1) * page_size).limit(page_size)))
         items = [MovieOut.model_validate(m) for m in rows]
     return MovieListResponse(

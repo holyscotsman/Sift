@@ -43,6 +43,8 @@ export interface Counts {
   monitored: number;
   collections: number;
   watch_records: number;
+  // Distinct titles with any watch history (watch_records counts raw play rows).
+  watched_titles: number;
   actions_pending: number;
   upgrades: number;
   // The two actionable queues: Junk page candidates and pending Must-Have picks.

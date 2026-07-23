@@ -9,6 +9,7 @@ import { Outlet } from "react-router-dom";
 import { Aurora } from "@/components/Aurora";
 import { MovieDrawer } from "@/components/MovieDrawer";
 import { Skeleton } from "@/components/ui";
+import { Shortcuts } from "@/lib/shortcuts";
 
 import { Header } from "./Header";
 import { ScanPanel } from "./ScanPanel";
@@ -40,6 +41,7 @@ export function AppShell() {
       </div>
       <ScanPanel />
       <MovieDrawer />
+      <Shortcuts />
     </div>
   );
 }

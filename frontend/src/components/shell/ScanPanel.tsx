@@ -6,7 +6,7 @@ import { useMotionAllowed } from "@/lib/prefs";
 import { SCAN_PHASES, useScan } from "@/lib/scan";
 
 export function ScanPanel() {
-  const { panelOpen, scanning, pct, phaseStates, error, setPanelOpen } = useScan();
+  const { panelOpen, scanning, pct, phaseStates, error, setPanelOpen, start } = useScan();
   const motion = useMotionAllowed();
   if (!panelOpen) return null;
 
@@ -54,6 +54,16 @@ export function ScanPanel() {
           <p className="mt-2 text-xs text-fg3">
             {error ? error : scanning ? "Reading your library…" : "Snapshot updated."}
           </p>
+          {/* A failure offers the way forward right here — the server resumes
+              from the last completed phase when it can. */}
+          {error && !scanning && (
+            <button
+              onClick={() => void start()}
+              className="mt-2 rounded-md border border-line px-3 py-1 text-xs font-semibold text-fg2 hover:bg-bg2"
+            >
+              Retry scan
+            </button>
+          )}
         </div>
       </div>
 

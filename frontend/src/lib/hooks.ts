@@ -51,10 +51,22 @@ function useAsync<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: number
     setLoading(true);
     const cancel = run();
     let timer: number | undefined;
-    if (pollMs) timer = window.setInterval(run, pollMs);
+    // Poll ticks skip while the tab is hidden (no point refreshing a screen
+    // nobody sees); coming back refetches immediately so it's never stale.
+    const tick = () => {
+      if (!document.hidden) run();
+    };
+    const onVisible = () => {
+      if (!document.hidden) run();
+    };
+    if (pollMs) {
+      timer = window.setInterval(tick, pollMs);
+      document.addEventListener("visibilitychange", onVisible);
+    }
     return () => {
       cancel();
       if (timer) window.clearInterval(timer);
+      if (pollMs) document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run, pollMs, ...deps]);

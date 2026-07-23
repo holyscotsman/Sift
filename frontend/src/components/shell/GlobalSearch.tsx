@@ -52,10 +52,13 @@ export function GlobalSearch() {
           if (seq !== seqRef.current) return; // stale response — a newer query is in flight
           setResults(r.items);
           setActive(0);
-          setOpen(true);
+          setOpen(true); // stays open on zero hits — an honest "no matches" row shows
         })
         .catch(() => {
-          if (seq === seqRef.current) setResults([]);
+          if (seq === seqRef.current) {
+            setResults([]);
+            setOpen(false);
+          }
         });
     }, 250);
     return () => window.clearTimeout(t);
@@ -99,6 +102,11 @@ export function GlobalSearch() {
           aria-label="Search library"
         />
       </div>
+      {open && results.length === 0 && value.trim().length >= 2 && (
+        <div className="glass absolute left-0 right-0 top-[calc(100%+8px)] z-50 rounded-lg p-3 text-sm text-fg3 shadow-s2">
+          No titles match “{value.trim()}” — Enter searches the Library page.
+        </div>
+      )}
       {open && results.length > 0 && (
         <ul
           className="glass absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg p-1.5 shadow-s2"

@@ -269,3 +269,33 @@ def test_movie_list_reports_filtered_total_size(client):
     body = client.get("/api/movies?in_plex=true").json()
     assert body["total_size"] == 3_000  # only the filtered set counts
     assert client.get("/api/movies").json()["total_size"] == 7_000
+
+    # Infinite-scroll economy: aggregates are computed once, on page 1 — later
+    # pages return the items with zeroed totals (the client keeps page 1's).
+    page2 = client.get("/api/movies?page=2&page_size=2").json()
+    assert len(page2["items"]) == 1
+    assert page2["total"] == 0 and page2["total_size"] == 0
+
+
+def test_health_sweep_is_cached_until_invalidated(client, monkeypatch):
+    # /api/health is polled every 20 s; the sweep behind it runs at most once per
+    # TTL. Saving connections rebuilds runtime state, which must invalidate.
+    from sift.services import health as health_service
+
+    c, _ = client
+    calls = {"n": 0}
+    real = health_service.gather_health
+
+    async def counting(settings):
+        calls["n"] += 1
+        return await real(settings)
+
+    monkeypatch.setattr(health_service, "gather_health", counting)
+    c.get("/api/health")
+    c.get("/api/health")
+    assert calls["n"] == 1  # second poll served from the cache
+
+    # Saving connections must drop the cache — the next poll probes live again.
+    c.put("/api/config", json={"connections": {}})
+    c.get("/api/health")
+    assert calls["n"] == 2
