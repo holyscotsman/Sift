@@ -103,3 +103,41 @@ async def test_falls_back_to_similar_when_recommendations_empty(factory, setting
         factory, settings, transport=httpx.MockTransport(handler)
     )
     assert [i["tmdb_id"] for i in result["items"]] == [605]
+
+
+async def test_taste_weights_reorder_but_never_gate(factory, settings):
+    # Two candidates: X leads on raw anchor relevance; Y matches the library's
+    # dominant genre + era. Sliders at zero → raw order (X first). Genre/era
+    # sliders up → Y overtakes. Both always present — weights reorder, never gate.
+    from sift.analysis import profile
+
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    with factory() as session:
+        m = Movie(tmdb_id=603, title="Anchor Comedy", in_plex=True,
+                  year=1994, genres=["Comedy"])
+        m.ratings.append(Rating(source=RatingSource.TMDB, value=8.7, votes=1000))
+        session.add(m)
+        session.commit()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/recommendations"):
+            return httpx.Response(200, json={"results": [
+                {"id": 111, "title": "X Drama", "release_date": "2010-01-01",
+                 "vote_average": 7.0, "genre_ids": [18]},
+                {"id": 222, "title": "Y Comedy", "release_date": "1994-06-01",
+                 "vote_average": 7.0, "genre_ids": [35]},
+            ]})
+        return httpx.Response(200, json={"results": []})
+
+    transport = httpx.MockTransport(handler)
+
+    with factory() as session:
+        profile.set_weights(session, {"genre": 0.0, "era": 0.0})
+    zero = await recommend.recommendations(factory, settings, transport=transport)
+    assert [i["tmdb_id"] for i in zero["items"]] == [111, 222]
+
+    with factory() as session:
+        profile.set_weights(session, {"genre": 1.0, "era": 1.0})
+    weighted = await recommend.recommendations(factory, settings, transport=transport)
+    assert [i["tmdb_id"] for i in weighted["items"]] == [222, 111]

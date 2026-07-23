@@ -2,6 +2,18 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.2.0 — Optimization Cycle 02
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_02.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): state-driven dashboard attention cards with live
+junk/must-have queue counts, taste-profile weights that actually steer
+recommendations (bounded reorder, zero-weight equivalence test-pinned), inline
+global-search results with poster thumbs + latest-wins fetches, Ask suggestion
+chips built from the library profile, scan history on Activity, security headers
+(nosniff / DENY / same-origin referrer), empty states with a next-step action,
+async poster decoding, gzip for large JSON responses, and `junk_flagged` /
+`musthave_pending` status counts that always match their pages.
+
 ## 2607.1.0 — Optimization Cycle 01
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_01.md`, log:

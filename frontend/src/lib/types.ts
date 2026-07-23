@@ -45,6 +45,9 @@ export interface Counts {
   watch_records: number;
   actions_pending: number;
   upgrades: number;
+  // The two actionable queues: Junk page candidates and pending Must-Have picks.
+  junk_flagged: number;
+  musthave_pending: number;
 }
 
 export interface StatusResponse {

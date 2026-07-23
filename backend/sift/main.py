@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
@@ -102,6 +103,18 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Large JSON pages (library lists) compress ~10x; small responses skip it.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    @app.middleware("http")
+    async def _security_headers(request, call_next):  # type: ignore[no-untyped-def]
+        # Browser hardening. No HSTS (TLS terminates at the host; local HTTP must
+        # work) and no CSP yet (the inline-styled SPA needs a considered policy).
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
 
     app.state.sift = AppState(
         settings=settings,

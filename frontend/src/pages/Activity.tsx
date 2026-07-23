@@ -1,11 +1,14 @@
-// Activity — the trust surface. A vertical timeline of audited actions from the
-// real /api/activity feed, with dry-run payloads. Filter chips by action type.
+// Activity — the trust surface. Recent scan runs (incl. automatic ones) up top,
+// then a vertical timeline of audited actions from the real /api/activity feed,
+// with dry-run payloads. Filter chips by action type.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { EmptyState, Pill } from "@/components/ui";
+import { api } from "@/lib/api";
 import { useActivity } from "@/lib/hooks";
-import type { ActionRecord } from "@/lib/types";
+import type { ActionRecord, ScanRun } from "@/lib/types";
 
 type Filter = "all" | "add" | "monitor" | "unmonitor" | "delete";
 
@@ -19,12 +22,37 @@ const TIER: Record<string, { label: string; tone: "keep" | "borderline" | "junk"
 export function Activity() {
   const { data, loading } = useActivity(80);
   const [filter, setFilter] = useState<Filter>("all");
+  const [scans, setScans] = useState<ScanRun[]>([]);
   const rows = (data ?? []).filter((a) => filter === "all" || a.type === filter);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .scanList(5)
+      .then((s) => {
+        if (!cancelled) setScans(s);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="page-enter">
       <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">Activity</h1>
       <p className="mt-1 text-sm text-fg2">Every action Sift takes, audited — with its dry-run payload.</p>
+
+      {scans.length > 0 && (
+        <div className="panel mt-4 p-4">
+          <span className="eyebrow">Scans</span>
+          <ul className="mt-2 divide-y divide-line">
+            {scans.map((s) => (
+              <ScanRow key={s.id} scan={s} />
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="my-4 flex flex-wrap gap-2">
         {(["all", "add", "monitor", "unmonitor", "delete"] as Filter[]).map((f) => (
@@ -42,7 +70,18 @@ export function Activity() {
 
       {loading ? null : rows.length === 0 ? (
         <div className="panel">
-          <EmptyState title="No activity yet" hint="Actions you approve or that run autonomously will appear here." />
+          <EmptyState
+            title="No activity yet"
+            hint="Actions you approve or that run autonomously will appear here."
+            action={
+              <Link
+                to="/junk"
+                className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+              >
+                Review the Junk queue
+              </Link>
+            }
+          />
         </div>
       ) : (
         <ol className="relative ml-2 border-l border-line pl-6">
@@ -52,6 +91,40 @@ export function Activity() {
         </ol>
       )}
     </div>
+  );
+}
+
+const SCAN_TONE: Record<string, "keep" | "borderline" | "junk" | "neutral"> = {
+  completed: "keep",
+  running: "borderline",
+  interrupted: "borderline",
+  failed: "junk",
+};
+
+function duration(start: string, end: string | null): string {
+  if (!end) return "…";
+  const secs = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000));
+  if (secs < 60) return `${secs}s`;
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}
+
+function ScanRow({ scan }: { scan: ScanRun }) {
+  const status = scan.status.toLowerCase().replace("scanstatus.", "");
+  const movies = scan.stats?.total_movies;
+  const inPlex = scan.stats?.in_plex;
+  return (
+    <li className="flex flex-wrap items-center gap-2 py-2 text-sm">
+      <Pill tone={SCAN_TONE[status] ?? "neutral"}>{status}</Pill>
+      <span className="text-fg2" title={new Date(scan.started_at).toLocaleString()}>
+        {relativeTime(scan.started_at)}
+      </span>
+      <span className="text-xs text-fg3">· {duration(scan.started_at, scan.finished_at)}</span>
+      {movies != null && (
+        <span className="ml-auto text-xs text-fg3">
+          {movies.toLocaleString()} titles{inPlex != null ? ` · ${inPlex.toLocaleString()} in Plex` : ""}
+        </span>
+      )}
+    </li>
   );
 }
 
