@@ -15,6 +15,7 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -27,8 +28,13 @@ from ..db.models import Movie, MustHaveSuggestion
 from ..services import settings_store
 from .deps import get_session_factory, get_state, presented_token, token_accepted
 from .routes_movies import build_movie_stmt
+from .schemas import DecisionsImportIn, DecisionsImportOut
 
 router = APIRouter(prefix="/api", tags=["movies"])
+
+
+def _stamp() -> str:
+    return datetime.now(tz=UTC).date().isoformat()
 
 _MAX_ROWS = 20_000
 _HEADER = (
@@ -104,7 +110,9 @@ def export_movies_csv(
     return StreamingResponse(
         rows(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="sift-library.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="sift-library-{_stamp()}.csv"'
+        },
     )
 
 
@@ -151,5 +159,80 @@ def export_decisions(
     }
     return JSONResponse(
         payload,
-        headers={"Content-Disposition": 'attachment; filename="sift-decisions.json"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="sift-decisions-{_stamp()}.json"'
+        },
+    )
+
+
+def _entry_ids(entries: list[dict[str, Any]]) -> dict[int, str]:
+    """{tmdb_id: title} from backup entries, dropping anything malformed."""
+    out: dict[int, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        raw = entry.get("tmdb_id")
+        if isinstance(raw, bool) or not isinstance(raw, int | str):
+            continue
+        if isinstance(raw, str) and not raw.strip().isdigit():
+            continue
+        out[int(raw)] = str(entry.get("title") or "")
+    return out
+
+
+@router.post("/import/decisions", response_model=DecisionsImportOut)
+def import_decisions(
+    body: DecisionsImportIn,
+    request: Request,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    authorization: str | None = Header(default=None),
+    x_sift_token: str | None = Header(default=None),
+) -> DecisionsImportOut:
+    """Restore a decisions backup. Preview by DEFAULT (``dry_run=true``) — the
+    real apply requires the explicit flag from the confirm step. Restoring can
+    only touch keep flags, must-have status, and stored thresholds; it never
+    invents movies, never touches files, never reaches Radarr."""
+    if not token_accepted(get_state(request), presented_token(authorization, x_sift_token)):
+        raise HTTPException(status_code=401, detail="login required")
+
+    keeps = _entry_ids(body.keep_overrides)
+    dismissals = _entry_ids(body.dismissed_musthaves)
+    thresholds = body.thresholds if isinstance(body.thresholds, dict) else None
+
+    with factory() as session:
+        known_ids = {
+            int(tid)
+            for (tid,) in session.execute(
+                select(Movie.tmdb_id).where(Movie.tmdb_id.in_(keeps.keys()))
+            )
+        }
+        keeps_unknown = len(keeps) - len(known_ids)
+        if not body.dry_run:
+            for tid in known_ids:
+                movie = session.get(Movie, tid)
+                if movie is not None:
+                    movie.keep_override = True
+            for tid, title in dismissals.items():
+                row = session.scalar(
+                    select(MustHaveSuggestion).where(MustHaveSuggestion.tmdb_id == tid)
+                )
+                if row is None:
+                    session.add(
+                        MustHaveSuggestion(
+                            tmdb_id=tid, title=title or "Unknown", status="dismissed"
+                        )
+                    )
+                else:
+                    row.status = "dismissed"
+            if thresholds:
+                settings_store.set_junk_thresholds(session, thresholds)
+            session.commit()
+            get_state(request).counts_cache.invalidate()
+
+    return DecisionsImportOut(
+        dry_run=body.dry_run,
+        keeps_applied=len(known_ids),
+        keeps_unknown=keeps_unknown,
+        dismissals_applied=len(dismissals),
+        thresholds_restored=bool(thresholds),
     )

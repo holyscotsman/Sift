@@ -1,7 +1,7 @@
 {
   "name": "sift-frontend",
   "private": true,
-  "version": "2607.7.0",
+  "version": "2607.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

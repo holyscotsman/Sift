@@ -347,3 +347,59 @@ def test_decisions_backup_export(settings, factory):
         assert [d["tmdb_id"] for d in body["dismissed_musthaves"]] == [500]
         assert "junk_cutoff" in body["thresholds"]
         assert body["sift_version"]
+
+
+def test_decisions_import_previews_then_applies(client):
+    from sift.db.models import MustHaveSuggestion
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="Known", in_plex=True))
+        session.commit()
+    backup = {
+        "keep_overrides": [{"tmdb_id": 1, "title": "Known"}, {"tmdb_id": 999, "title": "Ghost"}],
+        "dismissed_musthaves": [{"tmdb_id": 500, "title": "Not For Me"}],
+        "thresholds": {"junk_cutoff": 70.0},
+    }
+    # Preview is the DEFAULT — nothing changes without the explicit flag.
+    preview = c.post("/api/import/decisions", json=backup).json()
+    assert preview["dry_run"] is True
+    assert preview["keeps_applied"] == 1 and preview["keeps_unknown"] == 1
+    with factory() as session:
+        assert session.get(Movie, 1).keep_override is False  # untouched
+
+    done = c.post("/api/import/decisions", json={**backup, "dry_run": False}).json()
+    assert done["dry_run"] is False and done["keeps_applied"] == 1
+    with factory() as session:
+        assert session.get(Movie, 1).keep_override is True
+        assert session.get(Movie, 999) is None  # unknown ids never invented
+        row = session.query(MustHaveSuggestion).filter_by(tmdb_id=500).one()
+        assert row.status == "dismissed"
+    assert c.get("/api/settings").json()["thresholds"]["junk_cutoff"] == 70.0
+
+
+def test_movie_sections_endpoint(client):
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=1, title="A", in_plex=True, library_section="Movies"))
+        session.add(Movie(tmdb_id=2, title="B", in_plex=True, library_section="Anime"))
+        session.add(Movie(tmdb_id=3, title="C", in_plex=True, library_section="Movies"))
+        session.add(Movie(tmdb_id=4, title="D", in_plex=True))  # no section → excluded
+        session.commit()
+    assert c.get("/api/movies/sections").json() == ["Anime", "Movies"]
+
+
+def test_export_filenames_carry_the_date(settings, factory):
+    settings.server.api_token = SecretStr("tok")
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        import re
+
+        csv_cd = c.get("/api/movies.csv", params={"token": "tok"}).headers["content-disposition"]
+        json_cd = c.get(
+            "/api/export/decisions.json", params={"token": "tok"}
+        ).headers["content-disposition"]
+        assert re.search(r"sift-library-\d{4}-\d{2}-\d{2}\.csv", csv_cd)
+        assert re.search(r"sift-decisions-\d{4}-\d{2}-\d{2}\.json", json_cd)

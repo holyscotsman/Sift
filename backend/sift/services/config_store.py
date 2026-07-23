@@ -43,9 +43,20 @@ def get_config(session: Session) -> dict[str, Any]:
     return dict(row.value) if row and row.value else {}
 
 
+def normalize_base_url(value: str) -> str:
+    """Fix the two most common paste mistakes: trailing slashes and a missing
+    scheme. A URL that already carries a scheme is only trimmed — https stays
+    https, always."""
+    text = value.strip().rstrip("/")
+    if text and "://" not in text:
+        text = f"http://{text}"
+    return text
+
+
 def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
     """Deep-merge a per-service patch. ``None`` values are skipped (leave unchanged);
-    an empty string clears a field. Returns the merged config."""
+    an empty string clears a field. Base URLs are stored normalized so health
+    checks and clients always agree. Returns the merged config."""
     current = get_config(session)
     for service, fields in patch.items():
         if service not in _ALLOWED or not isinstance(fields, dict):
@@ -54,6 +65,8 @@ def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
         for key, value in fields.items():
             if key not in _ALLOWED[service] or value is None:
                 continue
+            if key == "base_url" and isinstance(value, str) and value.strip():
+                value = normalize_base_url(value)
             merged[key] = value
         current[service] = merged
     session.merge(Setting(key=_CONN_KEY, value=current))
@@ -90,6 +103,13 @@ def _s(value: Any) -> str | None:
     return text or None
 
 
+def _url(value: Any) -> str | None:
+    """Like _s but for base URLs: also normalizes (covers pre-normalization
+    values already stored in older databases)."""
+    text = _s(value)
+    return normalize_base_url(text) if text else None
+
+
 def apply_to_settings(
     base: Settings, config: dict[str, Any], actions: dict[str, Any] | None = None
 ) -> Settings:
@@ -104,8 +124,8 @@ def apply_to_settings(
         eff.actions.dry_run = bool(actions["dry_run"])
 
     plex = config.get("plex") or {}
-    if _s(plex.get("base_url")):
-        eff.plex.base_url = _s(plex["base_url"])
+    if _url(plex.get("base_url")):
+        eff.plex.base_url = _url(plex["base_url"])
     if _s(plex.get("token")):
         eff.plex.token = SecretStr(plex["token"])
         eff.plex.enabled = True
@@ -113,8 +133,8 @@ def apply_to_settings(
         eff.plex.kids_sections = list(plex["kids_sections"])
 
     radarr = config.get("radarr") or {}
-    if _s(radarr.get("base_url")):
-        eff.radarr.base_url = _s(radarr["base_url"])
+    if _url(radarr.get("base_url")):
+        eff.radarr.base_url = _url(radarr["base_url"])
     if _s(radarr.get("api_key")):
         eff.radarr.api_key = SecretStr(radarr["api_key"])
         eff.radarr.enabled = True
@@ -125,8 +145,8 @@ def apply_to_settings(
         eff.radarr.default_quality_profile_id = int(profile_id)
 
     tautulli = config.get("tautulli") or {}
-    if _s(tautulli.get("base_url")):
-        eff.tautulli.base_url = _s(tautulli["base_url"])
+    if _url(tautulli.get("base_url")):
+        eff.tautulli.base_url = _url(tautulli["base_url"])
     if _s(tautulli.get("api_key")):
         eff.tautulli.api_key = SecretStr(tautulli["api_key"])
         eff.tautulli.enabled = True
@@ -147,8 +167,8 @@ def apply_to_settings(
         eff.ai.anthropic_model = anthropic["model"]
 
     ollama = config.get("ollama") or {}
-    if _s(ollama.get("base_url")):
-        eff.ai.local_base_url = _s(ollama["base_url"]) or eff.ai.local_base_url
+    if _url(ollama.get("base_url")):
+        eff.ai.local_base_url = _url(ollama["base_url"]) or eff.ai.local_base_url
         eff.ai.local_enabled = True
     if _s(ollama.get("model")):
         eff.ai.local_model = ollama["model"]

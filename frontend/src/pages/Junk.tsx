@@ -41,7 +41,14 @@ export function Junk() {
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // Score is the safety-relevant default; Size serves a disk-space purge.
-  const [sortBy, setSortBy] = useState<"score" | "size">("score");
+  // Persisted — a disk-purge session shouldn't reset on every visit.
+  const [sortBy, setSortByState] = useState<"score" | "size">(() =>
+    localStorage.getItem("sift.junk.sort") === "size" ? "size" : "score",
+  );
+  const setSortBy = (s: "score" | "size") => {
+    localStorage.setItem("sift.junk.sort", s);
+    setSortByState(s);
+  };
   const toastError = useToast();
 
   async function runReview() {
@@ -233,7 +240,10 @@ export function Junk() {
       )}
 
       {loading ? (
-        <div className="panel p-4">
+        <div className="panel p-4" aria-busy="true">
+          <span className="sr-only" role="status">
+            Loading the junk queue…
+          </span>
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="mb-2 h-20" />
           ))}

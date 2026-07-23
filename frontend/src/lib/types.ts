@@ -320,6 +320,14 @@ export interface PosterCacheStats {
   bytes: number;
 }
 
+export interface DecisionsImportResult {
+  dry_run: boolean;
+  keeps_applied: number;
+  keeps_unknown: number;
+  dismissals_applied: number;
+  thresholds_restored: boolean;
+}
+
 export interface QualityProfile {
   id: number;
   name: string;
