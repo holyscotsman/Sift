@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import scoring
 from ..db.models import Movie
-from .deps import AuthDep, get_session_factory
+from ..services.counts_cache import CountsCache
+from .deps import AuthDep, get_counts_cache, get_session_factory
 from .schemas import (
     KeepOverrideIn,
     KeepOverrideOut,
@@ -125,6 +126,7 @@ def set_keep_override(
     tmdb_id: int,
     body: KeepOverrideIn,
     factory: sessionmaker[Session] = Depends(get_session_factory),
+    counts_cache: CountsCache = Depends(get_counts_cache),
 ) -> KeepOverrideOut:
     """The owner's standing verdict: keep=true means this title is never flagged as
     junk again (until unset). Persisted — it survives rescans."""
@@ -134,4 +136,5 @@ def set_keep_override(
             raise HTTPException(status_code=404, detail="movie not found")
         movie.keep_override = body.keep
         session.commit()
+        counts_cache.invalidate()  # the flagged count must drop on the next poll
         return KeepOverrideOut(tmdb_id=tmdb_id, keep_override=movie.keep_override)

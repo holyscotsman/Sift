@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 
 import { ChevronDown, ChevronRight } from "@/components/icons";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { useToast } from "@/components/Toast";
 import { EmptyState, Pill, Poster, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
@@ -37,6 +38,7 @@ export function Junk() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const toastError = useToast();
 
   async function runReview() {
     setReviewing(true);
@@ -76,6 +78,15 @@ export function Junk() {
     () => pending.filter((c) => selected.has(c.tmdb_id)),
     [pending, selected],
   );
+  // What pruning is worth: total disk behind the flagged queue / the selection.
+  const pendingBytes = useMemo(
+    () => pending.reduce((sum, c) => sum + (c.file_size ?? 0), 0),
+    [pending],
+  );
+  const selectedBytes = useMemo(
+    () => selectedPending.reduce((sum, c) => sum + (c.file_size ?? 0), 0),
+    [selectedPending],
+  );
 
   function toggleSelected(id: number) {
     setSelected((s) => {
@@ -85,11 +96,19 @@ export function Junk() {
     });
   }
 
-  // Bulk Keep: persist the override for every selected row at once.
+  // Bulk Keep: persist the override for every selected row at once. A failed save
+  // rolls the row back to undecided so the screen never lies about what's stored.
   function keepSelected() {
     for (const c of selectedPending) {
       setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }));
-      void api.setKeepOverride(c.tmdb_id, true).catch(() => {});
+      void api.setKeepOverride(c.tmdb_id, true).catch(() => {
+        setDecisions((d) => {
+          const next = { ...d };
+          delete next[c.tmdb_id];
+          return next;
+        });
+        toastError(`Couldn't save Keep for “${c.title}” — try again.`);
+      });
     }
     setSelected(new Set());
   }
@@ -113,6 +132,9 @@ export function Junk() {
           [c.tmdb_id]: done.dry_run ? "removed_staged" : "removed_live",
         }));
       }
+    } catch {
+      // Undecided rows stay undecided; say so instead of failing silently.
+      toastError("A removal didn't go through — the remaining titles are untouched.");
     } finally {
       setBusy(false);
       setModal(null);
@@ -133,6 +155,9 @@ export function Junk() {
           <p className="mt-1 max-w-2xl text-sm text-fg2">
             Every removal needs your approval. Keep is permanent; kids libraries are never
             listed.
+            {pendingBytes > 0 && (
+              <span className="text-fg3"> ~{fmtSize(pendingBytes)} reclaimable.</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -160,9 +185,16 @@ export function Junk() {
       )}
 
       {selectedPending.length > 0 && (
-        <div className="glass sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2.5">
-          <span className="text-sm font-semibold">
+        <div
+          role="toolbar"
+          aria-label="Actions for selected titles"
+          className="glass sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2.5"
+        >
+          <span className="text-sm font-semibold" aria-live="polite">
             {selectedPending.length} selected
+            {selectedBytes > 0 && (
+              <span className="font-normal text-fg3"> · {fmtSize(selectedBytes)}</span>
+            )}
           </span>
           <button
             onClick={keepSelected}

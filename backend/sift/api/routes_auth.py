@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..services import auth
-from .deps import AuthDep, get_session_factory
+from ..services.ratelimit import LoginRateLimiter
+from .deps import AuthDep, get_login_limiter, get_session_factory
 from .schemas import (
     AuthStatus,
     ChangePasswordRequest,
@@ -54,13 +55,27 @@ def setup(
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    body: LoginRequest, factory: sessionmaker[Session] = Depends(get_session_factory)
+    body: LoginRequest,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    limiter: LoginRateLimiter = Depends(get_login_limiter),
 ) -> TokenResponse:
+    username = body.username.strip()
+    # Brute-force guard: repeated failures for the same account back off before
+    # the password is even checked. A success clears the window.
+    wait = limiter.retry_after(username)
+    if wait is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="too many failed attempts — try again shortly",
+            headers={"Retry-After": str(wait)},
+        )
     with factory() as session:
-        token = auth.login(session, body.username.strip(), body.password)
+        token = auth.login(session, username, body.password)
     if token is None:
+        limiter.record_failure(username)
         raise HTTPException(status_code=401, detail="invalid username or password")
-    return TokenResponse(token=token, username=body.username.strip())
+    limiter.record_success(username)
+    return TokenResponse(token=token, username=username)
 
 
 @router.post("/password", response_model=OkResponse, dependencies=[AuthDep])

@@ -18,9 +18,10 @@ from ..db.models import (
     ScanStatus,
     WatchHistory,
 )
+from ..services.counts_cache import CountsCache
 from ..services.health import gather_health
 from ..services.settings_store import effective_junk
-from .deps import AuthDep, get_session_factory, get_settings
+from .deps import AuthDep, get_counts_cache, get_session_factory, get_settings
 from .schemas import Counts, HealthResponse, ServiceHealth, StatusResponse
 
 router = APIRouter(prefix="/api", tags=["health"], dependencies=[AuthDep])
@@ -37,7 +38,7 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     )
 
 
-def _counts(session: Session, settings: Settings) -> Counts:
+def _queue_counts(session: Session, settings: Settings) -> tuple[int, int]:
     # The two queues users act on. junk_flagged goes through junk.candidates so the
     # number always matches the Junk page (keep-overrides + kids-guard respected).
     thr = effective_junk(session, settings)
@@ -55,6 +56,13 @@ def _counts(session: Session, settings: Settings) -> Counts:
         )
         or 0
     )
+    return junk_flagged, musthave_pending
+
+
+def _counts(session: Session, settings: Settings, cache: CountsCache) -> Counts:
+    # junk_flagged re-scores the library; the dashboard polls every few seconds.
+    # Cached with explicit invalidation on every write path that changes it.
+    junk_flagged, musthave_pending = cache.get(lambda: _queue_counts(session, settings))
     return Counts(
         junk_flagged=junk_flagged,
         musthave_pending=musthave_pending,
@@ -90,6 +98,7 @@ def _counts(session: Session, settings: Settings) -> Counts:
 def status(
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
+    cache: CountsCache = Depends(get_counts_cache),
 ) -> StatusResponse:
     with factory() as session:
         last = session.scalars(select(ScanRun).order_by(ScanRun.id.desc()).limit(1)).first()
@@ -98,5 +107,5 @@ def status(
             last_scan_id=last.id if last else None,
             last_scan_status=str(last.status) if last else None,
             last_scan_finished_at=last.finished_at if last else None,
-            counts=_counts(session, settings),
+            counts=_counts(session, settings, cache),
         )

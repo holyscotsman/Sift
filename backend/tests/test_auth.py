@@ -159,3 +159,27 @@ def test_change_password_requires_auth(client):
         json={"current_password": "hunter2hunter2", "new_password": "longenough1"},
     )
     assert r.status_code == 401
+
+
+def test_login_rate_limit_locks_account_after_failures(client):
+    _setup(client)
+    for _ in range(5):
+        assert _login(client, password="wrong-wrong-1").status_code == 401
+    # Sixth attempt is refused before the password is even checked…
+    locked = _login(client, password="wrong-wrong-1")
+    assert locked.status_code == 429
+    assert int(locked.headers["Retry-After"]) >= 1
+    # …and the lock applies to the RIGHT password too (that's the point).
+    assert _login(client).status_code == 429
+
+
+def test_login_rate_limit_is_per_account_and_cleared_by_success(client):
+    _setup(client)
+    # Negative control: failures on one name never affect another.
+    for _ in range(5):
+        assert _login(client, username="somebody-else", password="wrong-wrong-1").status_code == 401
+    ok = _login(client)
+    assert ok.status_code == 200
+    # A success clears alice's window: a few fresh failures don't instantly lock.
+    assert _login(client, password="wrong-wrong-1").status_code == 401
+    assert _login(client).status_code == 200

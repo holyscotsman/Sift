@@ -67,6 +67,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       /* non-JSON error body */
     }
+    // A dead session (token invalidated by a secret rotation or DB reset) should
+    // drop the app back to the login screen, not leave every page silently broken.
+    // Auth endpoints are excluded — a wrong password is not a session death.
+    if (res.status === 401 && token && !path.startsWith("/api/auth/")) {
+      setToken(null);
+      window.dispatchEvent(new Event("sift:unauthorized"));
+    }
     throw new ApiError(detail, res.status);
   }
   if (res.status === 204) return undefined as T;

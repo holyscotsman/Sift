@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { ProfileBucket, ProfileResponse, ProfileWeights } from "@/lib/types";
@@ -49,6 +50,7 @@ export function TasteProfile() {
   const [data, setData] = useState<ProfileResponse | null>(null);
   const [weights, setWeights] = useState<ProfileWeights | null>(null);
   const [saved, setSaved] = useState(false);
+  const toastError = useToast();
 
   useEffect(() => {
     api
@@ -161,7 +163,15 @@ export function TasteProfile() {
               ))}
             </div>
             <button
-              onClick={() => api.saveWeights(weights).then((d) => { setWeights(d.weights); setSaved(true); })}
+              onClick={() =>
+                api
+                  .saveWeights(weights)
+                  .then((d) => {
+                    setWeights(d.weights);
+                    setSaved(true);
+                  })
+                  .catch(() => toastError("Couldn't save the weights — try again."))
+              }
               className="gradient-fill mt-4 w-full rounded-md py-2 text-sm font-bold shadow-glow"
             >
               {saved ? "Saved ✓" : "Save weights"}

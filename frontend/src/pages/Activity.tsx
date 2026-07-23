@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { EmptyState, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useActivity } from "@/lib/hooks";
+import { relativeTime } from "@/lib/time";
 import type { ActionRecord, ScanRun } from "@/lib/types";
 
 type Filter = "all" | "add" | "monitor" | "unmonitor" | "delete";
@@ -126,17 +127,6 @@ function ScanRow({ scan }: { scan: ScanRun }) {
       )}
     </li>
   );
-}
-
-// "2 h ago" beats a wall of absolute timestamps; the exact time stays on hover.
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
 }
 
 function TimelineEntry({ action }: { action: ActionRecord }) {

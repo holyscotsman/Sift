@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session, sessionmaker
@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..actions.engine import ActionEngine
 from ..ai.provider import LLMProvider
 from ..config import Settings
+from ..services.counts_cache import CountsCache
 from ..services.posters import PosterCache
+from ..services.ratelimit import LoginRateLimiter
 from ..services.scanner import ProgressHub
 
 
@@ -25,6 +27,8 @@ class AppState:
     hub: ProgressHub
     llm: LLMProvider
     posters: PosterCache
+    counts_cache: CountsCache = field(default_factory=CountsCache)
+    login_limiter: LoginRateLimiter = field(default_factory=LoginRateLimiter)
 
 
 def get_state(request: Request) -> AppState:
@@ -41,6 +45,14 @@ def get_session_factory(request: Request) -> sessionmaker[Session]:
 
 def get_action_engine(request: Request) -> ActionEngine:
     return get_state(request).engine
+
+
+def get_counts_cache(request: Request) -> CountsCache:
+    return get_state(request).counts_cache
+
+
+def get_login_limiter(request: Request) -> LoginRateLimiter:
+    return get_state(request).login_limiter
 
 
 def presented_token(authorization: str | None, x_sift_token: str | None) -> str | None:

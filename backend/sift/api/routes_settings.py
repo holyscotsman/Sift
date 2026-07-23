@@ -12,8 +12,9 @@ from ..ai.registry import ai_configured
 from ..analysis import junk
 from ..config import JunkThresholds, Settings
 from ..services import curated_lists, settings_store
+from ..services.counts_cache import CountsCache
 from ..services.health import check_service, gather_health
-from .deps import AuthDep, get_session_factory, get_settings
+from .deps import AuthDep, get_counts_cache, get_session_factory, get_settings
 from .schemas import (
     ScanScheduleIn,
     ScanScheduleOut,
@@ -94,12 +95,14 @@ def save_thresholds(
     body: ThresholdsModel,
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
+    counts_cache: CountsCache = Depends(get_counts_cache),
 ) -> ThresholdPreview:
     with factory() as session:
         settings_store.set_junk_thresholds(session, body.model_dump())
         thr = settings_store.effective_junk(session, settings)
         cult = curated_lists.cult_ids(session)
     junk.compute_and_store(factory, thr, cult_ids=cult)  # re-score with the new thresholds
+    counts_cache.invalidate()  # new thresholds change what counts as flagged
     return ThresholdPreview(**junk.preview(factory, thr))
 
 
