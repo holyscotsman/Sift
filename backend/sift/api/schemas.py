@@ -346,6 +346,8 @@ class SettingsResponse(BaseModel):
     connections: list[ServiceHealth]
     thresholds: ThresholdsModel
     ai_configured: bool
+    # Both providers usable under tandem — Ask can offer side-by-side compare.
+    ai_compare_available: bool = False
     # True when writes are staged only (nothing reaches Radarr). The hosted default.
     actions_dry_run: bool
     # "sqlite" | "postgres" — and whether that means login/config die on redeploy
@@ -422,6 +424,13 @@ class AskSource(BaseModel):
     year: int | None
 
 
+class AskAlternate(BaseModel):
+    answer: str
+    provider: str
+    model: str
+    latency_ms: float
+
+
 class AskResponse(BaseModel):
     answer: str
     provider: str
@@ -429,6 +438,9 @@ class AskResponse(BaseModel):
     latency_ms: float
     ai_configured: bool
     sources: list[AskSource]
+    # Compare mode: the second provider's phrasing of the SAME retrieval.
+    # None in single mode or when the second provider didn't answer.
+    alternate: AskAlternate | None = None
 
 
 class ActionOut(BaseModel):

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { SearchIcon } from "@/components/icons";
-import { Poster } from "@/components/ui";
+import { Pill, Poster } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import type { Movie } from "@/lib/types";
@@ -127,6 +127,13 @@ export function GlobalSearch() {
                   className="h-8 w-6 shrink-0 overflow-hidden rounded-sm"
                 />
                 <span className="truncate text-sm text-fg">{m.title}</span>
+                {/* Ownership at a glance: green = in your Plex library, muted =
+                    only wanted/monitored in Radarr. */}
+                {m.in_plex ? (
+                  <Pill tone="keep">In Plex</Pill>
+                ) : m.monitored ? (
+                  <Pill>Radarr</Pill>
+                ) : null}
                 {m.year && <span className="ml-auto text-xs text-fg3">{m.year}</span>}
               </button>
             </li>

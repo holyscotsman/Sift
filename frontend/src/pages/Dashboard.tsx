@@ -7,12 +7,13 @@ import { Link } from "react-router-dom";
 
 import { HealthOrb } from "@/components/HealthOrb";
 import { ScanIcon } from "@/components/icons";
-import { EmptyState, Pill, RingGauge, Skeleton } from "@/components/ui";
+import { EmptyState, Pill, Poster, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
 import { useActivity, useHealth, useStatus } from "@/lib/hooks";
 import { useScan } from "@/lib/scan";
 import { hoursSince, relativeTime } from "@/lib/time";
-import type { Counts, SettingsResponse } from "@/lib/types";
+import type { Counts, Movie, SettingsResponse } from "@/lib/types";
 
 interface Deduction {
   label: string;
@@ -123,7 +124,9 @@ export function Dashboard() {
   const { data: health } = useHealth();
   const { data: activity } = useActivity(6);
   const { start } = useScan();
+  const { open: openDrawer } = useDrawer();
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [recent, setRecent] = useState<Movie[]>([]);
   const c = status?.counts;
   const online = health?.services.filter((s) => s.ok).length ?? 0;
   const total = health?.services.length ?? 0;
@@ -134,6 +137,13 @@ export function Dashboard() {
       .getSettings()
       .then((s) => {
         if (!cancelled) setSettings(s);
+      })
+      .catch(() => undefined);
+    // One fetch, no polling — "what just landed" doesn't need to be live.
+    api
+      .movies({ in_plex: true, sort: "added_at", order: "desc", page_size: 6 })
+      .then((r) => {
+        if (!cancelled) setRecent(r.items.filter((m) => m.added_at));
       })
       .catch(() => undefined);
     return () => {
@@ -244,6 +254,30 @@ export function Dashboard() {
           />
         </Segment>
       </div>
+
+      {recent.length > 0 && (
+        <div className="panel mt-4 p-5">
+          <span className="eyebrow">Recently added</span>
+          <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+            {recent.map((m) => (
+              <button
+                key={m.tmdb_id}
+                onClick={() => openDrawer(m.tmdb_id)}
+                className="w-[92px] shrink-0 text-left"
+                title={m.added_at ? new Date(m.added_at).toLocaleString() : undefined}
+              >
+                <div className="aspect-[2/3] overflow-hidden rounded-md">
+                  <Poster tmdbId={m.tmdb_id} alt="" className="h-full w-full" />
+                </div>
+                <p className="mt-1 truncate text-[11px] text-fg3">{m.title}</p>
+                {m.added_at && (
+                  <p className="truncate text-[10px] text-fg3/80">{relativeTime(m.added_at)}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="panel p-5 lg:col-span-2">

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -115,6 +116,24 @@ def create_app(
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
+
+    @app.middleware("http")
+    async def _slow_request_log(request, call_next):  # type: ignore[no-untyped-def]
+        # Observability for hosted instances: anything over 500 ms gets a line.
+        # Path only — query strings can carry session tokens (downloads/posters)
+        # and must never reach the log.
+        started = time.monotonic()
+        response = await call_next(request)
+        elapsed_ms = (time.monotonic() - started) * 1000
+        if elapsed_ms > 500 and request.url.path.startswith("/api"):
+            log.warning(
+                "slow request: %s %s -> %s in %dms",
+                request.method,
+                request.url.path,
+                response.status_code,
+                int(elapsed_ms),
+            )
         return response
 
     app.state.sift = AppState(

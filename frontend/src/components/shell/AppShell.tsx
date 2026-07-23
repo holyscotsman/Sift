@@ -3,8 +3,10 @@
 // the Suspense boundary sits around the outlet so the shell never flashes away
 // while a chunk loads.
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+
+import { api } from "@/lib/api";
 
 import { Aurora } from "@/components/Aurora";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
@@ -15,6 +17,37 @@ import { Shortcuts } from "@/lib/shortcuts";
 import { Header } from "./Header";
 import { ScanPanel } from "./ScanPanel";
 import { TopNav } from "./TopNav";
+
+// A quiet footer so bug reports can say what they're running.
+function Footer() {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .version()
+      .then((v) => {
+        if (!cancelled) setVersion(v.version);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!version) return null;
+  return (
+    <footer className="mt-6 pb-2 text-center text-[11px] text-fg3/70">
+      Sift {version} ·{" "}
+      <a
+        href="https://github.com/holyscotsman/Sift/blob/main/CHANGELOG.md"
+        target="_blank"
+        rel="noreferrer"
+        className="hover:text-fg2"
+      >
+        changelog
+      </a>
+    </footer>
+  );
+}
 
 function PageFallback() {
   return (
@@ -47,6 +80,7 @@ export function AppShell() {
             </Suspense>
           </RouteErrorBoundary>
         </main>
+        <Footer />
       </div>
       <ScanPanel />
       <MovieDrawer />

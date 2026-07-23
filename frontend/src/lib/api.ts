@@ -108,6 +108,7 @@ function queryString(params: Record<string, unknown>): string {
 export const api = {
   health: () => request<HealthResponse>("/api/health"),
   status: () => request<StatusResponse>("/api/status"),
+  version: () => request<{ name: string; version: string }>("/api/version"),
   // Auth (open endpoints — the way in).
   authStatus: () => request<AuthStatus>("/api/auth/status"),
   authSetup: (username: string, password: string) =>

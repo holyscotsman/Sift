@@ -38,6 +38,8 @@ export function Junk() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Score is the safety-relevant default; Size serves a disk-space purge.
+  const [sortBy, setSortBy] = useState<"score" | "size">("score");
   const toastError = useToast();
 
   async function runReview() {
@@ -73,6 +75,13 @@ export function Junk() {
       .catch(() => setDryRun(true));
   }, []);
 
+  const sortedItems = useMemo(
+    () =>
+      sortBy === "size"
+        ? [...items].sort((a, b) => (b.file_size ?? 0) - (a.file_size ?? 0))
+        : items, // server order = score desc
+    [items, sortBy],
+  );
   const pending = useMemo(() => items.filter((c) => !decisions[c.tmdb_id]), [items, decisions]);
   const selectedPending = useMemo(
     () => pending.filter((c) => selected.has(c.tmdb_id)),
@@ -240,8 +249,23 @@ export function Junk() {
           />
         </div>
       ) : (
+        <>
+          <div className="mb-2 flex items-center gap-1 text-xs">
+            <span className="mr-1 text-fg3">Sort by</span>
+            {(["score", "size"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setSortBy(k)}
+                className={`rounded-pill px-2.5 py-1 font-semibold capitalize ${
+                  sortBy === k ? "bg-accent-soft text-accent" : "text-fg2 hover:bg-bg2"
+                }`}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
         <div className="panel divide-y divide-line">
-          {items.map((c) => (
+          {sortedItems.map((c) => (
             <Row
               key={c.tmdb_id}
               candidate={c}
@@ -283,6 +307,7 @@ export function Junk() {
             />
           ))}
         </div>
+        </>
       )}
 
       <ConfirmModal
@@ -346,17 +371,34 @@ function Row({
   onReset: () => void;
 }) {
   const { open } = useDrawer();
+  // A decided row gets out of the way: one compact line, undoable, so the
+  // still-undecided queue keeps the screen.
+  if (decision) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-2">
+        <span className="truncate text-sm text-fg2">{c.title}</span>
+        <Pill tone={decision === "kept" ? "keep" : "junk"}>
+          {decision === "kept"
+            ? "kept"
+            : decision === "removed_live"
+              ? "removed"
+              : "removal staged"}
+        </Pill>
+        <button onClick={onReset} className="ml-auto shrink-0 text-xs text-fg3 hover:text-fg">
+          Change
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start">
-      {!decision && (
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onCheck}
-          aria-label={`Select ${c.title}`}
-          className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--accent)]"
-        />
-      )}
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onCheck}
+        aria-label={`Select ${c.title}`}
+        className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--accent)]"
+      />
       <button
         onClick={() => open(c.tmdb_id)}
         aria-label={`Details for ${c.title}`}
@@ -413,36 +455,19 @@ function Row({
       <div className="flex shrink-0 items-center gap-3">
         <RingGauge value={c.junk_score} color={bandColor(c.band)} size={56} label={Math.round(c.junk_score)} />
         <div className="flex flex-col gap-1.5">
-          {decision ? (
-            <>
-              <Pill tone={decision === "kept" ? "keep" : "junk"}>
-                {decision === "kept"
-                  ? "Kept — won't be flagged again"
-                  : decision === "removed_live"
-                    ? "Removed"
-                    : "Removal staged"}
-              </Pill>
-              <button onClick={onReset} className="text-xs text-fg3 hover:text-fg">
-                Change
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={onKeep}
-                className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
-              >
-                Keep it
-              </button>
-              <button
-                onClick={onRemove}
-                className="rounded-md px-3 py-1.5 text-xs font-bold"
-                style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
-              >
-                Approve removal
-              </button>
-            </>
-          )}
+          <button
+            onClick={onKeep}
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Keep it
+          </button>
+          <button
+            onClick={onRemove}
+            className="rounded-md px-3 py-1.5 text-xs font-bold"
+            style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+          >
+            Approve removal
+          </button>
         </div>
       </div>
     </div>

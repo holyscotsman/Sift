@@ -8,7 +8,7 @@ import { SparkleIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import { formatAnswer } from "@/lib/format";
-import type { AskResponse, AskSource, ProfileResponse } from "@/lib/types";
+import type { AskAlternate, AskResponse, AskSource, ProfileResponse } from "@/lib/types";
 
 interface UserMsg {
   role: "user";
@@ -22,6 +22,7 @@ interface AssistantMsg {
   latency: number;
   aiConfigured: boolean;
   sources: AskSource[];
+  alternate: AskAlternate | null;
 }
 type Msg = UserMsg | AssistantMsg;
 
@@ -50,6 +51,10 @@ export function Ask() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(STATIC_SUGGESTIONS);
+  // Side-by-side answers from both providers — offered only when the server
+  // says tandem is fully configured.
+  const [compareAvailable, setCompareAvailable] = useState(false);
+  const [compare, setCompare] = useState(false);
   const { open: openDrawer } = useDrawer();
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +65,12 @@ export function Ask() {
       .getProfile()
       .then((p) => {
         if (!cancelled) setSuggestions(buildSuggestions(p));
+      })
+      .catch(() => undefined);
+    api
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setCompareAvailable(s.ai_compare_available);
       })
       .catch(() => undefined);
     return () => {
@@ -76,7 +87,7 @@ export function Ask() {
     setThread((t) => [...t, { role: "user", text: query }]);
     setThinking(true);
     try {
-      const res: AskResponse = await api.ask(query);
+      const res: AskResponse = await api.ask(query, compare ? "compare" : "single");
       setThread((t) => [
         ...t,
         {
@@ -87,6 +98,7 @@ export function Ask() {
           latency: res.latency_ms,
           aiConfigured: res.ai_configured,
           sources: res.sources,
+          alternate: res.alternate,
         },
       ]);
     } catch {
@@ -100,6 +112,7 @@ export function Ask() {
           latency: 0,
           aiConfigured: false,
           sources: [],
+          alternate: null,
         },
       ]);
     } finally {
@@ -160,30 +173,50 @@ export function Ask() {
                 </div>
               </div>
             ) : (
-              <div key={i} className="max-w-[85%]">
-                <div className="panel px-4 py-3">
-                  <div className="space-y-2 text-sm text-fg">{formatAnswer(m.answer)}</div>
-                  {m.sources.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {m.sources.map((s) => (
-                        <button
-                          key={s.tmdb_id}
-                          onClick={() => openDrawer(s.tmdb_id)}
-                          className="rounded-pill bg-bg2 px-2 py-0.5 text-[11px] text-fg2 hover:text-fg"
-                        >
-                          {s.title}
-                          {s.year ? ` · ${s.year}` : ""}
-                        </button>
-                      ))}
+              <div key={i} className={m.alternate ? "w-full" : "max-w-[85%]"}>
+                <div className={m.alternate ? "grid grid-cols-1 gap-3 md:grid-cols-2" : ""}>
+                  <div>
+                    <div className="panel px-4 py-3">
+                      {m.alternate && (
+                        <p className="eyebrow mb-2">{m.model || m.provider}</p>
+                      )}
+                      <div className="space-y-2 text-sm text-fg">{formatAnswer(m.answer)}</div>
+                    </div>
+                    <p className="mt-1 px-1 text-[11px] text-fg3">
+                      {m.provider === "stub"
+                        ? "grounded answer — connect a model in Settings › Connections for richer phrasing"
+                        : `${m.model}`}
+                      {m.latency ? ` · ${Math.round(m.latency)}ms` : ""}
+                    </p>
+                  </div>
+                  {m.alternate && (
+                    <div>
+                      <div className="panel px-4 py-3">
+                        <p className="eyebrow mb-2">{m.alternate.model || m.alternate.provider}</p>
+                        <div className="space-y-2 text-sm text-fg">
+                          {formatAnswer(m.alternate.answer)}
+                        </div>
+                      </div>
+                      <p className="mt-1 px-1 text-[11px] text-fg3">
+                        {m.alternate.model} · {Math.round(m.alternate.latency_ms)}ms
+                      </p>
                     </div>
                   )}
                 </div>
-                <p className="mt-1 px-1 text-[11px] text-fg3">
-                  {m.provider === "stub"
-                    ? "grounded answer — connect a model in Settings › Connections for richer phrasing"
-                    : `${m.model}`}
-                  {m.latency ? ` · ${Math.round(m.latency)}ms` : ""}
-                </p>
+                {m.sources.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {m.sources.map((s) => (
+                      <button
+                        key={s.tmdb_id}
+                        onClick={() => openDrawer(s.tmdb_id)}
+                        className="rounded-pill bg-bg2 px-2 py-0.5 text-[11px] text-fg2 hover:text-fg"
+                      >
+                        {s.title}
+                        {s.year ? ` · ${s.year}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ),
           )}
@@ -208,6 +241,21 @@ export function Ask() {
         }}
         className="mt-3 flex items-center gap-2"
       >
+        {compareAvailable && (
+          <button
+            type="button"
+            onClick={() => setCompare((c) => !c)}
+            aria-pressed={compare}
+            title="Ask both models and compare their answers side by side"
+            className={`shrink-0 rounded-pill border px-3 py-2 text-xs font-semibold ${
+              compare
+                ? "border-accent-line bg-accent-soft text-accent"
+                : "border-line text-fg2 hover:bg-bg2"
+            }`}
+          >
+            Compare
+          </button>
+        )}
         <input
           ref={inputRef}
           value={input}

@@ -147,3 +147,54 @@ def test_ask_endpoint(client):
     assert body["ai_configured"] is False
     assert body["provider"] == "stub"
     assert any(s["tmdb_id"] == 603 for s in body["sources"])
+
+
+def test_ask_compare_returns_both_answers(client, monkeypatch):
+    # Compare mode: one retrieval, two phrasings, both labeled. The alternate is
+    # built per-request; here both are stubs with distinct models.
+    from sift.api import routes_ask
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", year=1999, in_plex=True))
+        session.commit()
+    monkeypatch.setattr(routes_ask, "_build_alternate", lambda settings: StubProvider("local"))
+    body = c.post("/api/ask", json={"query": "the matrix", "mode": "compare"}).json()
+    assert body["alternate"] is not None
+    assert body["alternate"]["model"] == "local"
+    assert body["alternate"]["answer"]
+    assert any(s["tmdb_id"] == 603 for s in body["sources"])
+
+
+def test_ask_compare_degrades_when_alternate_fails(client, monkeypatch):
+    from sift.api import routes_ask
+
+    class ExplodingProvider:
+        name = "boom"
+        model = "boom"
+
+        async def complete(self, *, system: str, prompt: str):
+            raise RuntimeError("dead provider")
+
+        async def aclose(self) -> None:
+            return None
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", year=1999, in_plex=True))
+        session.commit()
+    monkeypatch.setattr(routes_ask, "_build_alternate", lambda settings: ExplodingProvider())
+    body = c.post("/api/ask", json={"query": "the matrix", "mode": "compare"}).json()
+    # Primary answer survives; the dead alternate is simply absent.
+    assert body["provider"] == "stub"
+    assert body["alternate"] is None
+
+
+def test_ask_single_mode_has_no_alternate(client):
+    # Negative control: default mode never carries a second answer.
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", year=1999, in_plex=True))
+        session.commit()
+    body = c.post("/api/ask", json={"query": "the matrix"}).json()
+    assert body["alternate"] is None

@@ -8,7 +8,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..ai.registry import ai_configured
+from ..ai.registry import ai_configured, compare_available
 from ..analysis import junk
 from ..config import JunkThresholds, Settings
 from ..services import curated_lists, settings_store
@@ -61,6 +61,7 @@ async def get_all(
         ],
         thresholds=_thresholds_out(thr),
         ai_configured=ai_configured(settings),
+        ai_compare_available=compare_available(settings),
         actions_dry_run=settings.actions.dry_run,
         database_kind=db_kind,
         # SQLite on Render's free tier lives on an ephemeral disk: login + config

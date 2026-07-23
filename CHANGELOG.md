@@ -2,6 +2,16 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.6.0 — Optimization Cycle 06
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_06.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): real Ask compare mode (both tandem providers
+phrase one retrieval, side by side, graceful degradation), Activity movie-id
+drawer links + expandable scan receipts, collapsed decided junk rows, junk
+score/size sort, a recently-added dashboard strip, a version footer, ownership
+pills in global search, slow-request logging (paths only — tokens never reach
+logs), and a wizard readiness line.
+
 ## 2607.5.0 — Optimization Cycle 05
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_05.md`, log:
