@@ -7,6 +7,57 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.6.0 — Cycle 06
+
+**Plan:** `docs/optimization/CYCLE_06.md` (10/10 approved after change review, 4 amended).
+
+1. **Ask compare mode, made real** — the long-dead `mode: "compare"` flag now
+   works: under tandem, one deterministic retrieval is phrased by BOTH providers
+   concurrently and shown side by side, each labeled with model + latency. The
+   alternate failing degrades to a single answer (test-pinned); single mode is
+   byte-identical to before (test-pinned). The toggle only appears when the
+   server reports both providers usable (`ai_compare_available`). Advisory rules
+   unchanged — compare adds a phrasing surface, never a decision.
+2. **Activity links to the movie** — action rows' "#id" opens the movie drawer.
+3. **Scan receipts** — Activity's scan rows expand to per-phase checkpoint
+   status, counts, and the error text for failed runs.
+4. **Decided junk rows collapse** — kept/removed titles shrink to a one-line
+   strip with an undo, keeping the undecided queue on screen.
+5. **Junk sorts by score or size** — a client-side toggle; score (the
+   safety-relevant order) stays the default.
+6. **Recently added** — a dashboard poster strip of the six newest arrivals
+   (one fetch, no polling; hidden when empty), with drawer click-through.
+7. **A footer that says what's running** — "Sift {version} · changelog" from
+   `/api/version`.
+8. **Search shows ownership** — result rows carry "In Plex" (green) or a muted
+   "Radarr" tag.
+9. **Slow requests get logged** — >500 ms API requests log method + path +
+   status + duration at WARNING. Paths only — query strings (which can carry
+   download tokens) never reach the log.
+10. **Wizard readiness line** — "N of 4 sources verified" derived from the test
+    results already in the form; no auto-probing.
+
+**QA:** 168 backend tests green (3 new — compare returns a labeled alternate,
+compare degrades when the alternate dies, single mode never carries one).
+ruff + bandit ruleset + mypy strict clean; tsc + build + npm audit clean. Live
+seeded-server: `ai_compare_available` correctly false without providers, single
+ask unchanged, version endpoint feeding the footer; screenshots verified the
+expanded scan receipts, linked action ids, collapsed kept-row strip, sort
+toggle, footer, and the recently-added strip; seed state restored after QA.
+
+**Security review:** compare builds the second provider per-request and closes
+it (no client leaks); no new endpoints beyond reading `/api/version` (already
+public); the slow-request log deliberately excludes query strings so poster/CSV
+tokens can never land in logs; wizard readiness reads local state only.
+
+**Bug review:** cycle diff re-read line-by-line; caught pre-merge: the compare
+gather needed `return_exceptions` so a dead alternate can't sink the primary;
+`OllamaProvider` import path (lives in `ai/ollama`, not `ai/provider`); the
+decided-row early return made the old in-row decision branch dead code —
+removed rather than left to rot.
+
+---
+
 ## 2607.5.0 — Cycle 05
 
 **Plan:** `docs/optimization/CYCLE_05.md` (10/10 approved after change review, 6 amended).

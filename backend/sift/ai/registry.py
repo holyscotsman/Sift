@@ -56,6 +56,13 @@ def ai_configured(settings: Settings) -> bool:
     return has_local or has_remote
 
 
+def compare_available(settings: Settings) -> bool:
+    """Can Ask offer side-by-side answers? Needs BOTH providers under tandem.
+    A pure check — never constructs providers (each opens an httpx client)."""
+    mode = _mode(settings)
+    return mode == "tandem" and settings.ai.local_enabled and anthropic_key(settings) is not None
+
+
 def build_llm_provider(settings: Settings) -> LLMProvider:
     """The single conversational provider (Ask): Anthropic when allowed and keyed,
     else the local model, else the deterministic stub. Constructs only the provider

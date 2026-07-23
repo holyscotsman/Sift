@@ -307,6 +307,8 @@ export interface SettingsResponse {
   connections: ServiceHealth[];
   thresholds: Thresholds;
   ai_configured: boolean;
+  // Both providers usable under tandem — Ask can offer side-by-side compare.
+  ai_compare_available: boolean;
   actions_dry_run: boolean;
   database_kind: string;
   ephemeral_risk: boolean;
@@ -343,6 +345,13 @@ export interface AskSource {
   year: number | null;
 }
 
+export interface AskAlternate {
+  answer: string;
+  provider: string;
+  model: string;
+  latency_ms: number;
+}
+
 export interface AskResponse {
   answer: string;
   provider: string;
@@ -350,6 +359,8 @@ export interface AskResponse {
   latency_ms: number;
   ai_configured: boolean;
   sources: AskSource[];
+  // Compare mode: the second provider's phrasing of the same retrieval.
+  alternate: AskAlternate | null;
 }
 
 // Live scan progress frames pushed over /ws/scan/{id}.

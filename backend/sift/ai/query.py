@@ -71,10 +71,9 @@ def _context(movies: list[Movie]) -> str:
     return "\n".join(lines) if lines else "(the library is empty)"
 
 
-async def answer(
-    session: Session, provider: LLMProvider, query: str, *, limit: int = 12
-) -> AskResult:
-    movies = retrieve(session, query, limit=limit)
+async def answer_with(provider: LLMProvider, movies: list[Movie], query: str) -> AskResult:
+    """Phrase an answer over an already-retrieved context. Split out so compare
+    mode can ask two providers about the SAME retrieval (comparable answers)."""
     prompt = f"Library context ({len(movies)} titles):\n{_context(movies)}\n\nQuestion: {query}"
     completion = await provider.complete(system=_SYSTEM, prompt=prompt)
     return AskResult(
@@ -84,3 +83,10 @@ async def answer(
         latency_ms=completion.latency_ms,
         sources=[Source(m.tmdb_id, m.title, m.year) for m in movies],
     )
+
+
+async def answer(
+    session: Session, provider: LLMProvider, query: str, *, limit: int = 12
+) -> AskResult:
+    movies = retrieve(session, query, limit=limit)
+    return await answer_with(provider, movies, query)

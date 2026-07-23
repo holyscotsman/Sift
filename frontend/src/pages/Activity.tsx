@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 
 import { EmptyState, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
 import { useActivity } from "@/lib/hooks";
 import { relativeTime } from "@/lib/time";
 import type { ActionRecord, ScanRun } from "@/lib/types";
@@ -124,20 +125,56 @@ function duration(start: string, end: string | null): string {
 }
 
 function ScanRow({ scan }: { scan: ScanRun }) {
+  const [expanded, setExpanded] = useState(false);
   const status = scan.status.toLowerCase().replace("scanstatus.", "");
   const movies = scan.stats?.total_movies;
   const inPlex = scan.stats?.in_plex;
+  const checkpoints = Object.entries(scan.checkpoints ?? {});
   return (
-    <li className="flex flex-wrap items-center gap-2 py-2 text-sm">
-      <Pill tone={SCAN_TONE[status] ?? "neutral"}>{status}</Pill>
-      <span className="text-fg2" title={new Date(scan.started_at).toLocaleString()}>
-        {relativeTime(scan.started_at)}
-      </span>
-      <span className="text-xs text-fg3">· {duration(scan.started_at, scan.finished_at)}</span>
-      {movies != null && (
-        <span className="ml-auto text-xs text-fg3">
-          {movies.toLocaleString()} titles{inPlex != null ? ` · ${inPlex.toLocaleString()} in Plex` : ""}
+    <li className="py-2 text-sm">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full flex-wrap items-center gap-2 text-left"
+      >
+        <Pill tone={SCAN_TONE[status] ?? "neutral"}>{status}</Pill>
+        <span className="text-fg2" title={new Date(scan.started_at).toLocaleString()}>
+          {relativeTime(scan.started_at)}
         </span>
+        <span className="text-xs text-fg3">· {duration(scan.started_at, scan.finished_at)}</span>
+        {movies != null && (
+          <span className="ml-auto text-xs text-fg3">
+            {movies.toLocaleString()} titles{inPlex != null ? ` · ${inPlex.toLocaleString()} in Plex` : ""}
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="mt-2 rounded-md border border-line bg-panel p-3 text-xs text-fg2">
+          {scan.error && (
+            <p className="mb-2" style={{ color: "var(--junk)" }}>
+              {scan.error}
+            </p>
+          )}
+          {checkpoints.length > 0 ? (
+            <ul className="flex flex-col gap-1">
+              {checkpoints.map(([phase, cp]) => (
+                <li key={phase} className="flex items-center gap-2">
+                  <span className="w-28 shrink-0 capitalize text-fg3">{phase}</span>
+                  <span>{cp.status}</span>
+                  {cp.counts && (
+                    <span className="text-fg3">
+                      {Object.entries(cp.counts)
+                        .map(([k, v]) => `${k} ${v}`)
+                        .join(" · ")}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-fg3">No phase details recorded for this run.</p>
+          )}
+        </div>
       )}
     </li>
   );
@@ -145,6 +182,7 @@ function ScanRow({ scan }: { scan: ScanRun }) {
 
 function TimelineEntry({ action }: { action: ActionRecord }) {
   const [showPayload, setShowPayload] = useState(false);
+  const { open } = useDrawer();
   const tier = TIER[action.type] ?? { label: "System", tone: "accent" as const };
   const when = new Date(action.created_at).toLocaleString();
   return (
@@ -158,7 +196,13 @@ function TimelineEntry({ action }: { action: ActionRecord }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold capitalize text-fg">{action.type}</span>
         {action.movie_tmdb_id != null && (
-          <span className="text-xs text-fg3">#{action.movie_tmdb_id}</span>
+          <button
+            onClick={() => open(action.movie_tmdb_id!)}
+            className="text-xs text-accent hover:underline"
+            title="Open movie details"
+          >
+            #{action.movie_tmdb_id}
+          </button>
         )}
         <Pill tone={tier.tone}>{tier.label}</Pill>
         <Pill>{action.dry_run ? `${action.status} · staged` : action.status}</Pill>

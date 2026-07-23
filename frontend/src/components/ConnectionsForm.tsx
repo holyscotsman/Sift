@@ -232,9 +232,23 @@ export function ConnectionsForm({
   }
 
   const hasAi = specs.some((s) => s.key === "ollama" || s.key === "anthropic");
+  // Readiness at a glance, from the tests already run in this form — no
+  // auto-probing. Core sources only (the AI engine is optional by design).
+  const coreKeys = specs
+    .map((s) => s.key)
+    .filter((k) => ["plex", "radarr", "tautulli", "tmdb"].includes(k));
+  const connectedCount = coreKeys.filter(
+    (k) => (tests[k] as ServiceHealth | undefined)?.ok === true,
+  ).length;
 
   return (
     <div className="flex flex-col gap-4">
+      {coreKeys.length > 0 && connectedCount > 0 && (
+        <p className="text-xs font-semibold text-fg2" aria-live="polite">
+          {connectedCount} of {coreKeys.length} sources verified
+          {connectedCount === coreKeys.length ? " — all set ✓" : ""}
+        </p>
+      )}
       {specs.map((spec) => {
         const t = tests[spec.key];
         return (
