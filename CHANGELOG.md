@@ -2,6 +2,16 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.5.0 — Optimization Cycle 05
+
+Ten reviewed changes (plan: `docs/optimization/CYCLE_05.md`, log:
+`OPTIMIZATION_CHANGELOG.md`): route-level error boundary, chooseable Radarr add
+defaults (root folder + quality profile with stale-safe fallback), streaming
+CSV export of the filtered library, 375 px mobile fixes (search row, no CTA
+wrap), memoized grid tiles/posters, a tiny Ask answer formatter, one-click
+collection fill with progress, bounded poster warm-up after completed scans,
+username prefill at login, and skip-to-content + labeled landmarks.
+
 ## 2607.4.0 — Optimization Cycle 04
 
 Ten reviewed changes (plan: `docs/optimization/CYCLE_04.md`, log:

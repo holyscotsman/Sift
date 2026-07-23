@@ -363,6 +363,18 @@ class ThresholdPreview(BaseModel):
     total: int
 
 
+class QualityProfileOut(BaseModel):
+    id: int
+    name: str
+
+
+class RadarrOptions(BaseModel):
+    root_folders: list[str] = []
+    quality_profiles: list[QualityProfileOut] = []
+    default_root_folder: str | None = None
+    default_quality_profile_id: int | None = None
+
+
 class ScanScheduleIn(BaseModel):
     interval_hours: int
 

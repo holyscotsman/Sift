@@ -11,6 +11,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..clients.base import BaseClient, ClientError
@@ -19,7 +20,7 @@ from ..clients.radarr import RadarrClient
 from ..clients.tautulli import TautulliClient
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
-from ..db.models import ScanRun, ScanStatus
+from ..db.models import Movie, ScanRun, ScanStatus
 from ..ingest.pipeline import ScanPipeline, ScanProgress
 
 log = logging.getLogger("sift.scanner")
@@ -39,6 +40,36 @@ def create_scan_run(factory: sessionmaker[Session]) -> int:
         session.commit()
         session.refresh(run)
         return run.id
+
+
+async def warm_posters(state: Any, *, limit: int = 36) -> None:
+    """Best-effort poster pre-fetch for the first Library page (title order), so
+    the screen after a scan paints from cache instead of a page of gradients.
+    Strictly bounded; every failure is ignored; skipped when TMDB can't resolve
+    artwork anyway."""
+    import asyncio
+
+    if not state.settings.tmdb.enabled or state.settings.tmdb.api_key is None:
+        return
+
+    def _first_page_ids() -> list[int]:
+        with state.session_factory() as session:
+            return [
+                int(tid)
+                for (tid,) in session.execute(
+                    select(Movie.tmdb_id)
+                    .where(Movie.in_plex.is_(True))
+                    .order_by(Movie.title.asc())
+                    .limit(limit)
+                )
+            ]
+
+    for tmdb_id in await asyncio.to_thread(_first_page_ids):
+        try:
+            await state.posters.get(tmdb_id)
+        except Exception as exc:  # noqa: BLE001 - warming is best-effort by definition
+            log.debug("poster warm failed for %s: %s", tmdb_id, exc)
+            continue
 
 
 def launch_scan(app: Any, scan_run_id: int, *, resume: bool = False) -> None:
@@ -62,6 +93,15 @@ def launch_scan(app: Any, scan_run_id: int, *, resume: bool = False) -> None:
         active.discard(scan_run_id)
         # A finished scan (however it ended) may have changed both status queues.
         state.counts_cache.invalidate()
+        # Only a COMPLETED scan warms the poster cache — an interrupted or failed
+        # run must not kick off background network work.
+        with state.session_factory() as session:
+            run = session.get(ScanRun, scan_run_id)
+            completed = run is not None and run.status == ScanStatus.COMPLETED
+        if completed:
+            warm = asyncio.create_task(warm_posters(state))
+            tasks.add(warm)
+            warm.add_done_callback(tasks.discard)
 
     task.add_done_callback(_done)
 

@@ -7,6 +7,62 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.5.0 — Cycle 05
+
+**Plan:** `docs/optimization/CYCLE_05.md` (10/10 approved after change review, 6 amended).
+
+1. **A crashed page no longer kills the app** — a route-level React error
+   boundary keeps the shell alive, offers Try again / Reload, resets on route
+   change, and rethrows to the console.
+2. **Choose where Radarr adds go** — Settings › "Radarr add defaults" offers the
+   real root folders + quality profiles (new `/api/settings/radarr_options`,
+   ids/paths/names only); saved choices win, and a stale choice (deleted
+   profile, removed folder) silently falls back to first-of-each so an add
+   never fails from drift (test-pinned).
+3. **Export the visible library as CSV** — `GET /api/movies.csv` shares the
+   exact filter/sort builder with `/api/movies` (they can't drift), streams
+   row-by-row, caps at 20k rows, and takes the token as a query param like the
+   poster route. Library header gains "Export CSV".
+4. **Mobile pass at 375 px** — audit-driven: the header search gets its own
+   full-width row on phones (it was simply hidden), and the Run-scan CTA no
+   longer wraps to two lines. Everything else already stacked cleanly.
+5. **Grids stop re-rendering on scroll** — `React.memo` on `GridTile` and the
+   shared `Poster`; appended pages leave existing tiles untouched.
+6. **Readable Ask answers** — a deliberately tiny formatter (paragraphs,
+   bullet/numbered lists, **bold**; anything else stays literal) replaces the
+   pre-wrap blob. Pure function, no dependency.
+7. **Fill a collection in one click** — "Add all missing (N)" walks the existing
+   per-title add action sequentially with live progress; a failure stops and
+   names the title. Same staging/dry-run semantics as a single add.
+8. **Posters are warm after a scan** — a COMPLETED scan pre-fetches artwork for
+   the first Library page (bounded 36, best-effort, skipped without TMDB,
+   never on interrupted/failed runs — test-pinned).
+9. **Login remembers you** — the username (never the password) prefills from
+   localStorage and focus lands on the password field.
+10. **Skip-to-content + landmarks** — a focus-revealed skip link, labeled
+    primary nav, `<main id="content">`.
+
+**QA:** 165 backend tests green (3 new — saved-defaults preference + stale
+fallback, CSV auth/filters/escaping/GB rendering, poster-warm bound + no-TMDB
+skip). ruff + bandit ruleset + mypy strict clean; tsc + build + npm audit
+clean. Live seeded-server: CSV verified end-to-end (401 without token, filters
+respected, proper quoting), radarr_options degrades to empty when unreachable;
+formatter behavior verified by script; mobile screenshots re-taken after fixes.
+
+**Security review:** CSV export enforces the same token auth as the API (401
+pinned); radarr_options exposes ids/paths/names only, never keys; the saved
+add-defaults flow reuses the existing config store (no new secret surface);
+error boundary reveals no stack traces in the UI.
+
+**Bug review:** cycle diff re-read line-by-line; caught pre-merge: the CSV route
+originally sat under the router-wide auth dependency (which can't read
+query-param tokens — moved to its own router with explicit auth, mirroring
+posters); `build_movie_stmt` initially shipped with an invalid type-ignore
+(typed properly instead); Ask's era suggestion had already been fixed to use
+the dominant era, confirmed intact.
+
+---
+
 ## 2607.4.0 — Cycle 04
 
 **Plan:** `docs/optimization/CYCLE_04.md` (10/10 approved after change review, 5 amended).

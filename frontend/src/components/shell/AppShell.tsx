@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
 
 import { Aurora } from "@/components/Aurora";
+import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { MovieDrawer } from "@/components/MovieDrawer";
 import { Skeleton } from "@/components/ui";
 import { Shortcuts } from "@/lib/shortcuts";
@@ -29,14 +30,22 @@ function PageFallback() {
 export function AppShell() {
   return (
     <div className="relative min-h-full">
+      <a
+        href="#content"
+        className="sr-only-focusable"
+      >
+        Skip to content
+      </a>
       <Aurora />
       <div className="relative z-10 mx-auto flex min-h-full max-w-page flex-col gap-3 px-3.5 pb-4 pt-3.5 md:px-6">
         <Header />
         <TopNav />
-        <main className="pt-3">
-          <Suspense fallback={<PageFallback />}>
-            <Outlet />
-          </Suspense>
+        <main id="content" className="pt-3">
+          <RouteErrorBoundary>
+            <Suspense fallback={<PageFallback />}>
+              <Outlet />
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
       <ScanPanel />

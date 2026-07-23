@@ -127,3 +127,35 @@ def test_schedule_endpoint_round_trip(settings, factory):
             client.put("/api/settings/scan_schedule", json={"interval_hours": 5}).status_code
             == 422
         )
+
+
+async def test_warm_posters_bounded_and_skipped_without_tmdb(factory, settings):
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+
+    from sift.db.models import Movie
+    from sift.services import scanner
+
+    with factory() as session:
+        for i in range(50):
+            session.add(Movie(tmdb_id=100 + i, title=f"M{i:03d}", in_plex=True))
+        session.commit()
+
+    fetched: list[int] = []
+
+    class FakePosters:
+        async def get(self, tmdb_id: int) -> None:
+            fetched.append(tmdb_id)
+
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    state = SimpleNamespace(settings=settings, session_factory=factory, posters=FakePosters())
+    await scanner.warm_posters(state)
+    assert len(fetched) == 36  # strictly bounded to the first grid page
+
+    # Negative control: without TMDB there's no artwork to resolve — no work at all.
+    fetched.clear()
+    settings.tmdb.api_key = None
+    await scanner.warm_posters(state)
+    assert fetched == []

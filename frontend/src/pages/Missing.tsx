@@ -58,6 +58,45 @@ function PosterCard({
   );
 }
 
+// Fill a collection in one click: walks the per-title add action sequentially
+// (same staging/dry-run semantics as a single add) with visible progress; a
+// failure stops the walk and names the title.
+function AddAllButton({ items }: { items: { tmdb_id: number; title: string }[] }) {
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [label, setLabel] = useState("");
+  const toastError = useToast();
+  if (items.length < 2 || state === "done") {
+    return state === "done" ? (
+      <span className="ml-auto text-xs font-semibold text-fg3">{label}</span>
+    ) : null;
+  }
+  async function addAll() {
+    setState("busy");
+    let added = 0;
+    for (const item of items) {
+      setLabel(`Adding ${added + 1}/${items.length}…`);
+      try {
+        await api.addMovie(item.tmdb_id, item.title);
+        added += 1;
+      } catch {
+        toastError(`Adding “${item.title}” failed — ${added} of ${items.length} were sent.`);
+        break;
+      }
+    }
+    setLabel(added === items.length ? `All ${added} staged/added ✓` : `${added} added`);
+    setState("done");
+  }
+  return (
+    <button
+      onClick={() => void addAll()}
+      disabled={state === "busy"}
+      className="ml-auto rounded-pill border border-line px-3 py-1 text-xs font-semibold text-accent hover:bg-bg2 disabled:opacity-70"
+    >
+      {state === "busy" ? label : `Add all missing (${items.length})`}
+    </button>
+  );
+}
+
 // Add-to-Radarr button — autonomous action, staged unless live writes are enabled.
 function AddButton({ tmdbId, title }: { tmdbId: number; title: string }) {
   const [label, setLabel] = useState("+ Add");
@@ -135,6 +174,9 @@ export function Missing() {
                   <span className="text-sm text-fg3">
                     {g.owned_count}/{g.total_count} owned
                   </span>
+                  <AddAllButton
+                    items={g.members.filter((m) => !m.owned)}
+                  />
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {g.members.map((m) => (

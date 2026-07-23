@@ -18,6 +18,7 @@ import type {
   PosterCacheStats,
   ProfileResponse,
   ProfileWeights,
+  RadarrOptions,
   RecommendationsResponse,
   ResetResponse,
   ReviewRunResponse,
@@ -182,6 +183,7 @@ export const api = {
   saveWeights: (w: ProfileWeights) =>
     request<ProfileResponse>("/api/profile/weights", { method: "PUT", body: JSON.stringify(w) }),
   getSettings: () => request<SettingsResponse>("/api/settings"),
+  radarrOptions: () => request<RadarrOptions>("/api/settings/radarr_options"),
   saveScanSchedule: (intervalHours: number) =>
     request<{ interval_hours: number }>("/api/settings/scan_schedule", {
       method: "PUT",

@@ -191,3 +191,20 @@
 .no-scrollbar {
   scrollbar-width: none;
 }
+
+/* Skip link: invisible until keyboard-focused, then a clear pill at the top. */
+.sr-only-focusable {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+}
+.sr-only-focusable:focus {
+  left: 16px;
+  top: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 13px;
+  font-weight: 700;
+}

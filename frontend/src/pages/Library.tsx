@@ -2,12 +2,12 @@
 // scrolling. Pages are fetched and appended as a sentinel near the bottom scrolls
 // into view. Deep-links from global search via ?q=.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 
 import { GridIcon, TableIcon } from "@/components/icons";
-import { api } from "@/lib/api";
+import { api, getToken } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
@@ -123,6 +123,19 @@ export function Library() {
     [buildQuery, pageSize],
   );
 
+  // CSV download of exactly the visible set — same filters/sort, token in the
+  // query (a download link can't send auth headers, mirroring the poster route).
+  const exportHref = useMemo(() => {
+    const usp = new URLSearchParams();
+    for (const [k, v] of Object.entries(buildQuery(1))) {
+      if (k === "page" || k === "page_size" || v === undefined || v === null) continue;
+      usp.set(k, String(v));
+    }
+    const token = getToken();
+    if (token) usp.set("token", token);
+    return `/api/movies.csv?${usp.toString()}`;
+  }, [buildQuery]);
+
   // Reset + load page 1 whenever the filters change.
   useEffect(() => {
     pageRef.current = 1;
@@ -179,13 +192,22 @@ export function Library() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-pill border border-line p-0.5">
-          <ViewBtn active={view === "grid"} onClick={() => setView("grid")} label="Grid">
-            <GridIcon size={15} />
-          </ViewBtn>
-          <ViewBtn active={view === "table"} onClick={() => setView("table")} label="Table">
-            <TableIcon size={15} />
-          </ViewBtn>
+        <div className="flex items-center gap-2">
+          <a
+            href={exportHref}
+            download
+            className="rounded-pill border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Export CSV
+          </a>
+          <div className="flex items-center gap-1 rounded-pill border border-line p-0.5">
+            <ViewBtn active={view === "grid"} onClick={() => setView("grid")} label="Grid">
+              <GridIcon size={15} />
+            </ViewBtn>
+            <ViewBtn active={view === "table"} onClick={() => setView("table")} label="Table">
+              <TableIcon size={15} />
+            </ViewBtn>
+          </div>
         </div>
       </div>
 
@@ -329,7 +351,9 @@ function ViewBtn({
   );
 }
 
-function GridTile({ movie }: { movie: Movie }) {
+// Memoized: infinite scroll appends rebuild the items array, but existing Movie
+// objects keep their identity — so already-rendered tiles skip re-rendering.
+const GridTile = memo(function GridTile({ movie }: { movie: Movie }) {
   const { open } = useDrawer();
   return (
     <button className="group text-left" onClick={() => open(movie.tmdb_id)}>
@@ -352,7 +376,7 @@ function GridTile({ movie }: { movie: Movie }) {
       </p>
     </button>
   );
-}
+});
 
 function SortableTh({
   field,

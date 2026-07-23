@@ -80,6 +80,10 @@ class RadarrConfig(BaseModel):
     enabled: bool = True
     base_url: str | None = None
     api_key: SecretStr | None = None
+    # Where add-to-Radarr puts titles. None = first root folder / first quality
+    # profile Radarr reports (the historical default); set from Settings.
+    default_root_folder: str | None = None
+    default_quality_profile_id: int | None = None
 
 
 class TautulliConfig(BaseModel):

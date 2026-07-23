@@ -39,7 +39,11 @@ def build_add_payload(
 async def resolve_add_options(
     config: RadarrConfig, *, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[str | None, int | None]:
-    """Return (root_folder_path, quality_profile_id) — the first of each, or Nones."""
+    """Return (root_folder_path, quality_profile_id).
+
+    The owner's saved defaults win while Radarr still reports them; a stale saved
+    value (folder removed, profile deleted) silently falls back to the first of
+    each, so an add never fails because Settings drifted from Radarr."""
     if not config.base_url:
         return None, None
     client = RadarrClient(config, transport=transport)
@@ -48,6 +52,16 @@ async def resolve_add_options(
         profiles = await client.get_quality_profiles()
     finally:
         await client.aclose()
-    root = next((f.get("path") for f in folders if f.get("path")), None)
-    profile = next((p.get("id") for p in profiles if p.get("id") is not None), None)
-    return root, (int(profile) if profile is not None else None)
+    paths = [f.get("path") for f in folders if f.get("path")]
+    ids = [int(p["id"]) for p in profiles if p.get("id") is not None]
+    root = (
+        config.default_root_folder
+        if config.default_root_folder in paths
+        else (paths[0] if paths else None)
+    )
+    profile = (
+        config.default_quality_profile_id
+        if config.default_quality_profile_id in ids
+        else (ids[0] if ids else None)
+    )
+    return root, profile

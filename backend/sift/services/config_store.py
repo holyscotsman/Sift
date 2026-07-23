@@ -28,7 +28,7 @@ _ACTIONS_KEY = "actions"
 _SECRET_FIELDS = {"token", "api_key"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
-    "radarr": {"base_url", "api_key"},
+    "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
     "tautulli": {"base_url", "api_key", "kids_accounts"},
     "tmdb": {"api_key", "language"},
     "ollama": {"base_url", "model"},
@@ -118,6 +118,11 @@ def apply_to_settings(
     if _s(radarr.get("api_key")):
         eff.radarr.api_key = SecretStr(radarr["api_key"])
         eff.radarr.enabled = True
+    if _s(radarr.get("root_folder")):
+        eff.radarr.default_root_folder = _s(radarr["root_folder"])
+    profile_id = radarr.get("quality_profile_id")
+    if isinstance(profile_id, int | str) and str(profile_id).strip().isdigit():
+        eff.radarr.default_quality_profile_id = int(profile_id)
 
     tautulli = config.get("tautulli") or {}
     if _s(tautulli.get("base_url")):

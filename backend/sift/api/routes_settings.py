@@ -16,6 +16,8 @@ from ..services.counts_cache import CountsCache
 from ..services.health import HealthCache, check_service
 from .deps import AuthDep, get_counts_cache, get_health_cache, get_session_factory, get_settings
 from .schemas import (
+    QualityProfileOut,
+    RadarrOptions,
     ScanScheduleIn,
     ScanScheduleOut,
     ServiceHealth,
@@ -105,6 +107,39 @@ def save_thresholds(
     junk.compute_and_store(factory, thr, cult_ids=cult)  # re-score with the new thresholds
     counts_cache.invalidate()  # new thresholds change what counts as flagged
     return ThresholdPreview(**junk.preview(factory, thr))
+
+
+@router.get("/radarr_options", response_model=RadarrOptions)
+async def radarr_options(settings: Settings = Depends(get_settings)) -> RadarrOptions:
+    """Radarr's root folders + quality profiles (ids/paths/names only — no secrets),
+    so Settings can offer real choices for where adds go. Empty when unconfigured
+    or unreachable — the UI treats that as 'defaults apply'."""
+    from ..clients.base import ClientError
+    from ..clients.radarr import RadarrClient
+
+    if not settings.radarr.base_url or not settings.radarr.enabled:
+        return RadarrOptions()
+    try:
+        client = RadarrClient(settings.radarr)
+    except ClientError:
+        return RadarrOptions()
+    try:
+        folders = await client.get_root_folders()
+        profiles = await client.get_quality_profiles()
+    except Exception:  # noqa: BLE001 - unreachable Radarr just means no choices yet
+        return RadarrOptions()
+    finally:
+        await client.aclose()
+    return RadarrOptions(
+        root_folders=[str(f["path"]) for f in folders if f.get("path")],
+        quality_profiles=[
+            QualityProfileOut(id=int(p["id"]), name=str(p.get("name") or p["id"]))
+            for p in profiles
+            if p.get("id") is not None
+        ],
+        default_root_folder=settings.radarr.default_root_folder,
+        default_quality_profile_id=settings.radarr.default_quality_profile_id,
+    )
 
 
 @router.post("/test/{service}", response_model=ServiceHealth)

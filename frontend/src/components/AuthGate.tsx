@@ -11,10 +11,14 @@ import { ApiError, api, setToken } from "@/lib/api";
 
 type Phase = "checking" | "wizard" | "login" | "authed";
 
+const USERNAME_KEY = "sift.username";
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<Phase>("checking");
   const [canSetup, setCanSetup] = useState(false);
-  const [username, setUsername] = useState("");
+  // The username isn't a secret and rarely changes — prefill it so a returning
+  // owner only types the password. Never the password itself.
+  const [username, setUsername] = useState(() => localStorage.getItem(USERNAME_KEY) ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,6 +68,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.authLogin(username.trim(), password);
       setToken(res.token);
+      localStorage.setItem(USERNAME_KEY, username.trim());
       setPhase("authed");
     } catch (err) {
       setToken(null);
@@ -108,7 +113,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username"
-          autoFocus
+          autoFocus={!username}
           autoComplete="username"
           className="mt-4 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
         />
@@ -119,6 +124,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="password"
+          autoFocus={Boolean(username)}
           autoComplete="current-password"
           className="mt-2 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
         />
