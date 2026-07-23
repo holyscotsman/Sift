@@ -75,10 +75,14 @@ def list_movies(
     stmt = stmt.order_by(column.desc() if order == "desc" else column.asc())
 
     with factory() as session:
-        total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        sq = stmt.subquery()
+        total = session.scalar(select(func.count()).select_from(sq)) or 0
+        total_size = session.scalar(select(func.coalesce(func.sum(sq.c.file_size), 0))) or 0
         rows = list(session.scalars(stmt.offset((page - 1) * page_size).limit(page_size)))
         items = [MovieOut.model_validate(m) for m in rows]
-    return MovieListResponse(items=items, total=total, page=page, page_size=page_size)
+    return MovieListResponse(
+        items=items, total=total, page=page, page_size=page_size, total_size=int(total_size)
+    )
 
 
 @router.get("/movies/{tmdb_id}", response_model=MovieDetail)

@@ -81,6 +81,8 @@ export interface MovieListResponse {
   total: number;
   page: number;
   page_size: number;
+  // Sum of file_size across the whole filtered set, in bytes.
+  total_size: number;
 }
 
 export interface ScanRun {
@@ -301,6 +303,14 @@ export interface SettingsResponse {
   thresholds: Thresholds;
   ai_configured: boolean;
   actions_dry_run: boolean;
+  database_kind: string;
+  ephemeral_risk: boolean;
+  scan_interval_hours: number;
+}
+
+export interface PosterCacheStats {
+  count: number;
+  bytes: number;
 }
 
 export interface ThresholdPreview {

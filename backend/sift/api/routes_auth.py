@@ -12,8 +12,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..services import auth
-from .deps import get_session_factory
-from .schemas import AuthStatus, LoginRequest, SetupRequest, TokenResponse
+from .deps import AuthDep, get_session_factory
+from .schemas import (
+    AuthStatus,
+    ChangePasswordRequest,
+    LoginRequest,
+    OkResponse,
+    SetupRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -40,7 +47,8 @@ def setup(
             raise HTTPException(status_code=409, detail="already set up — sign in instead")
         auth.create_account(session, username, body.password)
         token = auth.login(session, username, body.password)
-    assert token is not None  # just created
+    if token is None:  # unreachable: the account was just created
+        raise HTTPException(status_code=500, detail="account creation failed")
     return TokenResponse(token=token, username=username)
 
 
@@ -53,3 +61,18 @@ def login(
     if token is None:
         raise HTTPException(status_code=401, detail="invalid username or password")
     return TokenResponse(token=token, username=body.username.strip())
+
+
+@router.post("/password", response_model=OkResponse, dependencies=[AuthDep])
+def change_password(
+    body: ChangePasswordRequest,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> OkResponse:
+    """Change the password without a factory reset. Gated (must be signed in) AND
+    re-verifies the current password; existing sessions stay valid."""
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=422, detail="password must be at least 8 characters")
+    with factory() as session:
+        if not auth.change_password(session, body.current_password, body.new_password):
+            raise HTTPException(status_code=401, detail="current password is wrong")
+    return OkResponse(ok=True)

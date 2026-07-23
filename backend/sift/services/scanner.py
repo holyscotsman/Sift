@@ -41,6 +41,29 @@ def create_scan_run(factory: sessionmaker[Session]) -> int:
         return run.id
 
 
+def launch_scan(app: Any, scan_run_id: int, *, resume: bool = False) -> None:
+    """Start a scan task and register it for exact liveness tracking. The single
+    launcher used by the HTTP route and the auto-rescan loop, so `active_scans`
+    can never disagree with reality."""
+    import asyncio
+
+    state = app.state.sift
+    task = asyncio.create_task(
+        run_scan(state.settings, state.session_factory, state.hub, scan_run_id, resume=resume)
+    )
+    tasks: set[asyncio.Task[None]] = app.state.scan_tasks
+    tasks.add(task)
+    active: set[int] = getattr(app.state, "active_scans", set())
+    active.add(scan_run_id)
+    app.state.active_scans = active
+
+    def _done(t: asyncio.Task[None]) -> None:
+        tasks.discard(t)
+        active.discard(scan_run_id)
+
+    task.add_done_callback(_done)
+
+
 def _maybe_client[C: BaseClient](
     settings: Settings, service: str, cls: Callable[[Any], C]
 ) -> C | None:

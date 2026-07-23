@@ -85,6 +85,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <label className="text-xs text-fg3">
                 Username
                 <input
+                  id="username"
+                  name="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   autoFocus
@@ -95,6 +97,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <label className="text-xs text-fg3">
                 Password (8+ characters)
                 <input
+                  id="new-password"
+                  name="new-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -105,6 +109,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <label className="text-xs text-fg3">
                 Confirm password
                 <input
+                  id="confirm-password"
+                  name="confirm-password"
                   type="password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}

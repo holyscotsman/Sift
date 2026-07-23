@@ -35,6 +35,7 @@ export function Junk() {
   const [dryRun, setDryRun] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   async function runReview() {
     setReviewing(true);
@@ -70,6 +71,27 @@ export function Junk() {
   }, []);
 
   const pending = useMemo(() => items.filter((c) => !decisions[c.tmdb_id]), [items, decisions]);
+  const selectedPending = useMemo(
+    () => pending.filter((c) => selected.has(c.tmdb_id)),
+    [pending, selected],
+  );
+
+  function toggleSelected(id: number) {
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  // Bulk Keep: persist the override for every selected row at once.
+  function keepSelected() {
+    for (const c of selectedPending) {
+      setDecisions((d) => ({ ...d, [c.tmdb_id]: "kept" }));
+      void api.setKeepOverride(c.tmdb_id, true).catch(() => {});
+    }
+    setSelected(new Set());
+  }
 
   // Propose → approve → execute. The engine refuses an unapproved delete, and the
   // server's dry-run switch (not the client) decides whether files are really removed.
@@ -93,6 +115,10 @@ export function Junk() {
     } finally {
       setBusy(false);
       setModal(null);
+      // Handled rows leave the selection.
+      setSelected(
+        (prev) => new Set([...prev].filter((id) => !candidates.some((c) => c.tmdb_id === id))),
+      );
     }
   }
 
@@ -132,6 +158,33 @@ export function Junk() {
         </p>
       )}
 
+      {selectedPending.length > 0 && (
+        <div className="glass sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-3 rounded-xl px-4 py-2.5">
+          <span className="text-sm font-semibold">
+            {selectedPending.length} selected
+          </span>
+          <button
+            onClick={keepSelected}
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Keep all selected
+          </button>
+          <button
+            onClick={() => setModal({ candidates: selectedPending })}
+            className="rounded-md px-3 py-1.5 text-xs font-bold"
+            style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+          >
+            Approve removal ({selectedPending.length})
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-xs text-fg3 hover:text-fg"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="panel p-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -152,6 +205,8 @@ export function Junk() {
               key={c.tmdb_id}
               candidate={c}
               decision={decisions[c.tmdb_id]}
+              checked={selected.has(c.tmdb_id)}
+              onCheck={() => toggleSelected(c.tmdb_id)}
               expanded={expanded.has(c.tmdb_id)}
               onToggle={() =>
                 setExpanded((s) => {
@@ -231,6 +286,8 @@ export function Junk() {
 function Row({
   candidate: c,
   decision,
+  checked,
+  onCheck,
   expanded,
   onToggle,
   onKeep,
@@ -239,6 +296,8 @@ function Row({
 }: {
   candidate: JunkCandidate;
   decision?: Decision;
+  checked: boolean;
+  onCheck: () => void;
   expanded: boolean;
   onToggle: () => void;
   onKeep: () => void;
@@ -248,6 +307,15 @@ function Row({
   const { open } = useDrawer();
   return (
     <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start">
+      {!decision && (
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onCheck}
+          aria-label={`Select ${c.title}`}
+          className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--accent)]"
+        />
+      )}
       <button
         onClick={() => open(c.tmdb_id)}
         aria-label={`Details for ${c.title}`}

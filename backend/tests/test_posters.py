@@ -93,3 +93,41 @@ def test_poster_endpoint_token_gated(settings, factory, tmp_path):
         assert c.get("/api/poster/603", headers={"X-Sift-Token": "tok"}).status_code == 200
         # Unknown id with sources disabled → 404 (placeholder on the client).
         assert c.get("/api/poster/111", params={"token": "tok"}).status_code == 404
+
+
+def test_poster_stats_and_clear_endpoints(settings, factory, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from sift.main import create_app
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.posters.cache_dir = tmp_path
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as client:
+        token = client.post(
+            "/api/auth/setup", json={"username": "alice", "password": "hunter2hunter2"}
+        ).json()["token"]
+        headers = {"X-Sift-Token": token}
+
+        # Empty cache → zeros; endpoints are gated.
+        assert client.get("/api/posters/stats").status_code == 401
+        assert client.get("/api/posters/stats", headers=headers).json() == {
+            "count": 0,
+            "bytes": 0,
+        }
+
+        # Drop two fake cached posters and watch the numbers move.
+        posters_dir = tmp_path / "posters"
+        posters_dir.mkdir(parents=True, exist_ok=True)
+        (posters_dir / "1.img").write_bytes(b"x" * 10)
+        (posters_dir / "2.img").write_bytes(b"y" * 5)
+        stats = client.get("/api/posters/stats", headers=headers).json()
+        assert stats == {"count": 2, "bytes": 15}
+
+        cleared = client.post("/api/posters/clear", headers=headers).json()
+        assert cleared["count"] == 2  # how many files were removed
+        assert client.get("/api/posters/stats", headers=headers).json() == {
+            "count": 0,
+            "bytes": 0,
+        }

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..db.models import ScanRun, ScanStatus
-from ..services.scanner import create_scan_run, run_scan
-from .deps import AuthDep, get_session_factory, get_state
+from ..services.scanner import create_scan_run, launch_scan
+from .deps import AuthDep, get_session_factory
 from .schemas import ScanRunOut, ScanStartResponse
 
 router = APIRouter(prefix="/api", tags=["scan"], dependencies=[AuthDep])
@@ -24,21 +22,7 @@ def _active_scans(request: Request) -> set[int]:
 
 
 def _launch(request: Request, scan_run_id: int, resume: bool) -> None:
-    state = get_state(request)
-    task = asyncio.create_task(
-        run_scan(state.settings, state.session_factory, state.hub, scan_run_id, resume=resume)
-    )
-    tasks: set[asyncio.Task[None]] = request.app.state.scan_tasks
-    tasks.add(task)
-    active = _active_scans(request)
-    active.add(scan_run_id)
-    request.app.state.active_scans = active
-
-    def _done(t: asyncio.Task[None]) -> None:
-        tasks.discard(t)
-        active.discard(scan_run_id)
-
-    task.add_done_callback(_done)
+    launch_scan(request.app, scan_run_id, resume=resume)
 
 
 @router.post("/scan", response_model=ScanStartResponse, status_code=202)

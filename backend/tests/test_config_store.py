@@ -172,3 +172,22 @@ def test_reset_wipes_data_and_reopens_wizard(client, factory):
     # The account was cleared, so setup-status flips back and the gate reopens.
     assert client.get("/api/auth/status").json()["setup_complete"] is False
     assert client.get("/api/config").json()["connections"] == {}
+
+
+def test_clearing_a_connection_with_empty_strings(client):
+    # Save an Ollama URL, then clear it with "" — the overlay must fully disable it.
+    from sift.config import load_settings
+    from sift.services.config_store import apply_to_settings
+
+    client.put("/api/config", json={"connections": {"ollama": {"base_url": "http://o:11434"}}})
+    cleared = client.put(
+        "/api/config", json={"connections": {"ollama": {"base_url": "", "model": ""}}}
+    )
+    assert cleared.status_code == 200
+
+    got = client.get("/api/config").json()["connections"]["ollama"]
+    assert got["base_url"] == ""
+
+    base = load_settings(config_path=None)
+    eff = apply_to_settings(base, {"ollama": {"base_url": "", "model": ""}})
+    assert eff.ai.local_enabled is False

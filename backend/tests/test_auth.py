@@ -118,3 +118,44 @@ def test_scan_ws_accepts_session_token(client):
     # the WS only honoured the static API token, so progress dropped for logged-in users).
     with client.websocket_connect(f"/ws/scan/1?token={token}"):
         pass
+
+
+def test_change_password_full_lifecycle(client):
+    token = _setup(client).json()["token"]
+    headers = {"X-Sift-Token": token}
+
+    # Wrong current password → 401; too-short new password → 422.
+    bad = client.post(
+        "/api/auth/password",
+        json={"current_password": "nope", "new_password": "longenough1"},
+        headers=headers,
+    )
+    assert bad.status_code == 401
+    short = client.post(
+        "/api/auth/password",
+        json={"current_password": "hunter2hunter2", "new_password": "short"},
+        headers=headers,
+    )
+    assert short.status_code == 422
+
+    ok = client.post(
+        "/api/auth/password",
+        json={"current_password": "hunter2hunter2", "new_password": "brand-new-pass-9"},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+
+    # Old password dead, new password lives, existing session token still valid
+    # (the signing secret is kept on purpose).
+    assert _login(client).status_code == 401
+    assert _login(client, password="brand-new-pass-9").status_code == 200
+    assert client.get("/api/status", headers=headers).status_code == 200
+
+
+def test_change_password_requires_auth(client):
+    _setup(client)
+    r = client.post(
+        "/api/auth/password",
+        json={"current_password": "hunter2hunter2", "new_password": "longenough1"},
+    )
+    assert r.status_code == 401

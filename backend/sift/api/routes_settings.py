@@ -1,6 +1,9 @@
-"""Settings: connection status, editable scoring thresholds (with live preview)."""
+"""Settings: connection status, editable scoring thresholds (with live preview),
+and the automatic-rescan schedule."""
 
 from __future__ import annotations
+
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,6 +15,8 @@ from ..services import curated_lists, settings_store
 from ..services.health import check_service, gather_health
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
+    ScanScheduleIn,
+    ScanScheduleOut,
     ServiceHealth,
     SettingsResponse,
     ThresholdPreview,
@@ -43,6 +48,8 @@ async def get_all(
     health = await gather_health(settings)
     with factory() as session:
         thr = settings_store.effective_junk(session, settings)
+        interval = settings_store.get_scan_interval(session)
+    db_kind = "postgres" if settings.database.target().startswith("postgres") else "sqlite"
     return SettingsResponse(
         connections=[
             ServiceHealth(service=s.service, ok=s.ok, detail=s.detail, latency_ms=s.latency_ms)
@@ -51,7 +58,25 @@ async def get_all(
         thresholds=_thresholds_out(thr),
         ai_configured=ai_configured(settings),
         actions_dry_run=settings.actions.dry_run,
+        database_kind=db_kind,
+        # SQLite on Render's free tier lives on an ephemeral disk: login + config
+        # vanish on every redeploy. Render sets the RENDER env var, so warn there.
+        ephemeral_risk=db_kind == "sqlite" and bool(os.environ.get("RENDER")),
+        scan_interval_hours=interval,
     )
+
+
+@router.put("/scan_schedule", response_model=ScanScheduleOut)
+def save_scan_schedule(
+    body: ScanScheduleIn,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> ScanScheduleOut:
+    try:
+        with factory() as session:
+            hours = settings_store.set_scan_interval(session, body.interval_hours)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ScanScheduleOut(interval_hours=hours)
 
 
 @router.post("/thresholds/preview", response_model=ThresholdPreview)

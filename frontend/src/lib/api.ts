@@ -15,6 +15,7 @@ import type {
   MovieListResponse,
   MustHaveListResponse,
   MustHaveRunResponse,
+  PosterCacheStats,
   ProfileResponse,
   ProfileWeights,
   RecommendationsResponse,
@@ -111,6 +112,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
   // In-app connection config.
   getConfig: () => request<ConnectionsResponse>("/api/config"),
   saveConfig: (connections: Record<string, Record<string, unknown>>) =>
@@ -168,6 +174,14 @@ export const api = {
   saveWeights: (w: ProfileWeights) =>
     request<ProfileResponse>("/api/profile/weights", { method: "PUT", body: JSON.stringify(w) }),
   getSettings: () => request<SettingsResponse>("/api/settings"),
+  saveScanSchedule: (intervalHours: number) =>
+    request<{ interval_hours: number }>("/api/settings/scan_schedule", {
+      method: "PUT",
+      body: JSON.stringify({ interval_hours: intervalHours }),
+    }),
+  posterStats: () => request<PosterCacheStats>("/api/posters/stats"),
+  clearPosterCache: () =>
+    request<PosterCacheStats>("/api/posters/clear", { method: "POST" }),
   previewThresholds: (t: Thresholds) =>
     request<ThresholdPreview>("/api/settings/thresholds/preview", {
       method: "POST",

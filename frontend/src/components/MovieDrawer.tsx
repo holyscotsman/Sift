@@ -2,7 +2,7 @@
 // /api/movies/{id}; shows ratings, the Sift score + rationale, watch history, and
 // a raw-metadata escape hatch.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Pill, Poster } from "@/components/ui";
@@ -142,6 +142,7 @@ export function MovieDrawer() {
   const [movie, setMovie] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [raw, setRaw] = useState(false);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (movieId === null) {
@@ -156,6 +157,22 @@ export function MovieDrawer() {
       .catch(() => setMovie(null))
       .finally(() => setLoading(false));
   }, [movieId]);
+
+  // Keyboard + focus: Esc closes; focus lands on the close button while open and
+  // returns to whatever opened the drawer afterwards.
+  useEffect(() => {
+    if (movieId === null) return;
+    const opener = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      opener?.focus?.();
+    };
+  }, [movieId, close]);
 
   if (movieId === null) return null;
 
@@ -175,6 +192,7 @@ export function MovieDrawer() {
           <div className="absolute inset-0" style={{ background: "linear-gradient(to top, var(--bg-1s), transparent)" }} />
         </div>
         <button
+          ref={closeBtnRef}
           onClick={close}
           aria-label="Close"
           className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60"

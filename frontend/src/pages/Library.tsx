@@ -28,6 +28,10 @@ const QUICK_LABELS: Record<Quick, string> = {
 
 const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
 
+function fmtBytes(bytes: number): string {
+  return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
 export function Library() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -44,6 +48,7 @@ export function Library() {
 
   const [items, setItems] = useState<Movie[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalSize, setTotalSize] = useState(0);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
   const pageRef = useRef(1);
@@ -83,6 +88,7 @@ export function Library() {
       try {
         const res = await api.movies(buildQuery(page));
         setTotal(res.total);
+        setTotalSize(res.total_size ?? 0);
         setItems((prev) => (replace ? res.items : [...prev, ...res.items]));
         setDone(page * pageSize >= res.total || res.items.length === 0);
       } finally {
@@ -134,7 +140,9 @@ export function Library() {
           <p className="mt-1 text-sm text-fg2">
             {firstLoad
               ? "Loading…"
-              : `${QUICK_LABELS[quick]} · ${items.length.toLocaleString()} of ${total.toLocaleString()}`}
+              : `${QUICK_LABELS[quick]} · ${items.length.toLocaleString()} of ${total.toLocaleString()}${
+                  totalSize > 0 ? ` · ${fmtBytes(totalSize)}` : ""
+                }`}
             {q && <span className="text-fg3"> · filtered by “{q}”</span>}
             {activeLetter && (
               <button

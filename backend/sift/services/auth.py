@@ -86,6 +86,18 @@ def clear_account(session: Session) -> None:
         session.commit()
 
 
+def change_password(session: Session, current: str, new: str) -> bool:
+    """Verify the current password and store a new hash. The signing secret is
+    kept, so existing sessions (this device included) stay signed in. Returns
+    False when the current password doesn't match."""
+    auth = get_auth(session)
+    if not auth or not verify_password(current, auth.get("password_hash", "")):
+        return False
+    session.merge(Setting(key=_AUTH_KEY, value={**auth, "password_hash": hash_password(new)}))
+    session.commit()
+    return True
+
+
 # ------------------------------------------------------------------ session token
 
 

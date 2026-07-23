@@ -11,9 +11,23 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
-from .deps import get_state, presented_token, token_accepted
+from .deps import AuthDep, get_state, presented_token, token_accepted
+from .schemas import PosterCacheStats
 
 router = APIRouter(prefix="/api", tags=["posters"])
+
+
+@router.get("/posters/stats", response_model=PosterCacheStats, dependencies=[AuthDep])
+def poster_stats(request: Request) -> PosterCacheStats:
+    count, size = get_state(request).posters.stats()
+    return PosterCacheStats(count=count, bytes=size)
+
+
+@router.post("/posters/clear", response_model=PosterCacheStats, dependencies=[AuthDep])
+def poster_clear(request: Request) -> PosterCacheStats:
+    """Empty the thumbnail cache (never touches the DB); posters refill on demand."""
+    cleared = get_state(request).posters.clear()
+    return PosterCacheStats(count=cleared, bytes=0)
 
 
 @router.get("/poster/{tmdb_id}")

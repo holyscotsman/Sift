@@ -55,7 +55,19 @@ export function Activity() {
   );
 }
 
+// "2 h ago" beats a wall of absolute timestamps; the exact time stays on hover.
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
 function TimelineEntry({ action }: { action: ActionRecord }) {
+  const [showPayload, setShowPayload] = useState(false);
   const tier = TIER[action.type] ?? { label: "System", tone: "accent" as const };
   const when = new Date(action.created_at).toLocaleString();
   return (
@@ -68,14 +80,30 @@ function TimelineEntry({ action }: { action: ActionRecord }) {
       </span>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold capitalize text-fg">{action.type}</span>
+        {action.movie_tmdb_id != null && (
+          <span className="text-xs text-fg3">#{action.movie_tmdb_id}</span>
+        )}
         <Pill tone={tier.tone}>{tier.label}</Pill>
-        <Pill>{action.status}</Pill>
-        <span className="text-xs text-fg3">{when}</span>
+        <Pill>{action.dry_run ? `${action.status} · staged` : action.status}</Pill>
+        <span className="text-xs text-fg3" title={when}>
+          {relativeTime(action.created_at)} · via {action.actor}
+        </span>
+        <button
+          onClick={() => setShowPayload((v) => !v)}
+          className="text-xs font-semibold text-accent"
+        >
+          {showPayload ? "Hide payload" : "Payload"}
+        </button>
       </div>
-      <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-panel p-3 font-mono text-[11.5px] text-fg2">
-        {JSON.stringify({ movie: action.movie_tmdb_id, dry_run: action.dry_run, ...action.payload }, null, 2)}
-      </pre>
-      <p className="mt-1 text-xs text-fg3">via {action.actor}</p>
+      {showPayload && (
+        <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-panel p-3 font-mono text-[11.5px] text-fg2">
+          {JSON.stringify(
+            { movie: action.movie_tmdb_id, dry_run: action.dry_run, ...action.payload },
+            null,
+            2,
+          )}
+        </pre>
+      )}
     </li>
   );
 }

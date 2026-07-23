@@ -37,3 +37,23 @@ def set_junk_thresholds(session: Session, values: dict[str, Any]) -> None:
 
 def effective_junk(session: Session, settings: Settings) -> JunkThresholds:
     return get_junk_thresholds(session, settings.junk)
+
+
+# ------------------------------------------------------------- automatic rescans
+
+_SCHEDULE_KEY = "scan_schedule"
+ALLOWED_INTERVALS = (0, 6, 12, 24)  # hours; 0 = off
+
+
+def get_scan_interval(session: Session) -> int:
+    row = session.get(Setting, _SCHEDULE_KEY)
+    hours = (row.value or {}).get("interval_hours", 0) if row else 0
+    return int(hours) if hours in ALLOWED_INTERVALS else 0
+
+
+def set_scan_interval(session: Session, hours: int) -> int:
+    if hours not in ALLOWED_INTERVALS:
+        raise ValueError(f"interval must be one of {ALLOWED_INTERVALS}")
+    session.merge(Setting(key=_SCHEDULE_KEY, value={"interval_hours": hours}))
+    session.commit()
+    return hours
