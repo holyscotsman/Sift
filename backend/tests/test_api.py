@@ -299,3 +299,28 @@ def test_health_sweep_is_cached_until_invalidated(client, monkeypatch):
     c.put("/api/config", json={"connections": {}})
     c.get("/api/health")
     assert calls["n"] == 2
+
+
+def test_csv_export_matches_filters_and_requires_token(settings, factory):
+    settings.server.api_token = SecretStr("tok")
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        with factory() as session:
+            session.add(
+                Movie(tmdb_id=1, title='Comma, "Quoted"', in_plex=True, file_size=2_000_000_000)
+            )
+            session.add(Movie(tmdb_id=2, title="Not In Plex", in_plex=False))
+            session.commit()
+        # Negative control: a download link without the token is refused.
+        assert c.get("/api/movies.csv").status_code == 401
+        r = c.get("/api/movies.csv", params={"in_plex": True, "token": "tok"})
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/csv")
+        assert "attachment" in r.headers["content-disposition"]
+        lines = r.text.strip().splitlines()
+        assert lines[0].startswith("title,year,")
+        assert len(lines) == 2  # header + the single in-Plex row: filters respected
+        assert '"Comma, ""Quoted"""' in lines[1]  # proper CSV escaping
+        assert "2.00" in lines[1]  # bytes rendered as GB

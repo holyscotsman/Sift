@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import scoring
@@ -31,9 +31,8 @@ _SORTABLE = {
 }
 
 
-@router.get("/movies", response_model=MovieListResponse)
-def list_movies(
-    factory: sessionmaker[Session] = Depends(get_session_factory),
+def build_movie_stmt(
+    *,
     q: str | None = None,
     section: str | None = None,
     is_kids: bool | None = None,
@@ -44,9 +43,10 @@ def list_movies(
     starts_with: str | None = None,
     sort: str = "title",
     order: str = "asc",
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=500),
-) -> MovieListResponse:
+) -> Select[tuple[Movie]]:
+    """The one filter/sort builder for the movie list — shared by the JSON list
+    endpoint and the CSV export so 'what you see' and 'what you download' can
+    never drift apart."""
     stmt = select(Movie)
     if q:
         stmt = stmt.where(Movie.title.ilike(f"%{q}%"))
@@ -71,9 +71,38 @@ def list_movies(
         stmt = stmt.where(Movie.has_file.is_(has_file))
     if cutoff_unmet is not None:
         stmt = stmt.where(Movie.cutoff_unmet.is_(cutoff_unmet))
-
     column = _SORTABLE.get(sort, Movie.title)
-    stmt = stmt.order_by(column.desc() if order == "desc" else column.asc())
+    return stmt.order_by(column.desc() if order == "desc" else column.asc())
+
+
+@router.get("/movies", response_model=MovieListResponse)
+def list_movies(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    q: str | None = None,
+    section: str | None = None,
+    is_kids: bool | None = None,
+    monitored: bool | None = None,
+    in_plex: bool | None = None,
+    has_file: bool | None = None,
+    cutoff_unmet: bool | None = None,
+    starts_with: str | None = None,
+    sort: str = "title",
+    order: str = "asc",
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+) -> MovieListResponse:
+    stmt = build_movie_stmt(
+        q=q,
+        section=section,
+        is_kids=is_kids,
+        monitored=monitored,
+        in_plex=in_plex,
+        has_file=has_file,
+        cutoff_unmet=cutoff_unmet,
+        starts_with=starts_with,
+        sort=sort,
+        order=order,
+    )
 
     with factory() as session:
         # COUNT + SUM over the filtered set are only worth paying for once per

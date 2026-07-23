@@ -78,3 +78,33 @@ def test_live_add_with_unreachable_radarr_is_400_not_500(settings, factory, monk
         resp = c.post("/api/actions/add", json={"tmdb_id": 605, "title": "X"})
     assert resp.status_code == 400
     assert "Radarr" in resp.json()["detail"]
+
+
+async def test_resolve_add_options_prefers_saved_defaults():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v3/rootfolder":
+            return httpx.Response(200, json=[{"path": "/data/movies"}, {"path": "/4k"}])
+        if request.url.path == "/api/v3/qualityprofile":
+            return httpx.Response(200, json=[{"id": 6, "name": "HD"}, {"id": 7, "name": "4K"}])
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    # The owner's saved choices win while Radarr still reports them…
+    config = RadarrConfig(
+        base_url="http://radarr.test",
+        default_root_folder="/4k",
+        default_quality_profile_id=7,
+    )
+    assert await radarr_add.resolve_add_options(config, transport=transport) == ("/4k", 7)
+
+    # …and stale saved values (folder gone, profile deleted) fall back to
+    # first-of-each rather than failing the add (negative control).
+    stale = RadarrConfig(
+        base_url="http://radarr.test",
+        default_root_folder="/removed",
+        default_quality_profile_id=99,
+    )
+    assert await radarr_add.resolve_add_options(stale, transport=transport) == (
+        "/data/movies",
+        6,
+    )

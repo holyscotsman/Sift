@@ -15,7 +15,9 @@ export function Header() {
   const { scanning, pct, start, setPanelOpen } = useScan();
 
   return (
-    <header className="glass flex h-[60px] items-center gap-3 rounded-xl px-3">
+    // On phones the search gets its own full-width row below the controls
+    // (there's no room beside the logo); ≥md it sits centered in the bar.
+    <header className="glass flex min-h-[60px] flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-3 py-2 md:h-[60px] md:flex-nowrap md:py-0">
       <a href="/" className="flex items-center gap-2 pl-1 pr-2" aria-label="Sift home">
         <span
           className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--accent-fg)]"
@@ -28,7 +30,7 @@ export function Header() {
         </span>
       </a>
 
-      <div className="ml-1 hidden flex-1 justify-center md:flex">
+      <div className="order-last w-full md:order-none md:ml-1 md:flex md:w-auto md:flex-1 md:justify-center">
         <GlobalSearch />
       </div>
 
@@ -78,7 +80,7 @@ export function Header() {
         <button
           onClick={() => void start()}
           disabled={scanning}
-          className="gradient-fill flex items-center gap-1.5 rounded-pill px-4 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
+          className="gradient-fill flex items-center gap-1.5 whitespace-nowrap rounded-pill px-4 py-1.5 text-xs font-bold shadow-glow disabled:opacity-60"
         >
           <ScanIcon size={15} />
           Run scan

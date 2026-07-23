@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { SparkleIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
+import { formatAnswer } from "@/lib/format";
 import type { AskResponse, AskSource, ProfileResponse } from "@/lib/types";
 
 interface UserMsg {
@@ -161,7 +162,7 @@ export function Ask() {
             ) : (
               <div key={i} className="max-w-[85%]">
                 <div className="panel px-4 py-3">
-                  <p className="whitespace-pre-wrap text-sm text-fg">{m.answer}</p>
+                  <div className="space-y-2 text-sm text-fg">{formatAnswer(m.answer)}</div>
                   {m.sources.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {m.sources.map((s) => (

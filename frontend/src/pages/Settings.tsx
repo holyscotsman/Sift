@@ -9,7 +9,13 @@ import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
 import { api, setToken } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
-import type { Connections as ConnConfig, ServiceHealth, ThresholdPreview, Thresholds } from "@/lib/types";
+import type {
+  Connections as ConnConfig,
+  RadarrOptions,
+  ServiceHealth,
+  ThresholdPreview,
+  Thresholds,
+} from "@/lib/types";
 
 const TABS = ["Appearance", "Connections", "Scoring", "Autonomy", "Account"] as const;
 type Tab = (typeof TABS)[number];
@@ -331,6 +337,86 @@ function RescanSection() {
   );
 }
 
+// Where add-to-Radarr puts titles. Unset = Radarr's first root folder / first
+// quality profile (the historical default); a stale choice falls back safely.
+function RadarrDefaultsSection() {
+  const [options, setOptions] = useState<RadarrOptions | null>(null);
+  const [root, setRoot] = useState("");
+  const [profile, setProfile] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api
+      .radarrOptions()
+      .then((o) => {
+        setOptions(o);
+        setRoot(o.default_root_folder ?? "");
+        setProfile(o.default_quality_profile_id != null ? String(o.default_quality_profile_id) : "");
+      })
+      .catch(() => setOptions(null));
+  }, []);
+
+  if (!options || (options.root_folders.length === 0 && options.quality_profiles.length === 0)) {
+    return null; // Radarr unconfigured/unreachable — defaults apply, nothing to choose
+  }
+
+  async function save() {
+    setSaved(false);
+    await api.saveConfig({
+      radarr: {
+        root_folder: root,
+        quality_profile_id: profile ? Number(profile) : "",
+      },
+    });
+    setSaved(true);
+  }
+
+  const select =
+    "w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none";
+  return (
+    <Section title="Radarr add defaults">
+      <p className="text-sm text-fg2">
+        Where titles added from Sift land in Radarr. Unset means Radarr&rsquo;s first root
+        folder and first quality profile.
+      </p>
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="text-xs text-fg3">
+          Root folder
+          <select value={root} onChange={(e) => setRoot(e.target.value)} className={`mt-1 ${select}`}>
+            <option value="">First available</option>
+            {options.root_folders.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-fg3">
+          Quality profile
+          <select
+            value={profile}
+            onChange={(e) => setProfile(e.target.value)}
+            className={`mt-1 ${select}`}
+          >
+            <option value="">First available</option>
+            {options.quality_profiles.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <button
+        onClick={() => void save().catch(() => setSaved(false))}
+        className="mt-3 rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+      >
+        {saved ? "Saved ✓" : "Save defaults"}
+      </button>
+    </Section>
+  );
+}
+
 // Change the password in place — no more factory reset just to rotate it.
 // Existing sessions (including this one) stay signed in.
 function PasswordSection() {
@@ -600,6 +686,7 @@ function Autonomy() {
       </Section>
 
       <RescanSection />
+      <RadarrDefaultsSection />
 
       <Section title="Autonomy tiers">
         <div className="divide-y divide-line">

@@ -318,6 +318,18 @@ export interface PosterCacheStats {
   bytes: number;
 }
 
+export interface QualityProfile {
+  id: number;
+  name: string;
+}
+
+export interface RadarrOptions {
+  root_folders: string[];
+  quality_profiles: QualityProfile[];
+  default_root_folder: string | null;
+  default_quality_profile_id: number | null;
+}
+
 export interface ThresholdPreview {
   junk: number;
   borderline: number;

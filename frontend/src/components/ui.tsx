@@ -1,6 +1,6 @@
 // Shared UI primitives used across screens.
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { posterUrl } from "@/lib/api";
@@ -12,8 +12,9 @@ export function posterGradient(id: number): string {
 }
 
 // A poster image resolved through the server cache, with a graceful gradient
-// fallback when no artwork exists. Retries once when the token changes.
-export function Poster({
+// fallback when no artwork exists. Memoized — props are primitives, and long
+// grids re-render their parents on every infinite-scroll append.
+export const Poster = memo(function Poster({
   tmdbId,
   alt = "",
   className = "",
@@ -37,7 +38,7 @@ export function Poster({
       className={`${className} object-cover`}
     />
   );
-}
+});
 
 export function PageTitle({ title, subhead }: { title: string; subhead?: ReactNode }) {
   return (

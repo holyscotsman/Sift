@@ -33,7 +33,10 @@ export function TopNav() {
     "flex items-center rounded-pill px-3.5 py-1.5 text-[13px] font-semibold transition-colors";
 
   return (
-    <nav className="glass flex flex-wrap items-center gap-1 rounded-xl px-2 py-1.5">
+    <nav
+      aria-label="Primary"
+      className="glass flex flex-wrap items-center gap-1 rounded-xl px-2 py-1.5"
+    >
       {NAV.map((item) => (
         <NavLink
           key={item.to}
