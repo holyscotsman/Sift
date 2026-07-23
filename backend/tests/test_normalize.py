@@ -144,3 +144,48 @@ def test_normalize_tmdb_movie_people_and_keywords():
     assert ("Christopher Nolan", "director") in jobs
     assert ("Leonardo DiCaprio", "actor") in jobs
     assert out["collection"]["tmdb_collection_id"] == 8945
+
+
+def test_theatrical_scale_covers_streaming_studio_releases():
+    from sift.ingest.normalize import _us_theatrical
+
+    # Streaming-only, but a major studio is attached → kept (theatrical-scale).
+    amazon_streamer = {
+        "release_dates": {"results": [
+            {"iso_3166_1": "US", "release_dates": [{"type": 4}]},  # 4 = digital
+        ]},
+        "production_companies": [{"name": "Amazon MGM Studios"}],
+        "budget": 0,
+    }
+    assert _us_theatrical(amazon_streamer) is True
+
+    # Studio-scale budget with no studio name match → still kept.
+    big_budget = {"release_dates": {}, "production_companies": [], "budget": 60_000_000}
+    assert _us_theatrical(big_budget) is True
+
+    # Negative control: small-budget indie with no theatrical run stays unprotected.
+    indie = {
+        "release_dates": {"results": [
+            {"iso_3166_1": "US", "release_dates": [{"type": 4}]},
+        ]},
+        "production_companies": [{"name": "Tiny Films LLC"}],
+        "budget": 900_000,
+    }
+    assert _us_theatrical(indie) is False
+
+
+def test_radarr_relative_poster_paths_are_dropped():
+    from sift.ingest.normalize import normalize_radarr_movie
+
+    relative = normalize_radarr_movie(
+        {"tmdbId": 1, "title": "X",
+         "images": [{"coverType": "poster", "url": "/MediaCover/1/poster.jpg"}]}
+    )
+    assert relative["poster_url"] is None  # unfetchable → let TMDB-by-id resolve it
+
+    absolute = normalize_radarr_movie(
+        {"tmdbId": 2, "title": "Y",
+         "images": [{"coverType": "poster",
+                     "remoteUrl": "https://image.tmdb.org/t/p/original/y.jpg"}]}
+    )
+    assert absolute["poster_url"] == "https://image.tmdb.org/t/p/original/y.jpg"

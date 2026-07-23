@@ -52,9 +52,13 @@ def classify(facts: MovieFacts, *, scored_low: bool) -> Classification:
     # 2. A cult classic is always kept — this is the explicit exception to "scored low".
     if facts.is_cult:
         return Classification(Verdict.PROTECT, "Recognized cult classic — kept despite the score.")
-    # 3. A US theatrical release is kept.
+    # 3. A theatrical-scale release (US theatrical run, major studio, or a
+    #    studio-scale budget) is kept — even a famously bad one; people watch
+    #    those *because* they're bad.
     if facts.us_theatrical:
-        return Classification(Verdict.PROTECT, "Had a US theatrical release.")
+        return Classification(
+            Verdict.PROTECT, "Theatrical-scale release (theatrical run / major studio)."
+        )
     # 4. Low-scoring independents and (non-cult) international films are cut.
     if scored_low and facts.is_independent:
         return Classification(Verdict.REMOVE, "Low-rated independent film.")

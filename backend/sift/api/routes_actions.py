@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..actions.engine import ActionEngine, ApprovalRequiredError
+from ..clients.overseerr import OverseerrClient
 from ..config import Settings
 from ..db.models import Action, ActionActor, ActionType
 from ..services import radarr_add
@@ -44,6 +45,50 @@ def propose_action(
         actor=body.actor,
         dry_run=dry_run,
     )
+
+
+@router.post("/actions/request", response_model=ActionOut)
+async def request_movie(
+    body: AddMovieIn,
+    engine: ActionEngine = Depends(get_action_engine),
+    settings: Settings = Depends(get_settings),
+) -> Action:
+    """Request a missing movie. Overseerr is the preferred front door when it's
+    configured (the request flows through Overseerr's own approval pipeline);
+    otherwise this falls back to a direct Radarr add. The server dry-run floor
+    applies to both paths — staged means nothing left Sift."""
+    if settings.actions.dry_run or not (
+        settings.overseerr.enabled and settings.overseerr.base_url and settings.overseerr.api_key
+    ):
+        # No Overseerr (or staging floor on) → the existing Radarr add path,
+        # which itself honors dry-run.
+        return await add_movie(body, engine, settings)
+
+    client = OverseerrClient(settings.overseerr)
+    try:
+        result = await client.request_movie(body.tmdb_id)
+    except Exception as exc:  # noqa: BLE001 - Overseerr down → honest 400, no silent fallback
+        raise HTTPException(
+            status_code=400,
+            detail="Couldn't reach Overseerr to file the request — check the connection.",
+        ) from exc
+    finally:
+        await client.aclose()
+    # Audit trail: the request is recorded like any other action, tagged with its
+    # route so Activity shows *where* it went.
+    action = engine.propose(
+        ActionType.ADD,
+        movie_tmdb_id=body.tmdb_id,
+        payload={
+            "via": "overseerr",
+            "title": body.title,
+            "request_id": result.get("id"),
+            "request_status": result.get("status"),
+        },
+        actor=ActionActor.USER,
+        dry_run=False,
+    )
+    return engine.mark_executed_external(action.id)
 
 
 @router.post("/actions/add", response_model=ActionOut)

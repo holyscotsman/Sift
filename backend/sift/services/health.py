@@ -14,17 +14,19 @@ from collections.abc import Callable
 from typing import Any
 
 from ..clients.base import BaseClient, ClientError, HealthStatus
+from ..clients.overseerr import OverseerrClient
 from ..clients.plex import PlexClient
 from ..clients.radarr import RadarrClient
 from ..clients.tautulli import TautulliClient
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
 
-_SERVICES = ("plex", "radarr", "tautulli", "tmdb")
+_SERVICES = ("plex", "radarr", "overseerr", "tautulli", "tmdb")
 # Each client takes its own config model, so the factory type is a plain callable.
 _CLIENT_TYPES: dict[str, Callable[[Any], BaseClient]] = {
     "plex": PlexClient,
     "radarr": RadarrClient,
+    "overseerr": OverseerrClient,
     "tautulli": TautulliClient,
     "tmdb": TmdbClient,
 }

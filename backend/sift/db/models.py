@@ -338,3 +338,28 @@ class MustHaveSuggestion(Base):
     vote_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16), default="suggested", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CanonMovie(Base):
+    """The backend's internal canon of theatrical-scale films worth owning.
+
+    Built deterministically — TMDB's top-rated chart, a revenue-sorted
+    blockbuster sweep, the curated lists (cult / IMDb top / criterion), and
+    already-gated must-have suggestions. Nothing enters on AI say-so. The list
+    itself stays backend-only; the Missing page shows canon minus the PLEX
+    library (Radarr is deliberately ignored — wanted-but-absent still counts
+    as missing)."""
+
+    __tablename__ = "canon_movies"
+
+    tmdb_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer)
+    poster_path: Mapped[str | None] = mapped_column(String(255))
+    vote_average: Mapped[float | None] = mapped_column(Float)
+    vote_count: Mapped[int | None] = mapped_column(Integer)
+    # Why it's canon: e.g. ["top rated", "blockbuster", "cult classic"].
+    sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )

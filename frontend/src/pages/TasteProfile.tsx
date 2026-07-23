@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { RecommendationsSection } from "@/components/Recommendations";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -134,7 +135,7 @@ export function TasteProfile() {
           </Card>
         </div>
 
-        <div className="lg:sticky lg:top-4 lg:self-start">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
           <Card title="Emphasis">
             <p className="mb-3 text-sm text-fg2">
               You favor <span className="font-semibold text-accent">{favors}</span>. Genre and
@@ -178,6 +179,10 @@ export function TasteProfile() {
             </button>
           </Card>
         </div>
+      </div>
+
+      <div className="mt-5">
+        <RecommendationsSection />
       </div>
     </div>
   );

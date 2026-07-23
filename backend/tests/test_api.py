@@ -112,7 +112,7 @@ def test_movie_detail_with_ratings_watch_and_score(client):
 def test_health_reports_all_services(client):
     c, _ = client
     services = {s["service"] for s in c.get("/api/health").json()["services"]}
-    assert services == {"plex", "radarr", "tautulli", "tmdb", "model"}
+    assert services == {"plex", "radarr", "overseerr", "tautulli", "tmdb", "model"}
 
 
 def test_token_gating(settings, factory):

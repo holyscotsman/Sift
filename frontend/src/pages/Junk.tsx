@@ -27,6 +27,14 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / 1e9).toFixed(1)} GB`;
 }
 
+// Direct title page when the id is known; IMDb's own search otherwise — the
+// link always lands somewhere useful.
+function imdbUrl(c: JunkCandidate): string {
+  return c.imdb_id
+    ? `https://www.imdb.com/title/${c.imdb_id}/`
+    : `https://www.imdb.com/find/?q=${encodeURIComponent(`${c.title}${c.year ? ` ${c.year}` : ""}`)}`;
+}
+
 export function Junk() {
   const [items, setItems] = useState<JunkCandidate[]>([]);
   // Server-reported total; when it exceeds what we fetched, say so (no silent cap).
@@ -63,6 +71,7 @@ export function Junk() {
       setReviewMsg(`Reviewed ${r.reviewed} title(s) ${src}.`);
       const fresh = await api.junk();
       setItems(fresh.items);
+      setSelected(new Set(fresh.items.map((c) => c.tmdb_id)));
     } catch {
       setReviewMsg("AI review failed — check your Ollama/Anthropic settings.");
     } finally {
@@ -76,6 +85,9 @@ export function Junk() {
       .then((r) => {
         setItems(r.items);
         setTotal(r.total);
+        // The owner's default: everything flagged starts selected for removal —
+        // unticking is the exception. Nothing is sent until Approve + confirm.
+        setSelected(new Set(r.items.map((c) => c.tmdb_id)));
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
@@ -343,6 +355,7 @@ export function Junk() {
                   .then((r) => {
                     setItems(r.items);
                     setTotal(r.total);
+                    setSelected(new Set(r.items.map((c) => c.tmdb_id)));
                   })
                   .catch(() => toastError("Couldn't load the full queue — try again."))
                   .finally(() => setLoading(false));
@@ -459,6 +472,16 @@ function Row({
           {c.quality && <Pill>{c.quality}</Pill>}
           <span className="text-xs text-fg3">{fmtSize(c.file_size)}</span>
           <Pill tone={bandTone(c.band)}>{c.band}</Pill>
+          <a
+            href={imdbUrl(c)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="Check this title on IMDb"
+            className="rounded-pill border border-line px-2 py-0.5 text-[11px] font-semibold text-fg2 hover:bg-bg2 hover:text-fg"
+          >
+            IMDb ↗
+          </a>
         </div>
         <p className="mt-1.5 text-sm text-fg2">{c.rationale}</p>
         {c.ai_note && (

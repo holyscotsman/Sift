@@ -168,6 +168,12 @@ class ActionEngine:
 
     # --------------------------------------------------------------------- helpers
 
+    def mark_executed_external(self, action_id: int) -> Action:
+        """Record an action whose write already happened OUTSIDE the engine (e.g.
+        an Overseerr request). Audit-only — nothing is dispatched; the golden
+        delete guard is untouched because this never routes to the writer."""
+        return self._mark(action_id, ActionStatus.EXECUTED)
+
     def _mark(
         self,
         action_id: int,

@@ -9,6 +9,7 @@ import type { ServiceHealth } from "@/lib/types";
 const LABELS: Record<string, string> = {
   plex: "Plex",
   radarr: "Radarr",
+  overseerr: "Overseerr",
   tautulli: "Tautulli",
   tmdb: "TMDB",
   model: "Model",
@@ -27,7 +28,7 @@ export function HealthDots() {
   const { data } = useHealth();
   const byName = new Map((data?.services ?? []).map((s) => [s.service, s]));
   // Model is the AI provider surface (Phase 2) — shown as not-configured for now.
-  const order = ["plex", "radarr", "tautulli", "tmdb", "model"];
+  const order = ["plex", "radarr", "overseerr", "tautulli", "tmdb", "model"];
 
   return (
     // A red dot should lead to the fix, not just diagnose — the group opens

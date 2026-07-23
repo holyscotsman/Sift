@@ -1,7 +1,7 @@
 {
   "name": "sift-frontend",
   "private": true,
-  "version": "2607.8.0",
+  "version": "2607.9.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,7 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

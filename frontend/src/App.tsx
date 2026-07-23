@@ -13,6 +13,9 @@ import { ScanProvider } from "@/lib/scan";
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Library = lazy(() => import("@/pages/Library").then((m) => ({ default: m.Library })));
 const Missing = lazy(() => import("@/pages/Missing").then((m) => ({ default: m.Missing })));
+const Collections = lazy(() =>
+  import("@/pages/Collections").then((m) => ({ default: m.Collections })),
+);
 const Junk = lazy(() => import("@/pages/Junk").then((m) => ({ default: m.Junk })));
 const Ask = lazy(() => import("@/pages/Ask").then((m) => ({ default: m.Ask })));
 const TasteProfile = lazy(() =>
@@ -34,6 +37,7 @@ export default function App() {
                     <Route index element={<Dashboard />} />
                     <Route path="library" element={<Library />} />
                     <Route path="missing" element={<Missing />} />
+                    <Route path="collections" element={<Collections />} />
                     <Route path="junk" element={<Junk />} />
                     <Route path="ask" element={<Ask />} />
                     <Route path="profile" element={<TasteProfile />} />

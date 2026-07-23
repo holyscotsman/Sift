@@ -135,6 +135,8 @@ export interface JunkCandidate {
   tmdb_id: number;
   title: string;
   year: number | null;
+  // For the one-click IMDb link; null when the id was never resolved.
+  imdb_id: string | null;
   poster_url: string | null;
   library_section: string | null;
   quality: string | null;
@@ -212,6 +214,27 @@ export interface MustHaveRunResponse {
   added: number;
   considered: number;
   provider: string;
+}
+
+export interface CanonMovieItem {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  vote_average: number | null;
+  vote_count: number | null;
+  // Why it's canon: e.g. ["top rated", "blockbuster", "cult classic"].
+  sources: string[];
+}
+
+export interface CanonMissingResponse {
+  items: CanonMovieItem[];
+  total: number;
+}
+
+export interface CanonRefreshResponse {
+  canon_written: number;
+  curator_added: number;
+  missing_total: number;
 }
 
 export interface RecommendedMovie {
