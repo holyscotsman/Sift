@@ -168,6 +168,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Key material for encrypting service secrets stored in the DB (``SIFT_SECRET_KEY``).
+    # Optional: when unset, the server API token is used, so a deploy that already has
+    # a token gets encryption at rest with no extra configuration. Set it explicitly to
+    # rotate the encryption key independently of the access token.
+    secret_key: SecretStr | None = None
+
     server: ServerConfig = Field(default_factory=ServerConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)

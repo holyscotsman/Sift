@@ -2,6 +2,59 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.10.0 — Service keys encrypted at rest
+
+Groundwork for running Sift on a **persistent** database. Until now the fix for
+"my login and keys reset on every redeploy" (point `SIFT_DATABASE__URL` at a free
+Postgres) had a catch: connection secrets were stored in plaintext, which is
+tolerable on a throwaway SQLite file and not tolerable in a cloud database that
+keeps backups. Now they're sealed before they're written.
+
+- **Encryption at rest for stored credentials.** Plex tokens and Radarr / TMDB /
+  Overseerr / Anthropic keys entered in the wizard or Settings are encrypted
+  (Fernet) before they reach the database. Non-secret fields (base URLs, models,
+  language) stay readable. New `services/secretbox.py`.
+- **No new setup step.** Key material is resolved from `SIFT_SECRET_KEY` if set,
+  otherwise the existing `SIFT_SERVER__API_TOKEN` — so an instance that already
+  has an access token gets this for free. `render.yaml` now generates a
+  `SIFT_SECRET_KEY` for new blueprint deploys. **The key never lives in the
+  database**, so a leaked connection string yields ciphertext.
+- **Existing databases upgrade themselves.** Secrets already stored in plaintext
+  are sealed in place on the next boot — idempotent, and a no-op when no key
+  material is available.
+- **Unchanged without key material.** With no token and no explicit key (a plain
+  local SQLite install), values are stored exactly as before. Nothing to migrate.
+- **Losing the key is not destructive.** An unreadable secret reports as
+  not-configured — re-enter it in Settings — rather than crashing the app, and an
+  unrelated save can never overwrite a secret this instance can't currently read.
+- **The session signing secret is sealed too** — and this one is load-bearing. In
+  the clear it sits in the same table, and it alone is enough to forge a valid
+  admin session from a database dump; the attacker then has the running app
+  decrypt every other credential for them. Encrypting the connection keys while
+  leaving it readable would have been theatre. Verified by building the exploit
+  and confirming the forged token is now rejected.
+- **You cannot be locked out by a key change.** An unreadable signing secret
+  signs everyone out, but `login` verifies against the password hash (which is
+  independent) and mints a replacement, so access always recovers.
+- **Adding a key later is safe.** Decryption tries the primary key and then the
+  fallback, so an instance sealed under the access token keeps working when a
+  `SIFT_SECRET_KEY` appears (as Render generates on a blueprint sync); the boot
+  upgrade then re-seals under the new primary. Without this, following the
+  documented path would have orphaned every stored credential.
+- **Visible, not assumed.** `/api/settings` reports `secrets_encrypted`; Settings ›
+  Account confirms it, and warns when a persistent database is paired with
+  unencrypted secrets.
+- Docs: `DEPLOY.md` gains the encryption note and a key-rotation section, and is
+  explicit that this protects data *at rest* — backups, replicas, a leaked
+  connection string — not the running instance.
+- New dependency: `cryptography`.
+
+Known limitation, unchanged by this release: an attacker who is already
+authenticated (has your access token or a live session) can point a service's
+`base_url` at a host they control and have Sift send that service's credential
+there. That predates this change and is tracked separately; encryption at rest
+does not address it.
+
 ## 2607.9.0 — Missing redesign, Overseerr, theatrical junk rules
 
 Owner-requested batch:

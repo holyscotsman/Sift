@@ -1,9 +1,17 @@
 """Single-user username/password auth for a hosted Sift.
 
-Everything is stdlib — no new runtime dependency. Passwords are PBKDF2-HMAC-SHA256
-with a per-password salt; the login credential and a per-instance signing secret
-live in the ``settings`` table (key ``auth``). Sessions are stateless signed tokens
-(HMAC over a small JSON payload), so there's no session store to keep or expire.
+Passwords are PBKDF2-HMAC-SHA256 with a per-password salt; the login credential and
+a per-instance signing secret live in the ``settings`` table (key ``auth``). Sessions
+are stateless signed tokens (HMAC over a small JSON payload), so there's no session
+store to keep or expire.
+
+The signing secret is **encrypted at rest** (:mod:`sift.services.secretbox`). It has
+to be: in the clear it turns a database dump into a forged session, and an
+authenticated attacker can make the app decrypt every other stored credential for
+them — which would leave the connection-key encryption doing nothing useful. If the
+encryption key changes the secret becomes unreadable; that logs everyone out but
+cannot lock the owner out, because ``login`` verifies against the password hash
+(independent of this secret) and then mints a replacement.
 
 The token is sent exactly like the existing access token (``X-Sift-Token`` /
 ``Authorization: Bearer``), so the gate accepts either a valid session token or the
@@ -23,6 +31,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..db.models import Setting
+from . import secretbox
 
 _AUTH_KEY = "auth"
 _PBKDF2_ROUNDS = 240_000
@@ -63,20 +72,45 @@ def is_configured(session: Session) -> bool:
     return bool(auth and auth.get("username") and auth.get("password_hash"))
 
 
+def _signing_secret(auth: dict[str, Any]) -> str | None:
+    """The session-signing secret in usable form, or None when it can't be read.
+
+    Stored encrypted: it is the one value in this table that turns a database dump
+    into a forged admin session, which would in turn let an attacker read back every
+    other credential through the running app. Encrypting the connection keys without
+    this one would be theatre.
+    """
+    stored = auth.get("secret")
+    return secretbox.decrypt(stored) if isinstance(stored, str) and stored else None
+
+
+def _store(session: Session, auth: dict[str, Any]) -> None:
+    session.merge(Setting(key=_AUTH_KEY, value=auth))
+    session.commit()
+
+
 def create_account(session: Session, username: str, password: str) -> None:
     """Create (or overwrite) the single account. Mints a fresh signing secret, which
     invalidates any previously issued tokens."""
-    session.merge(
-        Setting(
-            key=_AUTH_KEY,
-            value={
-                "username": username,
-                "password_hash": hash_password(password),
-                "secret": secrets.token_hex(32),
-            },
-        )
+    _store(
+        session,
+        {
+            "username": username,
+            "password_hash": hash_password(password),
+            "secret": secretbox.encrypt(secrets.token_hex(32)),
+        },
     )
-    session.commit()
+
+
+def upgrade_stored_secret(session: Session) -> bool:
+    """Seal (or re-seal) the signing secret at boot, mirroring the connections
+    upgrade. Non-destructive: a secret that can't be opened at all is left alone —
+    ``login`` re-mints it rather than this silently discarding it."""
+    auth = get_auth(session)
+    if not auth or not secretbox.needs_resealing(auth.get("secret")):
+        return False
+    _store(session, {**auth, "secret": secretbox.reseal(str(auth["secret"]))})
+    return True
 
 
 def clear_account(session: Session) -> None:
@@ -147,11 +181,22 @@ def login(
         return None
     if not verify_password(password, auth.get("password_hash", "")):
         return None
-    return issue_token(str(auth["secret"]), username, now=now)
+    secret = _signing_secret(auth)
+    if secret is None:
+        # The encryption key changed (or went missing), so the stored secret can't be
+        # read. The password just verified against its own independent hash, so this
+        # is recoverable: mint a fresh secret rather than lock the owner out of their
+        # own instance. Any previously issued token stops working, which is correct.
+        secret = secrets.token_hex(32)
+        _store(session, {**auth, "secret": secretbox.encrypt(secret)})
+    return issue_token(secret, username, now=now)
 
 
 def token_valid(session: Session, token: str, *, now: float | None = None) -> bool:
     auth = get_auth(session)
     if not auth or not token:
         return False
-    return verify_token(str(auth.get("secret", "")), token, now=now) is not None
+    secret = _signing_secret(auth)
+    if not secret:
+        return False  # unreadable secret → no token can be trusted
+    return verify_token(secret, token, now=now) is not None

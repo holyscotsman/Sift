@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import SecretStr
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import __version__
@@ -46,7 +47,7 @@ from .api import (
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
-from .services import autoscan, config_store
+from .services import auth, autoscan, config_store, secretbox
 from .services.posters import PosterCache
 
 log = logging.getLogger("sift")
@@ -57,6 +58,10 @@ log = logging.getLogger("sift")
 _FRONTEND_DIST = Path(
     os.environ.get("SIFT_FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend" / "dist")
 )
+
+
+def _secret_value(secret: SecretStr | None) -> str | None:
+    return secret.get_secret_value() if secret is not None else None
 
 
 @asynccontextmanager
@@ -86,8 +91,23 @@ def create_app(
         init_db(engine)
         session_factory = make_session_factory(engine)
 
+    # Secrets stored in the DB are encrypted with key material that lives only in the
+    # environment: an explicit SIFT_SECRET_KEY, else the server access token. Resolved
+    # from settings (not os.environ) so .env / sift.toml deploys are covered too. Both
+    # are passed so an instance that sealed under the token still opens after a
+    # SIFT_SECRET_KEY appears; the boot upgrade then re-seals under the new primary.
+    secretbox.configure(
+        _secret_value(base_settings.secret_key), _secret_value(base_settings.server.api_token)
+    )
+
     # Effective config = the env/toml base overlaid with any UI-entered connections.
     with session_factory() as session:
+        # Seal anything written before encryption was available (or under an older
+        # key) — one-time and idempotent, so an existing database needs no operator
+        # action. The signing secret is covered too: leaving it readable would let a
+        # database dump forge a session and read every other credential back out.
+        config_store.upgrade_stored_secrets(session)
+        auth.upgrade_stored_secret(session)
         conn = config_store.get_config(session)
         actions_cfg = config_store.get_actions(session)
     settings = config_store.apply_to_settings(base_settings, conn, actions_cfg)
