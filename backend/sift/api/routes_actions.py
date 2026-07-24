@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..actions.engine import ActionEngine, ApprovalRequiredError
+from ..clients.base import ClientAuthError, ClientHTTPError, ClientUnavailableError
 from ..clients.overseerr import OverseerrClient
 from ..config import Settings
 from ..db.models import Action, ActionActor, ActionType
@@ -65,9 +66,27 @@ async def request_movie(
         return await add_movie(body, engine, settings)
 
     client = OverseerrClient(settings.overseerr)
+    already_requested = False
     try:
         result = await client.request_movie(body.tmdb_id)
-    except Exception as exc:  # noqa: BLE001 - Overseerr down → honest 400, no silent fallback
+    except ClientAuthError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Overseerr rejected the API key — check it in Settings › Connections.",
+        ) from exc
+    except ClientHTTPError as exc:
+        # Overseerr answers 409 when the title is already requested/available — that's
+        # not a failure from the user's chair, so record it as a request rather than
+        # bouncing them into an endless "Retry" loop that will never succeed.
+        if exc.status_code == 409:
+            already_requested = True
+            result = {}
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Overseerr rejected the request (HTTP {exc.status_code}).",
+            ) from exc
+    except ClientUnavailableError as exc:
         raise HTTPException(
             status_code=400,
             detail="Couldn't reach Overseerr to file the request — check the connection.",
@@ -83,7 +102,7 @@ async def request_movie(
             "via": "overseerr",
             "title": body.title,
             "request_id": result.get("id"),
-            "request_status": result.get("status"),
+            "request_status": "already_requested" if already_requested else result.get("status"),
         },
         actor=ActionActor.USER,
         dry_run=False,

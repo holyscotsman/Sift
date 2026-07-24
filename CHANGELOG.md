@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.10.0 — Overseerr request fix, Missing "Request all", README rewrite
+
+Owner-requested batch:
+
+- **Overseerr requests no longer dead-end.** A title Overseerr already has on file
+  answered with HTTP 409, which Sift was treating as a generic "couldn't reach
+  Overseerr" failure — a retry could never succeed, so the request looked stuck
+  forever. It's now recorded as `already_requested` (shown as "Already requested",
+  not an error). A rejected API key now says so explicitly instead of reading like
+  a network fault. On the frontend, request/add calls now carry a 30s timeout, so
+  a genuinely hung connection surfaces as a retryable error instead of a button
+  stuck on "…" with no feedback, and a failed request now names the reason in a
+  toast rather than failing silently.
+- **Missing gets "Request all missing."** The same one-click bulk-request control
+  Collections already had is now on the Missing page too, next to "Refresh
+  catalog" — it walks every title currently missing from the Plex library through
+  the same Overseerr/Radarr routing as a single request.
+- **README rewritten** for a first-time reader: the repo URL is now the second line
+  (impossible to miss), followed by a plain-language "what Sift actually does" and
+  a numbered "how the workflow works" walkthrough, ahead of the existing technical
+  reference material.
+- Verified the existing single-user account system already covers "create an
+  account, come back later without re-entering everything": signed session tokens
+  persist for 30 days in the browser, and every connected service's credentials
+  are stored server-side (not re-entered per login). No changes needed there —
+  confirmed via the existing auth test suite.
+
 ## 2607.9.0 — Missing redesign, Overseerr, theatrical junk rules
 
 Owner-requested batch:

@@ -55,14 +55,43 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+// Most calls have no deadline (AI/Ask can legitimately run long); pass timeoutMs
+// for ones a user is staring at a spinner for, so a hung connection surfaces as an
+// error instead of an indefinite "…" (e.g. filing a request with Overseerr/Radarr).
+async function request<T>(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> {
   const token = getToken();
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   if (init.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("X-Sift-Token", token);
 
-  const res = await fetch(path, { ...init, headers });
+  let signal = init.signal;
+  let timeoutController: AbortController | null = null;
+  let timeoutId: number | undefined;
+  if (timeoutMs) {
+    timeoutController = new AbortController();
+    const onCallerAbort = () => timeoutController?.abort();
+    if (init.signal) {
+      if (init.signal.aborted) timeoutController.abort();
+      else init.signal.addEventListener("abort", onCallerAbort);
+    }
+    timeoutId = window.setTimeout(() => timeoutController?.abort(), timeoutMs);
+    signal = timeoutController.signal;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(path, { ...init, headers, signal });
+  } catch (e) {
+    // A timeout we set off looks like any other AbortError — tell them it timed
+    // out rather than leaving a caller-cancel and a dead connection looking alike.
+    if (timeoutController?.signal.aborted && !init.signal?.aborted) {
+      throw new ApiError("Timed out waiting for a response — check the connection and try again.", 0);
+    }
+    throw e;
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -235,16 +264,20 @@ export const api = {
   executeAction: (id: number) =>
     request<ActionRecord>(`/api/actions/${id}/execute`, { method: "POST" }),
   addMovie: (tmdbId: number, title: string) =>
-    request<ActionRecord>("/api/actions/add", {
-      method: "POST",
-      body: JSON.stringify({ tmdb_id: tmdbId, title }),
-    }),
+    request<ActionRecord>(
+      "/api/actions/add",
+      { method: "POST", body: JSON.stringify({ tmdb_id: tmdbId, title }) },
+      30_000,
+    ),
   // Requests route through Overseerr when configured, else fall back to Radarr.
+  // Bounded so a hung connection to either service surfaces as a retryable error
+  // instead of a button stuck on "…" forever.
   requestMovie: (tmdbId: number, title: string) =>
-    request<ActionRecord>("/api/actions/request", {
-      method: "POST",
-      body: JSON.stringify({ tmdb_id: tmdbId, title }),
-    }),
+    request<ActionRecord>(
+      "/api/actions/request",
+      { method: "POST", body: JSON.stringify({ tmdb_id: tmdbId, title }) },
+      30_000,
+    ),
   canonMissing: (limit = 500) =>
     request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
   canonRefresh: () =>

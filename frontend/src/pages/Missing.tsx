@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 
-import { RequestCard } from "@/components/RequestCard";
+import { RequestAllButton, RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -72,13 +72,16 @@ export function Missing() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => void refresh()}
-          disabled={refreshing}
-          className="gradient-fill shrink-0 rounded-pill px-4 py-1.5 text-sm font-bold shadow-glow disabled:opacity-60"
-        >
-          {refreshing ? "Refreshing catalog…" : "Refresh catalog"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <RequestAllButton items={items} />
+          <button
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            className="gradient-fill rounded-pill px-4 py-1.5 text-sm font-bold shadow-glow disabled:opacity-60"
+          >
+            {refreshing ? "Refreshing catalog…" : "Refresh catalog"}
+          </button>
+        </div>
       </div>
       {note && (
         <p className="mt-3 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">

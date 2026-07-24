@@ -173,3 +173,71 @@ def test_request_stays_staged_under_dry_run_even_with_overseerr(settings, factor
         body = c.post("/api/actions/request", json={"tmdb_id": 605, "title": "Reloaded"}).json()
     assert body["dry_run"] is True
     assert body["payload"]["result"]["sent"] is False
+
+
+def test_request_already_made_in_overseerr_records_not_errors(settings, factory, monkeypatch):
+    # Overseerr answers 409 when a title's already been requested. That's not a
+    # failure the user can act on by retrying — it must be recorded as a request,
+    # not bounced back as an error that just invites an endless "Retry" loop.
+    from pydantic import SecretStr
+
+    from sift.api import routes_actions
+    from sift.clients.base import ClientHTTPError
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.actions.dry_run = False
+    settings.overseerr.base_url = "http://overseerr.test"
+    settings.overseerr.api_key = SecretStr("k")
+
+    class FakeOverseerr:
+        def __init__(self, config):
+            pass
+
+        async def request_movie(self, tmdb_id: int):
+            raise ClientHTTPError("overseerr: HTTP 409", 409)
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(routes_actions, "OverseerrClient", FakeOverseerr)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "executed"
+    assert body["payload"]["via"] == "overseerr"
+    assert body["payload"]["request_status"] == "already_requested"
+
+
+def test_request_overseerr_auth_failure_is_a_clear_400(settings, factory, monkeypatch):
+    # A rejected API key shouldn't read the same as a generic "couldn't reach" —
+    # the fix (re-enter the key) is different from the fix for a network fault.
+    from pydantic import SecretStr
+
+    from sift.api import routes_actions
+    from sift.clients.base import ClientAuthError
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.actions.dry_run = False
+    settings.overseerr.base_url = "http://overseerr.test"
+    settings.overseerr.api_key = SecretStr("bad-key")
+
+    class FakeOverseerr:
+        def __init__(self, config):
+            pass
+
+        async def request_movie(self, tmdb_id: int):
+            raise ClientAuthError("overseerr: authentication failed (401)")
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(routes_actions, "OverseerrClient", FakeOverseerr)
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"})
+    assert resp.status_code == 400
+    assert "API key" in resp.json()["detail"]

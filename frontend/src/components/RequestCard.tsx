@@ -7,19 +7,22 @@ import { useState } from "react";
 
 import { useToast } from "@/components/Toast";
 import { Poster } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { ActionRecord } from "@/lib/types";
 
 const tmdbMovieUrl = (tmdbId: number) => `https://www.themoviedb.org/movie/${tmdbId}`;
 
 function requestOutcome(action: ActionRecord): string {
-  if (action.payload?.via === "overseerr") return "Requested ✓";
+  if (action.payload?.via === "overseerr") {
+    return action.payload?.request_status === "already_requested" ? "Already requested" : "Requested ✓";
+  }
   return action.dry_run ? "Request staged" : "Added ✓";
 }
 
 export function RequestButton({ tmdbId, title }: { tmdbId: number; title: string }) {
   const [label, setLabel] = useState("Request");
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const toastError = useToast();
   async function send(e: React.MouseEvent) {
     e.stopPropagation();
     setState("busy");
@@ -27,9 +30,11 @@ export function RequestButton({ tmdbId, title }: { tmdbId: number; title: string
       const action = await api.requestMovie(tmdbId, title);
       setState("done");
       setLabel(requestOutcome(action));
-    } catch {
+    } catch (err) {
       setState("idle");
       setLabel("Retry");
+      const detail = err instanceof ApiError ? err.message : "couldn't reach the server";
+      toastError(`Requesting “${title}” failed — ${detail}`);
     }
   }
   return (

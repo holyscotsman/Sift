@@ -6,6 +6,19 @@ Resume point + working decisions. Read after `CLAUDE.md`.
 
 ## Where we are
 
+**Latest (2607.10.0):** Overseerr's 409 ("already requested") was being surfaced
+as a generic unreachable-connection error with no way to succeed on retry —
+fixed to record it as `already_requested` instead; auth failures now say "bad API
+key" instead of "couldn't reach"; request/add calls carry a 30s client-side
+timeout so a hung connection shows an error instead of an infinite spinner.
+Missing now has the same "Request all missing" bulk action Collections already
+had. README rewritten with the repo URL up top and a plain-language purpose +
+workflow explainer ahead of the technical reference sections. The existing
+single-user account system (30-day signed sessions, server-side connection
+storage) was reviewed and already covers "create an account, resume later
+without re-entering everything" — no changes needed there.
+
+
 **MVP merged (PR #1); refinement wave in flight on PR #2** (branch
 `claude/sift-webapp-setup-2qmxsn`, restarted from main post-merge). This wave adds:
 **AI engine modes** (tandem / Claude only / local only; `registry.build_providers`
