@@ -27,16 +27,33 @@ keeps backups. Now they're sealed before they're written.
 - **Losing the key is not destructive.** An unreadable secret reports as
   not-configured — re-enter it in Settings — rather than crashing the app, and an
   unrelated save can never overwrite a secret this instance can't currently read.
+- **The session signing secret is sealed too** — and this one is load-bearing. In
+  the clear it sits in the same table, and it alone is enough to forge a valid
+  admin session from a database dump; the attacker then has the running app
+  decrypt every other credential for them. Encrypting the connection keys while
+  leaving it readable would have been theatre. Verified by building the exploit
+  and confirming the forged token is now rejected.
+- **You cannot be locked out by a key change.** An unreadable signing secret
+  signs everyone out, but `login` verifies against the password hash (which is
+  independent) and mints a replacement, so access always recovers.
+- **Adding a key later is safe.** Decryption tries the primary key and then the
+  fallback, so an instance sealed under the access token keeps working when a
+  `SIFT_SECRET_KEY` appears (as Render generates on a blueprint sync); the boot
+  upgrade then re-seals under the new primary. Without this, following the
+  documented path would have orphaned every stored credential.
 - **Visible, not assumed.** `/api/settings` reports `secrets_encrypted`; Settings ›
   Account confirms it, and warns when a persistent database is paired with
   unencrypted secrets.
-- Docs: `DEPLOY.md` gains the encryption note and a key-rotation section.
+- Docs: `DEPLOY.md` gains the encryption note and a key-rotation section, and is
+  explicit that this protects data *at rest* — backups, replicas, a leaked
+  connection string — not the running instance.
 - New dependency: `cryptography`.
 
-Known gap, deliberately out of scope: the **session signing secret** is still
-stored in the clear, so database access remains sensitive. Encrypting it needs a
-self-healing path (re-mint on next login) to avoid a lockout, and is a separate
-change.
+Known limitation, unchanged by this release: an attacker who is already
+authenticated (has your access token or a live session) can point a service's
+`base_url` at a host they control and have Sift send that service's credential
+there. That predates this change and is tracked separately; encryption at rest
+does not address it.
 
 ## 2607.9.0 — Missing redesign, Overseerr, theatrical junk rules
 

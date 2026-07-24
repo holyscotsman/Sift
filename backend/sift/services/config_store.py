@@ -105,12 +105,13 @@ def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def upgrade_stored_secrets(session: Session) -> int:
-    """Seal any secrets still stored as plaintext, in place. Called once at boot so
-    a database written before encryption existed (or written while no key material
-    was set) upgrades itself with no operator step. Returns how many were sealed.
+    """Seal (or re-seal) stored secrets in place. Called once at boot so a database
+    written before encryption existed — or sealed under a key that is now only a
+    fallback — upgrades itself with no operator step. Returns how many were rewritten.
 
-    Idempotent and non-destructive: values already sealed are skipped, and with no
-    key material available this is a no-op rather than a rewrite.
+    Idempotent and non-destructive: values already sealed under the primary key are
+    skipped, a value that opens under no key at all is left alone rather than
+    overwritten, and with no key material this is a no-op.
     """
     if not secretbox.enabled():
         return 0
@@ -120,10 +121,9 @@ def upgrade_stored_secrets(session: Session) -> int:
         if not isinstance(fields, dict):
             continue
         for key, value in fields.items():
-            if key in _SECRET_FIELDS and isinstance(value, str) and value:
-                if not secretbox.is_encrypted(value):
-                    fields[key] = secretbox.encrypt(value)
-                    sealed += 1
+            if key in _SECRET_FIELDS and secretbox.needs_resealing(value):
+                fields[key] = secretbox.reseal(str(value))
+                sealed += 1
     if sealed:
         session.merge(Setting(key=_CONN_KEY, value=config))
         session.commit()

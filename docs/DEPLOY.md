@@ -86,10 +86,17 @@ your account, connections, and scans stick across every future redeploy.
 your Plex/Radarr/TMDB keys around indefinitely — including in its backups — so Sift
 encrypts them before writing. There is nothing to set up: the blueprint generates a
 `SIFT_SECRET_KEY`, and if you never set one Sift falls back to your access token. The
-key lives in Render's environment, never in the database, so a leaked connection
-string yields ciphertext. Settings › Account confirms it ("Saved service keys are
-encrypted at rest"). If you already had keys saved in plaintext, the next boot seals
-them in place — no action needed. See **Rotating the encryption key** below.
+key lives in Render's environment, never in the database. Settings › Account confirms
+it ("Saved service keys are encrypted at rest"). If you already had keys saved in
+plaintext, the next boot seals them in place — no action needed. See **Rotating the
+encryption key** below.
+
+What this does and doesn't cover: it protects your credentials wherever the *data*
+travels without the environment — database backups, replicas, snapshots, a leaked
+connection string, an exported dump. It is not a substitute for guarding the running
+instance: anyone who can reach your Sift URL **with a valid session or your access
+token** can still use the app, and the app necessarily decrypts keys to talk to your
+services.
 
 ## Good to know (free tier)
 
@@ -112,18 +119,27 @@ them in place — no action needed. See **Rotating the encryption key** below.
   issued without your explicit in-app approval.**
 - **Service keys are encrypted at rest.** Anything you enter in the wizard/Settings is
   sealed before it's stored, with key material that lives only in the environment
-  (`SIFT_SECRET_KEY`, else `SIFT_SERVER__API_TOKEN`). Whoever holds your database gets
-  ciphertext, not your Plex token. Note the flip side: your **session signing secret**
-  is still stored in the clear, so treat database access as sensitive regardless.
+  (`SIFT_SECRET_KEY`, else `SIFT_SERVER__API_TOKEN`). The session signing secret is
+  sealed the same way — in the clear it would let anyone holding a database dump forge
+  a login, which would hand them every other credential through the running app.
+- **Rotate the access token if it ever leaks.** It is a bearer credential: the export
+  endpoints accept it as a `?token=` query parameter, so it can end up in browser
+  history and platform request logs. If you rely on it as the encryption fallback,
+  rotating it also re-keys your stored secrets — see below. Setting an explicit
+  `SIFT_SECRET_KEY` decouples the two, which is why the blueprint generates one.
 
 ### Rotating the encryption key
 
-Change `SIFT_SECRET_KEY` in Render and restart. Previously saved keys can no longer be
-read — Sift reports those services as not-configured rather than failing, and you
-re-enter them once in Settings. Nothing else is affected: your account, library, and
-decisions are untouched. The same applies if you rotate `SIFT_SERVER__API_TOKEN` while
-relying on it as the fallback — set an explicit `SIFT_SECRET_KEY` if you want the two
-to rotate independently.
+Change `SIFT_SECRET_KEY` in Render and restart. Everyone is signed out (session tokens
+are signed with a secret derived from it) and previously saved service keys can no
+longer be read — Sift reports those services as not-configured rather than failing, and
+you re-enter them once in Settings. **You cannot lock yourself out:** logging back in
+with your password mints a fresh signing secret automatically. Your account, library,
+and decisions are untouched.
+
+*Adding* a `SIFT_SECRET_KEY` to an instance that has been running on the access-token
+fallback is safe and needs no re-entry: Sift still reads values sealed under the old
+material and quietly re-seals them under the new key on the next boot.
 
 ## Removals: staged vs. live
 

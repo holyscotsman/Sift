@@ -49,26 +49,56 @@ PREFIX = "enc:v1:"
 _KDF_SALT = b"sift.secretbox.v1"
 _KDF_ROUNDS = 200_000
 
-# Set at app boot from resolved settings so key material in .env / sift.toml works
-# too — process env alone would miss those.
-_configured_material: str | None = None
+# Key material, highest priority first. Set at app boot from resolved settings so
+# material in .env / sift.toml works too — process env alone would miss those.
+#
+# It's a *list* because the two sources legitimately change places: an instance that
+# sealed its secrets under the access token and later gains a SIFT_SECRET_KEY (Render
+# generates one when the blueprint syncs) must still be able to open them. New writes
+# always use the first entry; reads try each in turn, and the boot upgrade re-seals
+# anything that only opened under a fallback.
+_configured_materials: list[str] = []
+
+# Below this, key material is too weak to resist an offline dictionary attack against
+# a stolen database: the KDF salt is a constant in a public repo, so a short,
+# human-chosen token is precomputable. Generated tokens are far longer.
+_WEAK_MATERIAL_CHARS = 16
+_warned_weak = False
 
 
-def configure(material: str | None) -> None:
-    """Pin the key material explicitly (called once at startup)."""
-    global _configured_material
-    _configured_material = material.strip() if material and material.strip() else None
+def configure(*materials: str | None) -> None:
+    """Pin the key material explicitly (called once at startup), highest priority
+    first. Entries after the first are accepted for decryption only."""
+    global _configured_materials
+    kept: list[str] = []
+    for material in materials:
+        text = material.strip() if material else ""
+        if text and text not in kept:
+            kept.append(text)
+    _configured_materials = kept
 
 
-def _key_material() -> str | None:
-    if _configured_material:
-        return _configured_material
+def _key_materials() -> list[str]:
+    if _configured_materials:
+        return _configured_materials
     # Fallback for paths that never call configure() (CLI, tests, direct imports).
+    found: list[str] = []
     for name in ("SIFT_SECRET_KEY", "SIFT_SERVER__API_TOKEN"):
         raw = os.environ.get(name)
-        if raw and raw.strip():
-            return raw.strip()
-    return None
+        if raw and raw.strip() and raw.strip() not in found:
+            found.append(raw.strip())
+    return found
+
+
+def _warn_if_weak(material: str) -> None:
+    global _warned_weak
+    if not _warned_weak and len(material) < _WEAK_MATERIAL_CHARS:
+        _warned_weak = True
+        log.warning(
+            "Encryption key material is short (<%d chars). Stored credentials are only "
+            "as strong as it is — prefer a generated SIFT_SECRET_KEY.",
+            _WEAK_MATERIAL_CHARS,
+        )
 
 
 @lru_cache(maxsize=4)
@@ -81,7 +111,7 @@ def _fernet_for(material: str) -> Fernet:
 
 def enabled() -> bool:
     """True when key material is available, i.e. new writes will be encrypted."""
-    return _key_material() is not None
+    return bool(_key_materials())
 
 
 def is_encrypted(value: object) -> bool:
@@ -91,35 +121,69 @@ def is_encrypted(value: object) -> bool:
 def encrypt(value: str) -> str:
     """Encrypt a secret for storage. With no key material configured, or for an
     empty value (which means 'cleared'), the input is returned unchanged."""
-    material = _key_material()
-    if material is None or not value:
+    materials = _key_materials()
+    if not materials or not value:
         return value
     if is_encrypted(value):  # already sealed — don't double-wrap
         return value
-    return PREFIX + _fernet_for(material).encrypt(value.encode()).decode()
+    _warn_if_weak(materials[0])
+    return PREFIX + _fernet_for(materials[0]).encrypt(value.encode()).decode()
 
 
 def decrypt(value: str) -> str | None:
     """Plaintext for a stored value.
 
     Legacy plaintext passes through untouched. ``None`` means the value *is*
-    encrypted but this instance cannot open it (key rotated, lost, or not yet
-    set) — callers treat that as 'not configured' rather than failing hard.
+    encrypted but this instance cannot open it with any configured key (rotated,
+    lost, or not yet set) — callers treat that as 'not configured' rather than
+    failing hard.
     """
     if not is_encrypted(value):
         return value
-    material = _key_material()
-    if material is None:
+    materials = _key_materials()
+    if not materials:
         log.warning(
             "A stored secret is encrypted but no key material is set "
             "(SIFT_SECRET_KEY / SIFT_SERVER__API_TOKEN) — treating it as unset."
         )
         return None
+    body = value[len(PREFIX) :].encode()
+    for material in materials:
+        try:
+            return _fernet_for(material).decrypt(body).decode()
+        except InvalidToken:
+            continue
+    log.warning(
+        "A stored secret could not be decrypted with any current key — treating it "
+        "as unset. Re-enter it in Settings to replace it."
+    )
+    return None
+
+
+def needs_resealing(value: object) -> bool:
+    """True when a stored value should be rewritten: still plaintext, or sealed under
+    a fallback key rather than the current primary one."""
+    if not enabled() or not isinstance(value, str) or not value:
+        return False
+    if not is_encrypted(value):
+        return True  # legacy plaintext
+    body = value[len(PREFIX) :].encode()
     try:
-        return _fernet_for(material).decrypt(value[len(PREFIX) :].encode()).decode()
+        _fernet_for(_key_materials()[0]).decrypt(body)
     except InvalidToken:
-        log.warning(
-            "A stored secret could not be decrypted with the current key — "
-            "treating it as unset. Re-enter it in Settings to replace it."
-        )
-        return None
+        # Opens under a fallback → reseal. Unreadable entirely → leave it alone,
+        # overwriting would destroy data the owner may still recover with the old key.
+        return decrypt(value) is not None
+    return False
+
+
+def reseal(value: str) -> str:
+    """Rewrite a value under the primary key, preserving the plaintext. Returns the
+    input untouched when it can't be opened — never destroys an unreadable secret."""
+    plain = decrypt(value)
+    if plain is None:
+        return value
+    materials = _key_materials()
+    if not materials:
+        return value
+    return PREFIX + _fernet_for(materials[0]).encrypt(plain.encode()).decode()

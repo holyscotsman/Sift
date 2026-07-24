@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from sift.db.models import Setting
-from sift.services import config_store, secretbox
+from sift.services import auth, config_store, secretbox
 
 
 @pytest.fixture(autouse=True)
@@ -20,11 +20,19 @@ def _reset_secretbox():
     secretbox.configure(None)
 
 
-def _stored(factory) -> dict:
+def _stored(factory, key: str = "connections") -> dict:
     """The bytes actually on disk — bypasses the decrypting accessor."""
     with factory() as session:
-        row = session.get(Setting, "connections")
+        row = session.get(Setting, key)
         return dict(row.value) if row and row.value else {}
+
+
+def _whole_db(factory) -> str:
+    """Every settings row as one blob — what an attacker with a dump actually sees."""
+    from sqlalchemy import select
+
+    with factory() as session:
+        return str([(r.key, r.value) for r in session.scalars(select(Setting))])
 
 
 # ------------------------------------------------------------------ the primitive
@@ -68,14 +76,22 @@ def test_legacy_plaintext_is_read_through_and_not_double_wrapped():
     assert secretbox.encrypt("") == ""  # empty means 'cleared', stays empty
 
 
-def test_env_fallback_prefers_explicit_key_then_the_access_token(monkeypatch):
-    secretbox.configure(None)
+def test_env_fallback_prefers_explicit_key_but_still_reads_token_sealed_values(monkeypatch):
+    secretbox.configure()  # fall through to the environment
     monkeypatch.delenv("SIFT_SECRET_KEY", raising=False)
-    monkeypatch.setenv("SIFT_SERVER__API_TOKEN", "token-material")
+    monkeypatch.setenv("SIFT_SERVER__API_TOKEN", "token-material-long-enough")
     assert secretbox.enabled() is True
     from_token = secretbox.encrypt("s")
-    # An explicit key takes precedence, so the token-sealed value stops opening.
-    monkeypatch.setenv("SIFT_SECRET_KEY", "explicit-material")
+
+    # An explicit key takes precedence for NEW writes...
+    monkeypatch.setenv("SIFT_SECRET_KEY", "explicit-material-long-enough")
+    assert secretbox.encrypt("s2") != from_token
+    # ...while the token stays usable for reads, so adding a key can't orphan data.
+    assert secretbox.decrypt(from_token) == "s"
+    assert secretbox.needs_resealing(from_token) is True
+
+    # Negative control: a key material that was never used cannot open it.
+    secretbox.configure("unrelated-material")
     assert secretbox.decrypt(from_token) is None
 
 
@@ -164,6 +180,85 @@ def test_unrelated_save_never_destroys_an_unreadable_secret(factory):
     secretbox.configure("original-key")
     with factory() as session:
         assert config_store.get_config(session)["plex"]["token"] == "px-live"
+
+
+def test_key_material_added_later_still_opens_older_secrets(factory):
+    """The upgrade path render.yaml invites: sealed under the access token, then a
+    SIFT_SECRET_KEY appears. Without multi-key reads that would orphan everything."""
+    secretbox.configure("access-token")
+    with factory() as session:
+        config_store.set_config(session, {"radarr": {"api_key": "rk"}})
+    sealed_under_token = _stored(factory)["radarr"]["api_key"]
+
+    # New primary key, old one still present as the fallback.
+    secretbox.configure("new-secret-key", "access-token")
+    with factory() as session:
+        assert config_store.get_config(session)["radarr"]["api_key"] == "rk"
+        # Boot re-seals it under the new primary...
+        assert config_store.upgrade_stored_secrets(session) == 1
+    resealed = _stored(factory)["radarr"]["api_key"]
+    assert resealed != sealed_under_token
+
+    # ...so it now opens with the new key alone, and the old one is no longer needed.
+    secretbox.configure("new-secret-key")
+    with factory() as session:
+        assert config_store.get_config(session)["radarr"]["api_key"] == "rk"
+
+
+# ------------------------------------------------- the session-forgery hole (auth)
+
+
+def test_session_signing_secret_is_not_readable_from_a_database_dump(factory):
+    """A dump must not yield the signing secret: with it, an attacker forges an admin
+    session and has the running app decrypt every other credential for them."""
+    secretbox.configure("deploy-token")
+    with factory() as session:
+        auth.create_account(session, "jason", "supersecret1")
+        token = auth.login(session, "jason", "supersecret1")
+    assert token is not None
+
+    raw = _stored(factory, "auth")
+    assert secretbox.is_encrypted(raw["secret"])
+    # The signing secret must not appear anywhere in the dump...
+    plaintext_secret = auth._signing_secret(raw)
+    assert plaintext_secret and plaintext_secret not in _whole_db(factory)
+    # ...and a token forged from what the dump *does* contain must be rejected.
+    forged = auth.issue_token(str(raw["secret"]), "jason")
+    with factory() as session:
+        assert auth.token_valid(session, forged) is False
+        assert auth.token_valid(session, token) is True  # the real one still works
+
+
+def test_losing_the_key_logs_out_but_never_locks_the_owner_out(factory):
+    secretbox.configure("original-key")
+    with factory() as session:
+        auth.create_account(session, "jason", "supersecret1")
+        old_token = auth.login(session, "jason", "supersecret1")
+
+    secretbox.configure("rotated-key")
+    with factory() as session:
+        # Old sessions die (the secret can't be read)...
+        assert auth.token_valid(session, str(old_token)) is False
+        # ...but the password still works and login self-heals with a fresh secret.
+        new_token = auth.login(session, "jason", "supersecret1")
+        assert new_token is not None
+        assert auth.token_valid(session, new_token) is True
+    assert secretbox.is_encrypted(_stored(factory, "auth")["secret"])
+
+
+def test_boot_seals_a_preexisting_plaintext_signing_secret(factory):
+    secretbox.configure(None)
+    with factory() as session:
+        auth.create_account(session, "jason", "supersecret1")
+    assert not secretbox.is_encrypted(_stored(factory, "auth")["secret"])  # legacy
+
+    secretbox.configure("deploy-token")
+    with factory() as session:
+        assert auth.upgrade_stored_secret(session) is True
+        # Sealed, sessions still work, and it's idempotent.
+        assert auth.token_valid(session, str(auth.login(session, "jason", "supersecret1")))
+        assert auth.upgrade_stored_secret(session) is False
+    assert secretbox.is_encrypted(_stored(factory, "auth")["secret"])
 
 
 def test_masked_view_reports_an_unreadable_secret_as_unset(factory):
