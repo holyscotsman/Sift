@@ -46,7 +46,7 @@ from .api import (
 from .api.deps import AppState
 from .config import Settings, get_settings
 from .db.session import init_db, make_engine, make_session_factory
-from .services import autoscan, config_store
+from .services import autoscan, config_store, secretbox
 from .services.posters import PosterCache
 
 log = logging.getLogger("sift")
@@ -86,8 +86,17 @@ def create_app(
         init_db(engine)
         session_factory = make_session_factory(engine)
 
+    # Secrets stored in the DB are encrypted with key material that lives only in the
+    # environment: an explicit SIFT_SECRET_KEY, else the server access token. Resolved
+    # from settings (not os.environ) so .env / sift.toml deploys are covered too.
+    key_material = base_settings.secret_key or base_settings.server.api_token
+    secretbox.configure(key_material.get_secret_value() if key_material else None)
+
     # Effective config = the env/toml base overlaid with any UI-entered connections.
     with session_factory() as session:
+        # Seal anything written before encryption was available — a one-time,
+        # idempotent upgrade so an existing database needs no operator action.
+        config_store.upgrade_stored_secrets(session)
         conn = config_store.get_config(session)
         actions_cfg = config_store.get_actions(session)
     settings = config_store.apply_to_settings(base_settings, conn, actions_cfg)

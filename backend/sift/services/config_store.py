@@ -2,10 +2,13 @@
 
 Keys entered in the setup wizard / Settings are stored here (key ``connections``)
 and **overlaid on top of** the env/toml base, so a hosted instance can be configured
-entirely from the browser without touching Render. Secrets are held in the local
-SQLite in plaintext — acceptable for a single-user self-hosted app that's gated
-behind login; on a free host the DB (and thus this config) resets on redeploy unless
-a persistent disk is attached.
+entirely from the browser without touching Render.
+
+Secret fields are **encrypted at rest** (see :mod:`sift.services.secretbox`) so a
+persistent hosted database never holds usable credentials — the key material lives
+in the environment, not the DB. Encryption is transparent here: :func:`get_config`
+returns plaintext, :func:`set_config` seals on the way in. With no key material
+configured (a plain local SQLite install) values are stored as before.
 
 Only known fields per service are accepted; everything else is ignored.
 """
@@ -20,6 +23,7 @@ from sqlalchemy.orm import Session
 from ..ai.registry import MODES
 from ..config import Settings
 from ..db.models import Setting
+from . import secretbox
 
 _CONN_KEY = "connections"
 _ACTIONS_KEY = "actions"
@@ -39,9 +43,32 @@ _ALLOWED: dict[str, set[str]] = {
 }
 
 
-def get_config(session: Session) -> dict[str, Any]:
+def _raw_config(session: Session) -> dict[str, Any]:
+    """The stored config exactly as written — secrets still sealed. Used for the
+    read-modify-write path so untouched ciphertext is never re-encrypted or, if
+    this instance can't open it, silently destroyed."""
     row = session.get(Setting, _CONN_KEY)
     return dict(row.value) if row and row.value else {}
+
+
+def get_config(session: Session) -> dict[str, Any]:
+    """The stored config with secrets decrypted for use. A secret that cannot be
+    decrypted (key rotated or lost) comes back as ``None``, which every consumer
+    already reads as 'not configured'."""
+    config = _raw_config(session)
+    out: dict[str, Any] = {}
+    for service, fields in config.items():
+        if not isinstance(fields, dict):
+            continue
+        opened: dict[str, Any] = {}
+        for key, value in fields.items():
+            opened[key] = (
+                secretbox.decrypt(value)
+                if key in _SECRET_FIELDS and isinstance(value, str)
+                else value
+            )
+        out[service] = opened
+    return out
 
 
 def normalize_base_url(value: str) -> str:
@@ -58,7 +85,7 @@ def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
     """Deep-merge a per-service patch. ``None`` values are skipped (leave unchanged);
     an empty string clears a field. Base URLs are stored normalized so health
     checks and clients always agree. Returns the merged config."""
-    current = get_config(session)
+    current = _raw_config(session)
     for service, fields in patch.items():
         if service not in _ALLOWED or not isinstance(fields, dict):
             continue
@@ -68,11 +95,39 @@ def set_config(session: Session, patch: dict[str, Any]) -> dict[str, Any]:
                 continue
             if key == "base_url" and isinstance(value, str) and value.strip():
                 value = normalize_base_url(value)
+            if key in _SECRET_FIELDS and isinstance(value, str):
+                value = secretbox.encrypt(value)
             merged[key] = value
         current[service] = merged
     session.merge(Setting(key=_CONN_KEY, value=current))
     session.commit()
-    return current
+    return get_config(session)
+
+
+def upgrade_stored_secrets(session: Session) -> int:
+    """Seal any secrets still stored as plaintext, in place. Called once at boot so
+    a database written before encryption existed (or written while no key material
+    was set) upgrades itself with no operator step. Returns how many were sealed.
+
+    Idempotent and non-destructive: values already sealed are skipped, and with no
+    key material available this is a no-op rather than a rewrite.
+    """
+    if not secretbox.enabled():
+        return 0
+    config = _raw_config(session)
+    sealed = 0
+    for fields in config.values():
+        if not isinstance(fields, dict):
+            continue
+        for key, value in fields.items():
+            if key in _SECRET_FIELDS and isinstance(value, str) and value:
+                if not secretbox.is_encrypted(value):
+                    fields[key] = secretbox.encrypt(value)
+                    sealed += 1
+    if sealed:
+        session.merge(Setting(key=_CONN_KEY, value=config))
+        session.commit()
+    return sealed
 
 
 def get_actions(session: Session) -> dict[str, Any]:

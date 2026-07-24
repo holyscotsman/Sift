@@ -377,6 +377,9 @@ class SettingsResponse(BaseModel):
     # (SQLite on a host with an ephemeral disk, detected via the RENDER env var).
     database_kind: str = "sqlite"
     ephemeral_risk: bool = False
+    # True when stored service credentials are encrypted at rest (key material is
+    # present in the environment). This is what makes a persistent hosted DB safe.
+    secrets_encrypted: bool = False
     # Automatic rescan interval in hours; 0 = off.
     scan_interval_hours: int = 0
 

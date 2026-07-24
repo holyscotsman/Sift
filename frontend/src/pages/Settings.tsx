@@ -193,10 +193,17 @@ function Account() {
   const [modal, setModal] = useState<null | { keepThumbs: boolean }>(null);
   const [busy, setBusy] = useState(false);
   const [ephemeral, setEphemeral] = useState(false);
+  const [storage, setStorage] = useState<{ kind: string; encrypted: boolean } | null>(null);
 
   useEffect(() => {
     api.authStatus().then((s) => setUsername(s.username)).catch(() => setUsername(null));
-    api.getSettings().then((s) => setEphemeral(s.ephemeral_risk)).catch(() => {});
+    api
+      .getSettings()
+      .then((s) => {
+        setEphemeral(s.ephemeral_risk);
+        setStorage({ kind: s.database_kind, encrypted: s.secrets_encrypted });
+      })
+      .catch(() => {});
   }, []);
 
   async function doReset(keepThumbs: boolean) {
@@ -225,10 +232,29 @@ function Account() {
         </div>
       )}
 
+      {/* A persistent database that holds readable keys is the one combination worth
+          warning about — everything else is either safe or self-limiting. */}
+      {storage && storage.kind === "postgres" && !storage.encrypted && (
+        <div
+          className="mb-4 rounded-lg border p-4 text-sm"
+          style={{ borderColor: "var(--junk)", color: "var(--junk)" }}
+        >
+          <strong>Your service keys are stored unencrypted.</strong> This instance uses a
+          persistent database, so they stay readable to anyone who can reach it. Set
+          <code className="mx-1 rounded bg-bg2 px-1">SIFT_SECRET_KEY</code> (or an access
+          token) and restart — Sift encrypts them at rest automatically.
+        </div>
+      )}
+
       <Section title="Account">
         <p className="text-sm text-fg2">
           Signed in as <span className="font-semibold text-fg">{username ?? "—"}</span>.
         </p>
+        {storage?.encrypted && (
+          <p className="mt-1 text-xs text-fg2">
+            Saved service keys are encrypted at rest.
+          </p>
+        )}
         <button
           onClick={() => {
             setToken(null);

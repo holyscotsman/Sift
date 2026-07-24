@@ -335,6 +335,9 @@ export interface SettingsResponse {
   actions_dry_run: boolean;
   database_kind: string;
   ephemeral_risk: boolean;
+  // Are stored service keys encrypted at rest? Turns itself on when the instance
+  // has key material (SIFT_SECRET_KEY, else the access token).
+  secrets_encrypted: boolean;
   scan_interval_hours: number;
 }
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sift"
 # Version scheme: YYMM.major.patch  (see CLAUDE.md / CHANGELOG.md)
-version = "2607.0.1"
+version = "2607.10.0"
 description = "Sift — a portable metadata brain that analyzes a Plex + Radarr library to find missing movies and flag removals."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,6 +24,9 @@ dependencies = [
     # Postgres driver — enables a persistent hosted DB (e.g. free Neon) via
     # SIFT_DATABASE__URL / DATABASE_URL. SQLite remains the zero-config default.
     "psycopg2-binary>=2.9",
+    # Fernet, for encrypting stored service credentials at rest — a persistent
+    # hosted DB must never hold usable keys. See services/secretbox.py.
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

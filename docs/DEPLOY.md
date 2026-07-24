@@ -82,6 +82,15 @@ your account, connections, and scans stick across every future redeploy.
 > `SIFT_DATABASE__PATH=/data/sift.db`, or a **Fly.io** deploy with a free volume, also
 > persist. The Postgres route above is the simplest free option.
 
+**Your keys are encrypted in there.** A persistent database is a database that keeps
+your Plex/Radarr/TMDB keys around indefinitely — including in its backups — so Sift
+encrypts them before writing. There is nothing to set up: the blueprint generates a
+`SIFT_SECRET_KEY`, and if you never set one Sift falls back to your access token. The
+key lives in Render's environment, never in the database, so a leaked connection
+string yields ciphertext. Settings › Account confirms it ("Saved service keys are
+encrypted at rest"). If you already had keys saved in plaintext, the next boot seals
+them in place — no action needed. See **Rotating the encryption key** below.
+
 ## Good to know (free tier)
 
 - **It sleeps when idle.** Free services spin down after ~15 minutes of no traffic;
@@ -101,6 +110,20 @@ your account, connections, and scans stick across every future redeploy.
   change that; putting Radarr behind HTTPS + a login later would harden the whole setup.
 - Only `add` / `monitor` / `unmonitor` can run autonomously; **a file delete is never
   issued without your explicit in-app approval.**
+- **Service keys are encrypted at rest.** Anything you enter in the wizard/Settings is
+  sealed before it's stored, with key material that lives only in the environment
+  (`SIFT_SECRET_KEY`, else `SIFT_SERVER__API_TOKEN`). Whoever holds your database gets
+  ciphertext, not your Plex token. Note the flip side: your **session signing secret**
+  is still stored in the clear, so treat database access as sensitive regardless.
+
+### Rotating the encryption key
+
+Change `SIFT_SECRET_KEY` in Render and restart. Previously saved keys can no longer be
+read — Sift reports those services as not-configured rather than failing, and you
+re-enter them once in Settings. Nothing else is affected: your account, library, and
+decisions are untouched. The same applies if you rotate `SIFT_SERVER__API_TOKEN` while
+relying on it as the fallback — set an explicit `SIFT_SECRET_KEY` if you want the two
+to rotate independently.
 
 ## Removals: staged vs. live
 

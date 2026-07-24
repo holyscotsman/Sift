@@ -22,6 +22,14 @@ services:
       - key: SIFT_SERVER__API_TOKEN
         generateValue: true
 
+      # Encryption key for the service credentials Sift stores in its database, so a
+      # persistent Postgres never holds usable keys. Render generates this once and it
+      # stays put — nothing to copy anywhere, nothing to do. Only touch it to rotate:
+      # changing it makes already-saved keys unreadable and you re-enter them in
+      # Settings. (Leaving it unset is safe too — Sift falls back to the token above.)
+      - key: SIFT_SECRET_KEY
+        generateValue: true
+
       # Radarr (required) — your web-reachable Radarr and its API key.
       - key: SIFT_RADARR__BASE_URL
         sync: false

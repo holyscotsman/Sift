@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..ai.registry import ai_configured, compare_available
 from ..analysis import junk
 from ..config import JunkThresholds, Settings
-from ..services import curated_lists, settings_store
+from ..services import curated_lists, secretbox, settings_store
 from ..services.counts_cache import CountsCache
 from ..services.health import HealthCache, check_service
 from .deps import AuthDep, get_counts_cache, get_health_cache, get_session_factory, get_settings
@@ -67,6 +67,9 @@ async def get_all(
         # SQLite on Render's free tier lives on an ephemeral disk: login + config
         # vanish on every redeploy. Render sets the RENDER env var, so warn there.
         ephemeral_risk=db_kind == "sqlite" and bool(os.environ.get("RENDER")),
+        # Are stored service credentials sealed at rest? Surfaced so the operator can
+        # confirm it rather than take it on faith — it turns itself on.
+        secrets_encrypted=secretbox.enabled(),
         scan_interval_hours=interval,
     )
 
