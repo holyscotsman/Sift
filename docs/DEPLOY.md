@@ -62,25 +62,66 @@ That's it — bookmark the URL on your phone and you're set.
 
 ---
 
-## Make your setup persist (free — do this first)
+## Make your setup persist (do this first)
 
 Render's free tier has an **ephemeral disk**: the default `sift.db` resets on every
-redeploy/restart, so your **login and saved service keys disappear**. Point Sift at a
-free, persistent Postgres and it survives forever — same Render URL, no code changes.
+redeploy/restart. Everything Sift knows lives in that one database — your login, your
+saved service keys, **and your whole library**: every movie, score, rating, watch
+history, collection, and keep/remove decision from your scans. Lose the file and you
+are re-running the wizard and re-scanning from scratch.
 
-1. Create a free database at **[neon.tech](https://neon.tech)** (or any hosted
-   Postgres — Supabase works too). Neon's free tier is persistent with no expiry.
-2. Copy its **connection string** — it looks like
+Fixing it is one setting. Pick **one** of the two routes below — you don't need both,
+and either one saves *all* of the above.
+
+### Route A — Render Disk (simplest to manage, needs a paid instance)
+
+Keeps the SQLite file Sift already uses, on a disk that survives redeploys. Nothing
+external to sign up for.
+
+1. Render → your Sift service → **Settings** → change the instance type from Free to
+   **Starter** (disks aren't available on free instances).
+2. Render → your service → **Disks** → **Add Disk**. Name it anything; set
+   **Mount Path** to `/data` and size **1 GB** (plenty — the database is small).
+3. Render → your service → **Environment** → add
+   `SIFT_DATABASE__PATH` = `/data/sift.db`. Leave `SIFT_DATABASE__URL` **empty**; if
+   it has a value it takes priority and the disk is ignored.
+4. Save. Render redeploys, and Sift creates its tables on the disk at first boot.
+
+Two things you get for free on this route: your **thumbnail cache also persists**
+(Sift keeps it next to the database, so it lands on the same disk instead of
+re-downloading after every deploy), and Render **snapshots the disk daily**, keeping
+them at least seven days — real backups, which the free Postgres tier does not give
+you. Paid instances also stop sleeping, so no more ~30s wake-up.
+
+Trade-off: redeploys briefly take the service down instead of overlapping, because a
+disk can only attach to one instance. For a personal app this is unnoticeable.
+
+### Route B — free hosted Postgres (free, one external service)
+
+1. Sign up at **[neon.tech](https://neon.tech)** and create a project. Any hosted
+   Postgres works (Supabase too); Neon's free tier is persistent with no expiry.
+2. On the project dashboard, copy the **connection string**. It looks like
    `postgresql://user:pass@ep-xxx.region.aws.neon.tech/dbname?sslmode=require`.
-3. In Render → your Sift service → **Environment**, set
-   `SIFT_DATABASE__URL` to that string and save (Render redeploys).
+   Take the plain connection string, not a "pooled"/psql-command variant, and make
+   sure it starts with `postgresql://` or `postgres://`.
+3. Render → your Sift service → **Environment** → set `SIFT_DATABASE__URL` to that
+   string and save. Render redeploys and Sift creates its tables on first boot.
 
-That's it — Sift creates its tables on first boot. Now run the setup wizard **once**;
-your account, connections, and scans stick across every future redeploy.
+Sift normalizes the URL for you — `postgres://` is rewritten to `postgresql://`, and
+`sslmode=require` is appended if you left it off.
 
-> Prefer to stay on SQLite? A Render **Disk** (paid Starter plan) with
-> `SIFT_DATABASE__PATH=/data/sift.db`, or a **Fly.io** deploy with a free volume, also
-> persist. The Postgres route above is the simplest free option.
+Trade-off: your **thumbnails still re-download** after each deploy (they're files, not
+rows, so they stay on the ephemeral disk), and the free tier has no point-in-time
+recovery — use Settings › **Export decisions** periodically as your backup.
+
+### Either way
+
+Run the setup wizard **once** afterwards. From then on your login, connections,
+library, and decisions all survive every redeploy. Settings › Account stops showing
+the "resets on redeploy" warning once persistence is live.
+
+> A **Fly.io** deploy with a free volume is a third option with the same shape as
+> Route A. Same setting: point `SIFT_DATABASE__PATH` at the mounted volume.
 
 **Your keys are encrypted in there.** A persistent database is a database that keeps
 your Plex/Radarr/TMDB keys around indefinitely — including in its backups — so Sift

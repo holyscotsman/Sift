@@ -64,9 +64,15 @@ async def get_all(
         ai_compare_available=compare_available(settings),
         actions_dry_run=settings.actions.dry_run,
         database_kind=db_kind,
-        # SQLite on Render's free tier lives on an ephemeral disk: login + config
-        # vanish on every redeploy. Render sets the RENDER env var, so warn there.
-        ephemeral_risk=db_kind == "sqlite" and bool(os.environ.get("RENDER")),
+        # SQLite on Render's free tier lives on an ephemeral disk: login, config, and
+        # the whole library vanish on every redeploy. Render sets the RENDER env var,
+        # so warn there — unless the file is on a mounted volume, which is the other
+        # legitimate way to make it persist.
+        ephemeral_risk=(
+            db_kind == "sqlite"
+            and bool(os.environ.get("RENDER"))
+            and not settings.database.on_mounted_volume()
+        ),
         # Are stored service credentials sealed at rest? Surfaced so the operator can
         # confirm it rather than take it on faith — it turns itself on.
         secrets_encrypted=secretbox.enabled(),
