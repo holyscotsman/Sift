@@ -2,6 +2,27 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.11.0 — Persistent disk in the Blueprint
+
+Turns Route A of the deploy guide into the default the Blueprint actually ships,
+so making a hosted Sift persist is a merge rather than a checklist.
+
+- **`render.yaml` now declares persistence**: `plan: starter`, a 1 GB disk
+  mounted at `/data`, and `SIFT_DATABASE__PATH=/data/sift.db`. Deploying this
+  makes the login, saved service keys, and the whole scanned library survive
+  redeploys — and the thumbnail cache with them, since Sift keeps it beside the
+  database.
+- **Note that this changes the plan from `free` to `starter`, which bills.** A
+  persistent disk cannot be attached to a free instance; that is the trade. To
+  stay free, revert `plan` to `free`, delete the `disk` block, and set
+  `SIFT_DATABASE__URL` to a hosted Postgres instead (Route B).
+- **`SIFT_DATABASE__URL` is kept but documented as the alternative**, with the
+  precedence rule spelled out where it bites: a value there overrides the disk.
+- **DEPLOY.md warns against mixing Blueprint and dashboard config.** On a
+  Blueprint-managed service, dashboard edits that conflict with `render.yaml` are
+  overwritten on the next sync — so upgrading the plan by hand while the file
+  still says `free` can silently revert and take the disk with it.
+
 ## 2607.10.1 — Persistence, documented properly
 
 - **`DEPLOY.md` now walks through both persistence routes** step by step instead of

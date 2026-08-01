@@ -78,14 +78,26 @@ and either one saves *all* of the above.
 Keeps the SQLite file Sift already uses, on a disk that survives redeploys. Nothing
 external to sign up for.
 
-1. Render → your Sift service → **Settings** → change the instance type from Free to
-   **Starter** (disks aren't available on free instances).
-2. Render → your service → **Disks** → **Add Disk**. Name it anything; set
-   **Mount Path** to `/data` and size **1 GB** (plenty — the database is small).
-3. Render → your service → **Environment** → add
-   `SIFT_DATABASE__PATH` = `/data/sift.db`. Leave `SIFT_DATABASE__URL` **empty**; if
-   it has a value it takes priority and the disk is ignored.
-4. Save. Render redeploys, and Sift creates its tables on the disk at first boot.
+**This repo's `render.yaml` already declares it** — `plan: starter`, a 1 GB disk at
+`/data`, and `SIFT_DATABASE__PATH=/data/sift.db`. If your service was created from
+the Blueprint (**New → Blueprint**), there is nothing to click: deploy the current
+`main` and Render applies all three on the next sync. Just make sure
+`SIFT_DATABASE__URL` is **blank** in the dashboard — if it has a value it takes
+priority and the disk is ignored.
+
+Created the service by hand instead of from the Blueprint? Do the same three things
+in the dashboard:
+
+1. **Settings** → instance type Free → **Starter** (disks aren't available on free).
+2. **Disks** → **Add Disk**, **Mount Path** `/data`, size **1 GB** (the database is
+   small; you can grow a disk later but never shrink it).
+3. **Environment** → add `SIFT_DATABASE__PATH` = `/data/sift.db`, and leave
+   `SIFT_DATABASE__URL` empty.
+
+> Don't mix the two. On a Blueprint-managed service, dashboard edits that conflict
+> with `render.yaml` get overwritten on the next sync — so if the file says
+> `plan: free`, upgrading by hand can silently revert and take the disk with it.
+> Change the file, not the dashboard.
 
 Two things you get for free on this route: your **thumbnail cache also persists**
 (Sift keeps it next to the database, so it lands on the same disk instead of

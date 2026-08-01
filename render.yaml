@@ -6,14 +6,31 @@ services:
     name: sift
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
+    # Starter (not free) because a persistent disk requires a paid instance. Free
+    # instances lose the database on every redeploy — login, saved service keys, and
+    # the entire scanned library. Starter also stops the service sleeping when idle.
+    plan: starter
     autoDeploy: true
+
+    # The disk that makes everything persist. Sift keeps its thumbnail cache next to
+    # the database, so /data holds both and posters stop re-downloading after deploys.
+    # Render snapshots this daily and keeps the snapshots for at least seven days.
+    # sizeGB can be increased later but never reduced, and 1 GB is ample.
+    disk:
+      name: sift-data
+      mountPath: /data
+      sizeGB: 1
+
     envVars:
-      # Persistent database (STRONGLY RECOMMENDED). Without this, Sift uses an
-      # ephemeral SQLite file that Render's free tier wipes on every redeploy/restart —
-      # so your login and saved service keys disappear. Point this at a free, persistent
-      # Postgres (e.g. a Neon database) and your setup survives forever. Paste the full
-      # connection string, e.g. postgresql://user:pass@host/db?sslmode=require
+      # Where the SQLite database lives — on the disk above, so it survives redeploys.
+      - key: SIFT_DATABASE__PATH
+        value: /data/sift.db
+
+      # Alternative to the disk: a free hosted Postgres (e.g. Neon). LEAVE THIS BLANK
+      # when using the disk — if it has a value it takes priority and the disk is
+      # ignored. Only set it if you'd rather drop back to `plan: free` and remove the
+      # disk block above. Full connection string, e.g.
+      # postgresql://user:pass@host/db?sslmode=require
       - key: SIFT_DATABASE__URL
         sync: false
 
