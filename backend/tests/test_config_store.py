@@ -216,3 +216,26 @@ def test_stale_stored_urls_normalize_on_overlay(settings):
         settings, {"tautulli": {"base_url": "tautulli.local:8181/", "api_key": "k"}}
     )
     assert eff.tautulli.base_url == "http://tautulli.local:8181"
+
+
+def test_mounted_volume_suppresses_the_ephemeral_warning(settings, monkeypatch):
+    """A SQLite file on a Render Disk / Fly volume persists, so the 'your data resets
+    on redeploy' warning must not fire — it would be telling the owner to fix
+    something they already fixed."""
+    from pathlib import Path
+
+    # The default relative path on Render: genuinely ephemeral.
+    settings.database.path = Path("sift.db")
+    assert settings.database.on_mounted_volume() is False
+
+    # An absolute path inside the app directory is still ephemeral (negative control).
+    settings.database.path = Path.cwd() / "sift.db"
+    assert settings.database.on_mounted_volume() is False
+
+    # A mounted volume: absolute and outside the app directory.
+    settings.database.path = Path("/data/sift.db")
+    assert settings.database.on_mounted_volume() is True
+
+    # Postgres is never "a mounted volume" — it has its own persistence story.
+    settings.database.url = "postgresql://u:p@host/db"
+    assert settings.database.on_mounted_volume() is False

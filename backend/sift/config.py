@@ -66,6 +66,28 @@ class DatabaseConfig(BaseModel):
         raw = self.url or os.environ.get("DATABASE_URL")
         return raw.strip() if raw and raw.strip() else str(self.path)
 
+    def on_mounted_volume(self) -> bool:
+        """True when the SQLite file sits on a mounted volume (a Render Disk, a Fly
+        volume) and therefore survives redeploys.
+
+        The default is a *relative* path next to the app, which on a host with an
+        ephemeral disk is wiped every deploy. An absolute path outside the working
+        directory is only reachable because the operator mounted something there —
+        that's the signal, and it keeps the "your data resets" warning from crying
+        wolf at people who already fixed it.
+        """
+        target = self.target()
+        if target.startswith("postgres"):
+            return False
+        path = Path(target)
+        if not path.is_absolute():
+            return False
+        try:
+            path.relative_to(Path.cwd())
+        except ValueError:
+            return True  # outside the app directory → a mount
+        return False
+
 
 class PlexConfig(BaseModel):
     enabled: bool = True

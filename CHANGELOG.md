@@ -2,6 +2,24 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.10.1 — Persistence, documented properly
+
+- **`DEPLOY.md` now walks through both persistence routes** step by step instead of
+  presenting Postgres as the only real option with a one-line footnote. Route A is
+  a Render Disk (keeps SQLite; needs a paid instance, but also persists the
+  thumbnail cache and gets daily disk snapshots); Route B is free hosted Postgres.
+  Both are spelled out click by click, with the trade-offs and the common
+  mistakes — `SIFT_DATABASE__URL` silently overriding the disk path, pooled vs
+  plain Neon connection strings.
+- **Says what's actually at stake.** The old wording implied only the login and
+  service keys were lost on redeploy. It's the whole database: every movie, score,
+  rating, watch-history row, collection, and keep/remove decision too.
+- **Fixed: the ephemeral-disk warning no longer cries wolf.** It fired on
+  SQLite + Render regardless of where the file lived, so anyone who fixed
+  persistence with a mounted volume kept being told their data resets on redeploy.
+  A SQLite path that is absolute and outside the app directory is now recognised as
+  a mounted volume (`DatabaseConfig.on_mounted_volume`).
+
 ## 2607.10.0 — Service keys encrypted at rest
 
 Groundwork for running Sift on a **persistent** database. Until now the fix for
