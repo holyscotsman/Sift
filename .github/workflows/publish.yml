@@ -1,0 +1,78 @@
+# Build the container image and publish it to GitHub's own registry (GHCR).
+#
+# Why GHCR rather than Docker Hub: it's free for public images, it lives beside the
+# code, and it authenticates with the token GitHub already injects — there is no
+# account to create and no secret to manage.
+#
+# What this unlocks:
+#   * Render (or any host) can deploy a PREBUILT image instead of building from
+#     source, which turns a multi-minute deploy into seconds.
+#   * `docker run ghcr.io/<owner>/sift` anywhere — including on the same machine as
+#     Plex and Radarr, where Sift reaches them over the local network and neither
+#     has to be exposed to the internet.
+#
+# The image is tagged twice: `latest` (moves with main) and the exact version from
+# pyproject.toml, so a deploy can pin a known build rather than chasing a moving
+# tag.
+name: publish
+
+on:
+  push:
+    branches: [main]
+    # Docs-only commits do not change the image; skip the build rather than
+    # publishing an identical layer set under a new tag.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: meta
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The registry requires a lowercase path; repository owners can contain
+          # capitals, so normalise rather than letting the push fail on it.
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          # Reuse layers between runs; without this every build recompiles the
+          # frontend and reinstalls every Python dependency from scratch.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "Published \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}\`" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Packages are **private by default** — make it public once, under" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "the package's settings, if you want to pull it without logging in." \
+            >> "$GITHUB_STEP_SUMMARY"

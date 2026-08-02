@@ -26,13 +26,31 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..services import config_store
+from ..services import config_store, updates
 from .deps import AuthDep, get_session_factory
-from .schemas import RestartResponse, UpdateResponse
+from .schemas import RestartResponse, UpdateResponse, VersionStatus
 
 log = logging.getLogger("sift.system")
 
 router = APIRouter(prefix="/api/system", tags=["system"], dependencies=[AuthDep])
+
+
+@router.get("/version", response_model=VersionStatus)
+async def version_status(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> VersionStatus:
+    """What's running, what's published, and whether Update can close the gap."""
+    from .. import __version__
+
+    latest = await updates.latest_version()
+    with factory() as session:
+        has_hook = bool((config_store.get_config(session).get("deploy") or {}).get("hook_url"))
+    return VersionStatus(
+        running=__version__,
+        latest=latest,
+        update_available=bool(latest and updates.is_newer(latest, __version__)),
+        can_update=has_hook,
+    )
 
 # Long enough for the HTTP response to flush before the process goes away —
 # otherwise the browser sees a dropped connection instead of the confirmation.

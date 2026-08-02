@@ -17,6 +17,7 @@ import type {
   ServiceHealth,
   ThresholdPreview,
   Thresholds,
+  VersionStatus,
 } from "@/lib/types";
 
 const TABS = ["Appearance", "Connections", "Scoring", "Autonomy", "Account"] as const;
@@ -845,7 +846,12 @@ function MaintenanceSection() {
   const [busy, setBusy] = useState<null | "restart" | "update">(null);
   const [armed, setArmed] = useState<null | "restart" | "update">(null);
   const [note, setNote] = useState<string | null>(null);
+  const [ver, setVer] = useState<VersionStatus | null>(null);
   const toastError = useToast();
+
+  useEffect(() => {
+    api.versionStatus().then(setVer).catch(() => setVer(null));
+  }, []);
 
   async function run(which: "restart" | "update") {
     setBusy(which);
@@ -868,6 +874,25 @@ function MaintenanceSection() {
 
   return (
     <Section title="Maintenance">
+      {/* What you're running, and whether there's anything newer — without this
+          the Update button is a guess. "Couldn't check" is shown as itself rather
+          than as "up to date", since only one of those can mislead you. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-fg2">Version</span>
+        <code className="rounded bg-bg2 px-1.5 py-0.5 text-xs font-semibold text-fg">
+          {ver?.running ?? "…"}
+        </code>
+        {ver &&
+          (ver.latest === null ? (
+            <span className="text-xs text-fg3">couldn&rsquo;t check for updates</span>
+          ) : ver.update_available ? (
+            <Pill tone="junk">{ver.latest} available</Pill>
+          ) : (
+            <span className="text-xs" style={{ color: "var(--keep)" }}>
+              up to date
+            </span>
+          ))}
+      </div>
       <p className="text-sm text-fg2">
         <strong className="text-fg">Restart</strong> stops Sift so the host starts it again —
         useful if something has got stuck. <strong className="text-fg">Update</strong> asks the

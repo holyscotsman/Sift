@@ -12,14 +12,14 @@ server-side.
 
 ## Before you start — gather your details
 
-- **Radarr URL + API key** — e.g. `http://holysplexrequests.duckdns.org:7878` and the
+- **Radarr URL + API key** — e.g. `http://radarr.example.com:7878` and the
   key from Radarr → *Settings → General → Security → API Key*.
 - **TMDB key** (recommended) — [themoviedb.org → Settings → API](https://www.themoviedb.org/settings/api).
 - **Plex / Tautulli** (optional) — can be added later; skip them for the first deploy.
 
-The code is on the `claude/sift-webapp-setup-2qmxsn` branch of
-`github.com/holyscotsman/Sift`. You'll point Render at that branch (or merge it to
-`main` first and use `main`).
+Deploy from **`main`**. It is the only branch that is kept current — feature
+branches are merged into it and then deleted, so pointing a host at one leaves you
+frozen on whatever it contained the day it was created.
 
 ---
 
@@ -30,14 +30,18 @@ The code is on the `claude/sift-webapp-setup-2qmxsn` branch of
    the `Sift` repo).
 
 2. **New Blueprint.** In the Render dashboard: **New → Blueprint**. Pick the `Sift`
-   repo and the `claude/sift-webapp-setup-2qmxsn` branch. Render reads `render.yaml`
-   and proposes one **free** web service called `sift`.
+   repo and the **`main`** branch. Render reads `render.yaml` and proposes one
+   **free** web service called `sift`.
+
+   > Already deployed? Check **your service → Settings → Branch**. If it names a
+   > `claude/…` branch you are running a snapshot, not the current code, and
+   > nothing merged since will ever reach you.
 
 3. **Fill in the environment values** Render prompts for:
 
    | Key | Value |
    |---|---|
-   | `SIFT_RADARR__BASE_URL` | your Radarr URL, e.g. `http://holysplexrequests.duckdns.org:7878` |
+   | `SIFT_RADARR__BASE_URL` | your Radarr URL, e.g. `http://radarr.example.com:7878` |
    | `SIFT_RADARR__API_KEY` | your Radarr API key |
    | `SIFT_TMDB__API_KEY` | your TMDB key |
    | `SIFT_PLEX__BASE_URL` / `SIFT_PLEX__TOKEN` | *(optional — leave blank for now)* |
