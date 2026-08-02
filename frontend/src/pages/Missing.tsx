@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 
-import { RequestCard } from "@/components/RequestCard";
+import { RequestAllButton, RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -17,6 +17,7 @@ const FOLD = 30;
 export function Missing() {
   const [items, setItems] = useState<CanonMovieItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [requestedTotal, setRequestedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export function Missing() {
       .then((r) => {
         setItems(r.items);
         setTotal(r.total);
+        setRequestedTotal(r.requested_total);
       })
       .catch(() => setItems([]));
   }
@@ -69,6 +71,13 @@ export function Missing() {
             cult classics, criterion-caliber picks, top-rated and award-winning titles.
             {total > 0 && (
               <span className="font-semibold text-fg"> {total.toLocaleString()} missing.</span>
+            )}
+            {requestedTotal > 0 && (
+              <span className="text-fg3">
+                {" "}
+                {requestedTotal.toLocaleString()} already requested and on the way — hidden here
+                until they land.
+              </span>
             )}
           </p>
         </div>
@@ -116,6 +125,19 @@ export function Missing() {
           </div>
         ) : (
           <div className="panel p-4">
+            <div className="mb-3 flex items-center gap-3">
+              <span className="text-xs text-fg3">
+                Showing {visible.length.toLocaleString()} of {items.length.toLocaleString()}
+              </span>
+              {/* Requests what's on screen, not the whole canon — "request all" against
+                  several hundred titles is never what someone means by one click. */}
+              <RequestAllButton
+                items={visible}
+                label={`Request all ${visible.length} shown`}
+                confirmFirst
+                onDone={() => void load()}
+              />
+            </div>
             <div className="flex flex-wrap gap-3">
               {visible.map((m) => (
                 <RequestCard

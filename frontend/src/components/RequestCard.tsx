@@ -45,8 +45,22 @@ export function RequestButton({ tmdbId, title }: { tmdbId: number; title: string
 
 // Fill a whole set in one click — sequential, visible progress, a failure stops
 // the walk and names the title. Same server-side routing as a single request.
-export function RequestAllButton({ items }: { items: { tmdb_id: number; title: string }[] }) {
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+//
+// `confirmFirst` turns it into a two-step: one click arms, the next sends. Worth it
+// wherever the set is large enough that an accidental click would flood Overseerr
+// with requests you'd then have to cancel by hand.
+export function RequestAllButton({
+  items,
+  label: idleLabel,
+  confirmFirst = false,
+  onDone,
+}: {
+  items: { tmdb_id: number; title: string }[];
+  label?: string;
+  confirmFirst?: boolean;
+  onDone?: () => void;
+}) {
+  const [state, setState] = useState<"idle" | "armed" | "busy" | "done">("idle");
   const [label, setLabel] = useState("");
   const toastError = useToast();
   if (items.length < 2 || state === "done") {
@@ -69,14 +83,26 @@ export function RequestAllButton({ items }: { items: { tmdb_id: number; title: s
     }
     setLabel(sent === items.length ? `All ${sent} requested ✓` : `${sent} requested`);
     setState("done");
+    onDone?.();
   }
+  const text =
+    state === "busy"
+      ? label
+      : state === "armed"
+        ? `Send ${items.length} requests?`
+        : (idleLabel ?? `Request all missing (${items.length})`);
   return (
     <button
-      onClick={() => void requestAll()}
+      onClick={() => {
+        if (confirmFirst && state === "idle") setState("armed");
+        else void requestAll();
+      }}
       disabled={state === "busy"}
-      className="ml-auto rounded-pill border border-line px-3 py-1 text-xs font-semibold text-accent hover:bg-bg2 disabled:opacity-70"
+      className={`ml-auto rounded-pill border px-3 py-1 text-xs font-semibold hover:bg-bg2 disabled:opacity-70 ${
+        state === "armed" ? "border-accent text-accent" : "border-line text-accent"
+      }`}
     >
-      {state === "busy" ? label : `Request all missing (${items.length})`}
+      {text}
     </button>
   );
 }

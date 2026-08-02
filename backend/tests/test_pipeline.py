@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from sqlalchemy import func, select
 
+from sift.clients.base import HealthStatus
 from sift.db.models import Collection, Movie, ScanStatus, WatchHistory
+from sift.ingest import pipeline as pipeline_mod
 from sift.ingest.pipeline import ScanPipeline
 from sift.services.scanner import create_scan_run
 
@@ -46,7 +50,24 @@ TAUTULLI_HISTORY = [
 ]
 
 
-class FakeRadarr:
+class FakeService:
+    """Every real client answers a preflight probe, so the doubles must too.
+    ``reachable=False`` stands in for a service that's configured but down."""
+
+    name = "fake"
+
+    def __init__(self, *, reachable: bool = True):
+        self.reachable = reachable
+        self.probed = False
+
+    async def health(self):
+        self.probed = True
+        return HealthStatus(self.name, self.reachable, "" if self.reachable else "refused")
+
+
+class FakeRadarr(FakeService):
+    name = "radarr"
+
     async def get_movies(self):
         return RADARR_MOVIES
 
@@ -54,7 +75,9 @@ class FakeRadarr:
         return RADARR_COLLECTIONS
 
 
-class FakePlex:
+class FakePlex(FakeService):
+    name = "plex"
+
     async def get_sections(self):
         return PLEX_SECTIONS
 
@@ -62,14 +85,27 @@ class FakePlex:
         return PLEX_ITEMS.get(str(key), [])
 
 
-class FakeTautulli:
-    def __init__(self, *, fail: bool = False):
+class FakeTautulli(FakeService):
+    name = "tautulli"
+
+    def __init__(self, *, fail: bool = False, reachable: bool = True):
+        super().__init__(reachable=reachable)
         self.fail = fail
 
     async def get_history(self, *, media_type: str = "movie"):
         if self.fail:
             raise RuntimeError("tautulli dropped mid-scan")
         return TAUTULLI_HISTORY
+
+
+class HangingTautulli(FakeTautulli):
+    """Configured, accepts the connection, never answers — the case no try/except
+    can catch and only a timeout can."""
+
+    async def health(self):
+        self.probed = True
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable: the preflight timeout should have fired")
 
 
 def _configure_kids(settings):
@@ -163,3 +199,71 @@ async def test_interrupted_scan_resumes_to_same_result(factory, settings):
     with factory() as session:
         assert session.scalar(select(func.count()).select_from(Movie)) == 4
         assert session.scalar(select(func.count()).select_from(WatchHistory)) == 2
+
+
+# ------------------------------------------------------------------------ preflight
+
+
+async def test_unreachable_service_is_skipped_not_fatal(factory, settings):
+    """The reported bug: a saved-but-dead Tautulli took the whole scan down with it,
+    so a perfectly good Radarr never got read."""
+    _configure_kids(settings)
+    dead = FakeTautulli(reachable=False)
+    scan_id = create_scan_run(factory)
+    run = await _pipeline(factory, settings, tautulli=dead).run(scan_id)
+
+    assert run.status == ScanStatus.COMPLETED  # the scan still finishes
+    assert run.stats["services_skipped"] == 1
+    assert run.stats["services_ready"] == 2  # radarr + plex carried on
+    with factory() as session:
+        # Radarr and Plex were ingested normally...
+        assert session.scalar(select(func.count()).select_from(Movie)) == 4
+        # ...and the dead service simply contributed nothing.
+        assert session.scalar(select(func.count()).select_from(WatchHistory)) == 0
+
+
+async def test_a_service_that_never_answers_is_bounded_by_the_timeout(factory, settings):
+    """A refused connection fails fast on its own; a black hole doesn't. Only the
+    timeout distinguishes 'slow' from 'never', so it has to be the thing that fires."""
+    _configure_kids(settings)
+    monkeypatched = 0.05  # keep the test quick; the real bound is 15s
+    original = pipeline_mod.PREFLIGHT_TIMEOUT_SECONDS
+    pipeline_mod.PREFLIGHT_TIMEOUT_SECONDS = monkeypatched
+    try:
+        scan_id = create_scan_run(factory)
+        run = await _pipeline(factory, settings, tautulli=HangingTautulli()).run(scan_id)
+    finally:
+        pipeline_mod.PREFLIGHT_TIMEOUT_SECONDS = original
+
+    assert run.status == ScanStatus.COMPLETED
+    assert run.stats["services_skipped"] == 1
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(Movie)) == 4
+
+
+async def test_reachable_services_are_all_kept(factory, settings):
+    """Negative control: with everything answering, preflight must drop nothing."""
+    _configure_kids(settings)
+    tautulli = FakeTautulli()
+    scan_id = create_scan_run(factory)
+    run = await _pipeline(factory, settings, tautulli=tautulli).run(scan_id)
+
+    assert tautulli.probed is True  # it really was probed...
+    assert run.stats["services_skipped"] == 0  # ...and kept
+    assert run.stats["services_ready"] == 3
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(WatchHistory)) == 2
+
+
+async def test_midscan_failure_still_interrupts_and_resumes(factory, settings):
+    """Preflight guards against 'down when we started', not 'died halfway'. A service
+    that passes the probe and then fails must still interrupt the run so the resume
+    machinery can pick it up — otherwise the guard would mask real breakage."""
+    _configure_kids(settings)
+    scan_id = create_scan_run(factory)
+    with pytest.raises(RuntimeError):
+        await _pipeline(factory, settings, tautulli=FakeTautulli(fail=True)).run(scan_id)
+    with factory() as session:
+        from sift.db.models import ScanRun
+
+        assert session.get(ScanRun, scan_id).status == ScanStatus.INTERRUPTED

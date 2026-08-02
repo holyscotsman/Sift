@@ -6,7 +6,15 @@ import httpx
 from pydantic import SecretStr
 from sqlalchemy import select
 
-from sift.db.models import CanonMovie, CuratedListEntry, Movie, MustHaveSuggestion
+from sift.db.models import (
+    Action,
+    ActionStatus,
+    ActionType,
+    CanonMovie,
+    CuratedListEntry,
+    Movie,
+    MustHaveSuggestion,
+)
 from sift.services import canon
 
 
@@ -75,11 +83,63 @@ async def test_canon_missing_compares_against_plex_only(factory, settings):
         session.add(Movie(tmdb_id=1, title="Canon Classic", in_plex=True))
         session.add(Movie(tmdb_id=4, title="Loud Blockbuster", in_plex=False, monitored=True))
         session.commit()
-        rows, total = canon.missing(session)
+        rows, total, _ = canon.missing(session)
         missing_ids = {r.tmdb_id for r in rows}
     assert 1 not in missing_ids
     assert 4 in missing_ids  # monitored-but-not-downloaded still reads as missing
     assert total == len(missing_ids)
+
+
+async def test_requested_titles_drop_out_of_missing(factory, settings):
+    """A request takes days to land, so a requested title must stop being offered —
+    otherwise it sits there looking un-actioned and gets requested twice."""
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    await canon.refresh(factory, settings, transport=httpx.MockTransport(_tmdb_handler))
+
+    with factory() as session:
+        # Two more canon titles so each negative control has something to act on.
+        session.add(CanonMovie(tmdb_id=5, title="Staged Pick", vote_count=800))
+        session.add(CanonMovie(tmdb_id=6, title="Failed Pick", vote_count=700))
+        session.commit()
+        assert {1, 4, 5, 6}.issubset({r.tmdb_id for r in canon.missing(session)[0]})
+
+        # A request that actually left Sift.
+        session.add(
+            Action(
+                type=ActionType.ADD,
+                movie_tmdb_id=1,
+                status=ActionStatus.EXECUTED,
+                dry_run=False,
+                payload={"via": "overseerr"},
+            )
+        )
+        # Negative controls — none of these reached anything, so they stay missing:
+        # a staged (dry-run) add, a proposal never executed, and a failed one.
+        session.add(
+            Action(
+                type=ActionType.ADD, movie_tmdb_id=4, status=ActionStatus.EXECUTED, dry_run=True
+            )
+        )
+        session.add(
+            Action(
+                type=ActionType.ADD, movie_tmdb_id=5, status=ActionStatus.PROPOSED, dry_run=False
+            )
+        )
+        session.add(
+            Action(
+                type=ActionType.ADD, movie_tmdb_id=6, status=ActionStatus.FAILED, dry_run=False
+            )
+        )
+        session.commit()
+
+        rows, total, requested_total = canon.missing(session)
+        after = {r.tmdb_id for r in rows}
+
+    assert 1 not in after  # really requested → hidden
+    assert {4, 5, 6}.issubset(after)  # staged / proposed / failed → still missing
+    assert total == len(after)
+    assert requested_total == 1  # hidden, but counted rather than silently gone
 
 
 async def test_canon_refresh_without_tmdb_still_merges_curated(factory, settings):

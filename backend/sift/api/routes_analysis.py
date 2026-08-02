@@ -124,10 +124,10 @@ def canon_missing(
     limit: int = 500,
     factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> CanonMissingResponse:
-    """Canon titles absent from the PLEX library. Radarr is ignored on purpose —
-    monitored-but-not-downloaded still reads as missing."""
+    """Canon titles absent from the PLEX library and not already requested. Radarr
+    is ignored on purpose — monitored-but-not-downloaded still reads as missing."""
     with factory() as session:
-        rows, total = canon.missing(session, limit=max(1, min(limit, 1000)))
+        rows, total, requested_total = canon.missing(session, limit=max(1, min(limit, 1000)))
         return CanonMissingResponse(
             items=[
                 CanonMovieOut(
@@ -141,6 +141,7 @@ def canon_missing(
                 for r in rows
             ],
             total=total,
+            requested_total=requested_total,
         )
 
 
@@ -160,7 +161,7 @@ async def canon_refresh(
         curator_added = 0
     stats = await canon.refresh(factory, settings)
     with factory() as session:
-        _, missing_total = canon.missing(session, limit=1)
+        _, missing_total, _ = canon.missing(session, limit=1)
     return CanonRefreshResponse(
         canon_written=stats.get("written", 0),
         curator_added=curator_added,

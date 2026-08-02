@@ -18,12 +18,19 @@ import logging
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
-from ..db.models import CanonMovie, Movie, MustHaveSuggestion
+from ..db.models import (
+    Action,
+    ActionStatus,
+    ActionType,
+    CanonMovie,
+    Movie,
+    MustHaveSuggestion,
+)
 from . import curated_lists
 
 log = logging.getLogger("sift.canon")
@@ -186,29 +193,51 @@ async def refresh(
     return await asyncio.to_thread(_run, session_factory, _merge)
 
 
-def missing(session: Session, *, limit: int = 500) -> tuple[list[CanonMovie], int]:
-    """Canon titles NOT in the Plex library (Radarr is ignored on purpose)."""
+def missing(session: Session, *, limit: int = 500) -> tuple[list[CanonMovie], int, int]:
+    """Canon titles you neither own nor have already asked for.
+
+    Two things are subtracted from the canon:
+
+    * anything in the **Plex** library — Radarr is ignored on purpose, so a
+      wanted-but-not-downloaded title still counts as missing; and
+    * anything already requested, because a request takes time to land and the
+      title would otherwise sit here looking un-actioned for days.
+
+    "Requested" means an ``add`` that actually left Sift: executed and not a dry
+    run. A staged add reached nothing, so it correctly stays missing.
+
+    Returns ``(rows, total, requested_total)`` — the request count is surfaced so
+    the hidden titles stay accounted for rather than silently vanishing.
+    """
     in_plex = select(Movie.tmdb_id).where(
         Movie.in_plex.is_(True), Movie.tmdb_id == CanonMovie.tmdb_id
     )
+    requested = select(Action.movie_tmdb_id).where(
+        Action.type == ActionType.ADD,
+        Action.status == ActionStatus.EXECUTED,
+        Action.dry_run.is_(False),
+        Action.movie_tmdb_id == CanonMovie.tmdb_id,
+    )
+    outstanding = ~in_plex.exists() & ~requested.exists()
     stmt = (
         select(CanonMovie)
-        .where(~in_plex.exists())
+        .where(outstanding)
         .order_by(
             CanonMovie.vote_count.desc().nulls_last(),
             CanonMovie.title.asc(),
         )
     )
     rows = list(session.scalars(stmt.limit(limit)))
-    from sqlalchemy import func
-
-    total = (
+    total = session.scalar(select(func.count()).select_from(CanonMovie).where(outstanding)) or 0
+    requested_total = (
         session.scalar(
-            select(func.count()).select_from(CanonMovie).where(~in_plex.exists())
+            select(func.count())
+            .select_from(CanonMovie)
+            .where(~in_plex.exists(), requested.exists())
         )
         or 0
     )
-    return rows, total
+    return rows, total, requested_total
 
 
 def _run(session_factory: sessionmaker[Session], fn: Any) -> Any:

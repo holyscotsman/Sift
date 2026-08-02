@@ -229,6 +229,8 @@ export interface CanonMovieItem {
 export interface CanonMissingResponse {
   items: CanonMovieItem[];
   total: number;
+  // Hidden from the list because they've already been requested and are on the way.
+  requested_total: number;
 }
 
 export interface CanonRefreshResponse {
