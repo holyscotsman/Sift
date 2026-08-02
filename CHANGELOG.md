@@ -2,6 +2,34 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.15.0 — One branch, a published image, and a version you can see
+
+Housekeeping that turned out to matter: the repository default branch was a
+stale feature branch, and `DEPLOY.md` told you to point Render at it. Anything
+merged to `main` therefore never reached a deploy following those instructions.
+
+- **`DEPLOY.md` now says deploy from `main`**, and warns to check the branch on an
+  existing service. That instruction was the cause, not a symptom.
+- **The example Radarr hostname is now `radarr.example.com`.** A real one was
+  committed, and the repository is public with GitHub Pages enabled — which makes
+  it indexable rather than merely present.
+- **`publish.yml`** builds the container on every push to `main` and pushes it to
+  GHCR, tagged `latest` and the exact version. Free, no account, no secret — it
+  authenticates with the token GitHub already provides. A host can then deploy a
+  prebuilt image instead of building from source.
+- **`docker-compose.yml`** runs Sift on your own machine. On the box already
+  running Plex and Radarr this removes the whole class of hosted problems at
+  once: nothing sleeps, there is no cold start, the database is a file on your
+  disk, and Radarr never needs to face the internet.
+- **Settings › Maintenance shows the running version** and whether a newer one is
+  published, which is what makes the Update button meaningful — you can see
+  whether there is anything to update *to*. The check is cached for an hour,
+  bounded, and fails soft. A failed check reports "couldn't check", never "up to
+  date": claiming currency you cannot verify is the only answer that misleads.
+- Version comparison is numeric. `2607.9.0` sorts before `2607.14.0`, which a
+  string compare gets backwards — it would have nagged an up-to-date instance
+  forever.
+
 ## 2607.14.0 — Duplicates, and Restart/Update in the app
 
 **Duplicate copies are visible for the first time.** Films are keyed by TMDB id,

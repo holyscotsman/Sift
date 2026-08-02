@@ -537,3 +537,13 @@ class RestartResponse(BaseModel):
 class UpdateResponse(BaseModel):
     ok: bool
     detail: str
+
+
+class VersionStatus(BaseModel):
+    running: str
+    # None when the check could not be made (offline, rate limited, private fork).
+    # The UI says "couldn't check" rather than claiming you are up to date.
+    latest: str | None = None
+    update_available: bool = False
+    # True when an in-app Update can actually do something about it.
+    can_update: bool = False

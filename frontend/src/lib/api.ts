@@ -3,6 +3,7 @@
 
 import type {
   DuplicatesResponse,
+  VersionStatus,
   RestartResponse,
   UpdateResponse,
   ActionRecord,
@@ -285,6 +286,7 @@ export const api = {
     request<DuplicatesResponse>(`/api/duplicates?limit=${limit}`),
   // Restart hands control to the host: it stops the process and the platform
   // brings it back. `supervised: false` means nothing will.
+  versionStatus: () => request<VersionStatus>("/api/system/version"),
   restart: () => request<RestartResponse>("/api/system/restart", { method: "POST" }, 20_000),
   update: () => request<UpdateResponse>("/api/system/update", { method: "POST" }, 40_000),
   canonMissing: (limit = 500) =>

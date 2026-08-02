@@ -1,0 +1,43 @@
+# Run Sift on your own machine — ideally the one already running Plex and Radarr.
+#
+#   docker compose up -d      then open http://localhost:8756
+#
+# This is the version of Sift with the fewest moving parts. Everything that made
+# the hosted setup fiddly disappears: nothing sleeps, there is no cold start, the
+# database is a file in ./data that persists because it is on your disk, and
+# Radarr never has to be reachable from the internet — Sift talks to it across
+# your own network.
+#
+# Updating is `docker compose pull && docker compose up -d`.
+services:
+  sift:
+    # Published by .github/workflows/publish.yml on every push to main. Pin the
+    # version tag instead of `latest` if you would rather update deliberately.
+    image: ghcr.io/holyscotsman/sift:latest
+    container_name: sift
+    restart: unless-stopped
+    ports:
+      - "8756:8756"
+    volumes:
+      # The database and the thumbnail cache both live here, so this one folder
+      # is the whole of your Sift state — and the whole of your backup.
+      - ./data:/data
+    environment:
+      SIFT_DATABASE__PATH: /data/sift.db
+
+      # Encrypts the service keys Sift stores. Generate one and keep it:
+      #   openssl rand -hex 32
+      # Change it later and saved keys become unreadable — you re-enter them once.
+      SIFT_SECRET_KEY: "${SIFT_SECRET_KEY:?set SIFT_SECRET_KEY in a .env file next to this compose file}"
+
+      # Leave unset to reach Sift without a token — reasonable on a home network
+      # you trust. Set it if the port is exposed anywhere beyond that.
+      # SIFT_SERVER__API_TOKEN: "..."
+
+      # Deletes stay staged until this is explicitly false. Leave it alone until
+      # you have watched Sift make choices you agree with.
+      SIFT_ACTIONS__DRY_RUN: "true"
+
+      # Connections are entered in the app, not here. On the same host as Plex and
+      # Radarr, use the LAN address (http://192.168.x.x:7878) rather than
+      # localhost — localhost inside a container is the container itself.

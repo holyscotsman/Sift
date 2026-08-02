@@ -116,3 +116,70 @@ def test_the_deploy_hook_is_stored_encrypted(factory):
             assert masked["deploy"] == {"hook_url_set": True}
     finally:
         secretbox.configure(None)
+
+
+# --------------------------------------------------------------- version checking
+
+
+def test_versions_compare_numerically_not_as_strings():
+    """The bug a string compare would cause: "2607.9.0" > "2607.14.0" is True
+    alphabetically, so an up-to-date instance would nag forever."""
+    from sift.services import updates
+
+    assert updates.is_newer("2607.14.0", "2607.9.0") is True
+    assert updates.is_newer("2607.9.0", "2607.14.0") is False
+    assert updates.is_newer("2607.14.0", "2607.14.0") is False  # equal is not newer
+    # A hand-edited or odd version must not raise.
+    assert updates.version_tuple("2607.14.0-dev") == (2607, 14, 0)
+    assert updates.version_tuple("weird") == (0,)
+
+
+async def test_a_failed_update_check_reports_unknown_not_up_to_date(monkeypatch):
+    """NEGATIVE CONTROL: offline must be 'couldn't check'. Reporting 'up to date'
+    when you don't know is the one answer that actively misleads."""
+    from sift.services import updates
+
+    updates.reset_cache()
+
+    class Boom:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url):
+            raise RuntimeError("no network")
+
+    monkeypatch.setattr(updates.httpx, "AsyncClient", Boom)
+    assert await updates.latest_version(force=True) is None
+    updates.reset_cache()
+
+
+def test_the_published_version_is_parsed_from_pyproject():
+    from sift.services import updates
+
+    assert updates._parse_version('name = "sift"\nversion = "2607.15.0"\n') == "2607.15.0"
+    assert updates._parse_version("no version here") is None
+
+
+async def test_version_endpoint_reports_running_and_update_availability(client, monkeypatch):
+    from sift.services import updates
+
+    updates.reset_cache()
+
+    async def fake_latest(**_kw):
+        return "9999.1.0"
+
+    monkeypatch.setattr(updates, "latest_version", fake_latest)
+    body = client.get("/api/system/version").json()
+    assert body["running"]  # whatever this build is
+    assert body["latest"] == "9999.1.0"
+    assert body["update_available"] is True
+    # No deploy hook configured in this fixture, so Update can't act on it — the
+    # UI needs to know that rather than offering a button that will 400.
+    assert body["can_update"] is False
+    updates.reset_cache()

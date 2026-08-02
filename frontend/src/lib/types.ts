@@ -450,3 +450,13 @@ export interface UpdateResponse {
   ok: boolean;
   detail: string;
 }
+
+export interface VersionStatus {
+  running: string;
+  // null when the check couldn't be made — shown as "couldn't check", never as
+  // "up to date", since claiming currency you can't verify is the misleading case.
+  latest: string | null;
+  update_available: boolean;
+  // Whether an in-app Update can actually act (a deploy hook is configured).
+  can_update: boolean;
+}
