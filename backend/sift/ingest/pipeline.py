@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import junk
@@ -468,14 +468,35 @@ class ScanPipeline:
                 mrow.owned = member["owned"]
 
     def _persist_plex(self, items: list[dict[str, Any]]) -> dict[str, int]:
+        """Persist the Plex catalog.
+
+        Everything here is preloaded in a handful of queries rather than looked up
+        per film. On a hosted database every statement is a network round trip, so
+        a per-item ``get`` plus a per-item ``merge`` over a few thousand films is
+        tens of thousands of round trips — minutes of pure latency, which looks
+        exactly like the phase having hung.
+        """
         written = 0
         seen_keys: set[str] = set()
         with self.factory() as session:
+            wanted = {d["tmdb_id"] for d in items if d.get("tmdb_id")}
+            movies: dict[int, Movie] = {}
+            # Chunked: a single IN() over a whole library can exceed the driver's
+            # bind-parameter ceiling.
+            ids = list(wanted)
+            for start in range(0, len(ids), 500):
+                batch = ids[start : start + 500]
+                for m in session.scalars(select(Movie).where(Movie.tmdb_id.in_(batch))):
+                    movies[m.tmdb_id] = m
+            copies: dict[str, PlexCopy] = {
+                c.rating_key: c for c in session.scalars(select(PlexCopy))
+            }
+
             for data in items:
                 tmdb_id = data["tmdb_id"]
                 if not tmdb_id:
                     continue
-                movie = session.get(Movie, tmdb_id)
+                movie = movies.get(tmdb_id)
                 if movie is None:
                     # In Plex but not in the Radarr catalog — Plex is the library
                     # authority, so this is a first-class library entry, not a stub.
@@ -485,6 +506,7 @@ class ScanPipeline:
                         year=data["year"],
                     )
                     session.add(movie)
+                    movies[tmdb_id] = movie
                 # Presence in a Plex movie section IS library membership.
                 movie.in_plex = True
                 movie.plex_rating_key = data["plex_rating_key"]
@@ -499,28 +521,33 @@ class ScanPipeline:
                 # the other copies was silently dropped.
                 rating_key = data["plex_rating_key"]
                 if rating_key:
-                    session.merge(
-                        PlexCopy(
-                            rating_key=str(rating_key),
-                            movie_tmdb_id=tmdb_id,
-                            library_section=data["library_section"],
-                            is_kids=bool(data["is_kids"]),
-                            title=data["title"],
-                            seen_at=utcnow(),
-                        )
-                    )
-                    seen_keys.add(str(rating_key))
+                    key = str(rating_key)
+                    copy = copies.get(key)
+                    if copy is None:
+                        # session.add, not session.merge: merge issues its own
+                        # SELECT per call and flushes pending work each time,
+                        # which is what made this phase crawl.
+                        copy = PlexCopy(rating_key=key, movie_tmdb_id=tmdb_id)
+                        session.add(copy)
+                        copies[key] = copy
+                    copy.movie_tmdb_id = tmdb_id
+                    copy.library_section = data["library_section"]
+                    copy.is_kids = bool(data["is_kids"])
+                    copy.title = data["title"]
+                    copy.seen_at = utcnow()
+                    seen_keys.add(key)
                 written += 1
             # Copies Plex no longer reports are gone from disk; drop them so a
-            # tidied-up duplicate stops being counted as one.
+            # tidied-up duplicate stops being counted as one. Computed against the
+            # already-loaded map and issued as one statement per batch.
             if seen_keys:
-                stale = [
-                    c
-                    for c in session.scalars(select(PlexCopy))
-                    if c.rating_key not in seen_keys
-                ]
-                for copy in stale:
-                    session.delete(copy)
+                stale = [k for k in copies if k not in seen_keys]
+                for start in range(0, len(stale), 500):
+                    session.execute(
+                        delete(PlexCopy).where(
+                            PlexCopy.rating_key.in_(stale[start : start + 500])
+                        )
+                    )
             session.commit()
         return {"plex_items": written}
 

@@ -2,6 +2,26 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.15.1 — Fix the Plex phase stalling
+
+Recording duplicate copies (2607.14.0) was written with a `session.merge()` per
+film. Merge issues its own SELECT and flushes pending work on every call, so the
+phase went from one statement per film to **four** — invisible on local SQLite,
+crippling on a hosted database where each statement is a network round trip. A
+few thousand films became minutes of pure latency and the scan looked hung on
+"Reading Plex catalog".
+
+Movies and copies are now preloaded in a handful of queries and matched in
+memory, and stale copies are removed with a single batched DELETE instead of a
+full table load filtered in Python.
+
+Measured on 500 films: **4.0 statements per film → 0.01**. For a 4,000-film
+library at 25 ms per round trip that is roughly seven minutes of latency reduced
+to under a second.
+
+A regression test pins the query count on a rescan, so the per-item shape cannot
+come back unnoticed.
+
 ## 2607.15.0 — One branch, a published image, and a version you can see
 
 Housekeeping that turned out to matter: the repository default branch was a
