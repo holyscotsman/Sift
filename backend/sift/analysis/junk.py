@@ -14,8 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import JunkThresholds
-from ..db.models import Movie, Rating, Score, WatchHistory
-from . import scoring
+from ..db.models import CanonMovie, CuratedListEntry, Movie, Rating, Score, WatchHistory
+from . import recognition, scoring
 from .classify import MovieFacts, Verdict, classify
 
 
@@ -40,12 +40,26 @@ def _best_rating(session: Session, movie_id: int) -> tuple[float | None, int | N
     return best.value, best.votes
 
 
+def _canon_ids(session: Session) -> frozenset[int]:
+    """Titles the backend canon or a curated list vouches for. Recognition floors
+    these — it's what stops culling-the-obscure from deleting exactly the Criterion
+    and cult titles the Missing page tells you to acquire."""
+    ids = set(session.scalars(select(CanonMovie.tmdb_id)))
+    ids.update(
+        session.scalars(
+            select(CuratedListEntry.tmdb_id).where(CuratedListEntry.tmdb_id.is_not(None))
+        )
+    )
+    return frozenset(ids)
+
+
 def _iter_scores(
     session: Session, thr: JunkThresholds, now: datetime | None
 ) -> Iterator[tuple[int, scoring.ScoreResult]]:
     engagement_available = (
         session.scalar(select(func.count()).select_from(WatchHistory)) or 0
     ) > 0
+    canon_ids = _canon_ids(session)
     for tmdb_id in list(session.scalars(select(Movie.tmdb_id).where(Movie.in_plex.is_(True)))):
         movie = session.get(Movie, tmdb_id)
         if movie is None:
@@ -59,6 +73,20 @@ def _iter_scores(
             }
             for w in session.scalars(select(WatchHistory).where(WatchHistory.movie_id == tmdb_id))
         ]
+        # Recognition needs enrichment facts. A title TMDB hasn't reached yet has a
+        # vote count of None, and must not be read as "nobody has heard of it" —
+        # that would propose deleting the whole library after a partial scan.
+        rec = (
+            recognition.recognise(
+                votes=votes,
+                year=movie.year,
+                us_theatrical=bool(movie.us_theatrical),
+                budget=movie.budget,
+                on_canon_list=tmdb_id in canon_ids,
+            )
+            if votes is not None
+            else None
+        )
         yield tmdb_id, scoring.score_movie(
             rating_value=value,
             rating_votes=votes,
@@ -67,6 +95,7 @@ def _iter_scores(
             thr=thr,
             engagement_available=engagement_available,
             now=now,
+            recognition=rec,
         )
 
 

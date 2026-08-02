@@ -1,0 +1,56 @@
+# Keeps a free-tier Render instance warm.
+#
+# Render spins a free service down after ~15 minutes without **inbound HTTP**, and
+# the next visit pays a ~30s cold start. Sift's own internal timers (the autoscan
+# loop) do not prevent this — the platform keys off incoming requests, not process
+# activity — so the ping has to come from outside.
+#
+# Setup: add a repository variable named SIFT_URL with your Render URL, e.g.
+#   https://sift-xxxx.onrender.com
+# (Settings → Secrets and variables → Actions → Variables). With it unset this
+# workflow no-ops rather than failing, so a fork or a fresh clone stays green.
+#
+# It pings /api/version, which is deliberately unauthenticated and does no database
+# work — the cheapest thing that still wakes the process. No token is needed, and
+# none should be added: this URL ends up in workflow logs.
+#
+# Note on free-tier hours: Render's free plan includes a fixed number of instance
+# hours per month. Keeping the service awake around the clock consumes very nearly
+# all of them, so if you run several free services this may starve the others. The
+# schedule below is every 10 minutes during waking hours only, which keeps the app
+# responsive when you actually use it while leaving real headroom.
+name: keepalive
+
+on:
+  schedule:
+    # Every 10 minutes, 07:00–23:59 UTC. Adjust to your timezone; overnight is
+    # deliberately left out so the instance sleeps and reclaims hours.
+    - cron: "*/10 7-23 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the app
+        env:
+          SIFT_URL: ${{ vars.SIFT_URL }}
+        run: |
+          if [ -z "$SIFT_URL" ]; then
+            echo "SIFT_URL is not set — nothing to ping. See the header of this file."
+            exit 0
+          fi
+          # A cold start can take ~30s, so allow for it. Retry a couple of times:
+          # a single failed ping is not worth a red build, but a persistently down
+          # app is worth seeing in the Actions tab.
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
+              "${SIFT_URL%/}/api/version" || echo "000")
+            echo "attempt $attempt → HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "::warning::Sift did not answer after 3 attempts (last status $code)"

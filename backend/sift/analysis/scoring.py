@@ -8,11 +8,12 @@ human-readable detail are preserved for the UI and for the LLM to explain.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from ..config import JunkThresholds
+from .recognition import Recognition
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,12 @@ def engagement_signal(
     now = now or datetime.now(UTC)
     total_plays = sum(int(w.get("plays") or 0) for w in watch)
     if total_plays == 0:
-        return Signal("engagement", "Watch history", 0.4, 0.85, True, "never played")
+        # Never played is NOT evidence of junk. An unwatched Schindler's List looks
+        # identical here to an unwatched nobody-film, and most of a well-stocked
+        # shelf is unwatched by definition — that is what a shelf is for. Watching
+        # something can save it; not watching it must never condemn it, so this
+        # contributes nothing rather than the 0.85 it used to.
+        return Signal("engagement", "Watch history", 0.4, 0.0, True, "never played")
 
     contribution = 0.0
     details: list[str] = []
@@ -142,6 +148,23 @@ def rationale(signals: list[dict[str, Any]], band_value: str) -> str:
     return f"{lead}: " + "; ".join(str(s.get("detail", "")) for s in contributing) + "."
 
 
+def recognition_signal(rec: Recognition) -> Signal:
+    """Obscurity — the dominant removal signal.
+
+    This is the axis the library is actually curated on, so it outweighs everything
+    else. A film nobody has heard of is the thing to remove; a famously terrible one
+    is not, and its rating never enters into that.
+    """
+    return Signal(
+        "recognition",
+        "Public recognition",
+        1.0,
+        _clamp(1.0 - rec.score),
+        True,
+        f"{rec.tier} — {rec.reasons[0]}",
+    )
+
+
 def score_movie(
     *,
     rating_value: float | None,
@@ -151,10 +174,23 @@ def score_movie(
     thr: JunkThresholds,
     engagement_available: bool,
     now: datetime | None = None,
+    recognition: Recognition | None = None,
 ) -> ScoreResult:
-    signals = [
-        rating_signal(rating_value, rating_votes, thr),
-        engagement_signal(watch, thr, available=engagement_available, now=now),
-    ]
+    """Compose the removal score.
+
+    Recognition dominates wherever it's available. Rating stays on at a much
+    reduced weight — useful for separating two equally unrecognised films, but no
+    longer able to condemn a famous one on its own, which is precisely what the old
+    rating-led composition did to every notoriously bad movie in the library.
+    """
+    signals = [engagement_signal(watch, thr, available=engagement_available, now=now)]
+    if recognition is not None:
+        signals.append(recognition_signal(recognition))
+        signals.append(replace(rating_signal(rating_value, rating_votes, thr), weight=0.2))
+    else:
+        # Enrichment hasn't run yet, so there are no facts to recognise a title by.
+        # Fall back to the old composition rather than scoring the whole library as
+        # unrecognised and proposing to delete all of it.
+        signals.append(rating_signal(rating_value, rating_votes, thr))
     score = compose(signals, thr)
     return ScoreResult(score, band(score, thr), signals, kids_guard=is_kids)

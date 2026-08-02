@@ -173,3 +173,76 @@ def test_request_stays_staged_under_dry_run_even_with_overseerr(settings, factor
         body = c.post("/api/actions/request", json={"tmdb_id": 605, "title": "Reloaded"}).json()
     assert body["dry_run"] is True
     assert body["payload"]["result"]["sent"] is False
+
+
+def _overseerr_app(settings, factory, monkeypatch, raiser):
+    """A live-writes app whose Overseerr client fails in a specific way."""
+    from pydantic import SecretStr
+
+    from sift.api import routes_actions
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    settings.actions.dry_run = False
+    settings.overseerr.base_url = "http://overseerr.test"
+    settings.overseerr.api_key = SecretStr("k")
+
+    class FakeOverseerr:
+        def __init__(self, config):
+            pass
+
+        async def request_movie(self, tmdb_id: int):
+            raise raiser()
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(routes_actions, "OverseerrClient", FakeOverseerr)
+    return create_app(settings, session_factory=factory)
+
+
+def test_already_requested_in_overseerr_is_recorded_as_success(settings, factory, monkeypatch):
+    """Overseerr answers 409 when it already holds the request. That's the title
+    being on its way — not a failure. Treating it as an error recorded no action,
+    so the button stuck on something no retry could fix and the title never left
+    the Missing list."""
+    from sift.clients.base import ClientHTTPError
+
+    app = _overseerr_app(
+        settings, factory, monkeypatch, lambda: ClientHTTPError("overseerr: HTTP 409", 409)
+    )
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"})
+    assert resp.status_code == 200
+    body = resp.json()
+    # Recorded as a real, executed, non-dry-run add — which is what makes it drop
+    # out of Missing.
+    assert body["status"] == "executed" and body["dry_run"] is False
+    assert body["payload"]["already_requested"] is True
+
+
+def test_rejected_overseerr_key_says_so_instead_of_blaming_the_network(
+    settings, factory, monkeypatch
+):
+    from sift.clients.base import ClientAuthError
+
+    app = _overseerr_app(
+        settings, factory, monkeypatch, lambda: ClientAuthError("overseerr: auth failed (401)")
+    )
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"})
+    assert resp.status_code == 400
+    assert "API key" in resp.json()["detail"]
+
+
+def test_other_overseerr_http_errors_still_fail(settings, factory, monkeypatch):
+    """Negative control: 409 is special, everything else must still be an error —
+    a 500 must not be laundered into a fake success."""
+    from sift.clients.base import ClientHTTPError
+
+    app = _overseerr_app(
+        settings, factory, monkeypatch, lambda: ClientHTTPError("overseerr: HTTP 422", 422)
+    )
+    with TestClient(app) as c:
+        resp = c.post("/api/actions/request", json={"tmdb_id": 27205, "title": "Inception"})
+    assert resp.status_code == 400
