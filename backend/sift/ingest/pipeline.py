@@ -43,7 +43,17 @@ from . import normalize
 
 log = logging.getLogger("sift.ingest")
 
-PHASES = ("plex", "radarr", "tautulli", "tmdb", "finalize", "score", "ai")
+PHASES = ("preflight", "plex", "radarr", "tautulli", "tmdb", "finalize", "score", "ai")
+
+# A configured service that doesn't answer this fast is treated as down for the run.
+# Generous enough for a cold Plex behind a slow tunnel, short enough that a dead
+# optional service (Tautulli is the usual one) costs seconds, not the whole scan.
+PREFLIGHT_TIMEOUT_SECONDS = 15.0
+
+# Ceiling on the advisory AI pass. It's the last phase and reviews candidates one at
+# a time, so without a bound a slow provider parks a finished scan on "AI analysis"
+# for minutes. Whatever is done by then is kept.
+AI_BUDGET_SECONDS = 120.0
 
 
 @dataclass
@@ -81,6 +91,8 @@ class ScanPipeline:
         self.tmdb = tmdb
         self.progress_cb = progress_cb
         self.tmdb_enrich_limit = tmdb_enrich_limit
+        # Filled by the preflight phase; named in its progress message.
+        self.skipped_services: list[str] = []
 
     # ---------------------------------------------------------------- orchestration
 
@@ -89,7 +101,10 @@ class ScanPipeline:
         stats: dict[str, int] = {}
         try:
             for index, phase in enumerate(PHASES):
-                if resume and checkpoints.get(phase, {}).get("status") == "done":
+                # Preflight always re-runs: reachability is a fact about right now,
+                # not something a previous run's checkpoint can vouch for.
+                resumable = phase != "preflight"
+                if resume and resumable and checkpoints.get(phase, {}).get("status") == "done":
                     await self._emit(scan_run_id, phase, index, "skipped", "already complete")
                     stats.update(checkpoints[phase].get("counts", {}))
                     continue
@@ -97,7 +112,9 @@ class ScanPipeline:
                 counts = await getattr(self, f"_phase_{phase}")()
                 stats.update(counts)
                 await asyncio.to_thread(self._save_phase, scan_run_id, phase, counts)
-                await self._emit(scan_run_id, phase, index, "done", counts=counts)
+                await self._emit(
+                    scan_run_id, phase, index, "done", self._phase_note(phase), counts=counts
+                )
         except Exception as exc:  # noqa: BLE001 - recorded and re-raised
             log.warning("scan %s interrupted during a phase: %s", scan_run_id, exc)
             await asyncio.to_thread(
@@ -107,6 +124,13 @@ class ScanPipeline:
         return await asyncio.to_thread(
             self._finish, scan_run_id, ScanStatus.COMPLETED, stats, None
         )
+
+    def _phase_note(self, phase: str) -> str:
+        """Human-facing detail for a finished phase — currently only preflight has
+        something worth saying, and only when it dropped a service."""
+        if phase == "preflight" and self.skipped_services:
+            return f"skipped (not responding): {', '.join(self.skipped_services)}"
+        return ""
 
     async def _emit(
         self,
@@ -124,6 +148,43 @@ class ScanPipeline:
         )
 
     # ---------------------------------------------------------------------- phases
+
+    async def _phase_preflight(self) -> dict[str, int]:
+        """Probe every configured service and drop the ones that don't answer.
+
+        Without this a service that is saved but unreachable — a Tautulli that moved,
+        a Plex behind a dead tunnel — raises inside its phase and takes the entire
+        scan down with it, so a working Radarr never gets read. Dropping the client
+        turns that phase into the no-op it already is when the service isn't
+        configured, and the rest of the scan completes normally.
+
+        Each probe is hard-bounded: ``health()`` retries internally, so the timeout
+        goes on the outside where it can actually cap the wait.
+        """
+        skipped: list[str] = []
+        for name in ("plex", "radarr", "tautulli", "tmdb"):
+            client = getattr(self, name)
+            if client is None:
+                continue
+            try:
+                status = await asyncio.wait_for(
+                    client.health(), timeout=PREFLIGHT_TIMEOUT_SECONDS
+                )
+                reachable = status.ok
+                detail = status.detail
+            except TimeoutError:
+                reachable, detail = False, f"no answer in {PREFLIGHT_TIMEOUT_SECONDS:.0f}s"
+            except Exception as exc:  # noqa: BLE001 - any failure means "not usable now"
+                reachable, detail = False, str(exc)
+            if not reachable:
+                log.info("preflight: skipping %s this scan (%s)", name, detail)
+                setattr(self, name, None)
+                skipped.append(name)
+        self.skipped_services = skipped
+        ready = sum(
+            1 for n in ("plex", "radarr", "tautulli", "tmdb") if getattr(self, n) is not None
+        )
+        return {"services_ready": ready, "services_skipped": len(skipped)}
 
     async def _phase_radarr(self) -> dict[str, int]:
         if self.radarr is None:
@@ -225,25 +286,40 @@ class ScanPipeline:
         return {"scored": scored}
 
     async def _phase_ai(self) -> dict[str, int]:
-        """Advisory AI pass over the freshly scored removal queue. Skips silently when
-        no provider is configured; never changes a deterministic verdict. Everything —
-        the imports included — sits inside the guard: this phase must never be the
-        reason a finished scan reports failure."""
+        """Advisory AI pass over the freshly scored removal queue. Never changes a
+        deterministic verdict. Everything — the imports included — sits inside the
+        guard: this phase must never be the reason a finished scan reports failure.
+
+        Bounded by ``AI_BUDGET_SECONDS``. Notes are written for whatever was reviewed
+        before the budget ran out, so a slow provider degrades the pass instead of
+        stalling the scan or losing the work already done.
+        """
         try:
             from ..ai import review as ai_review
             from ..ai.registry import ai_configured
 
             if not ai_configured(self.settings):
-                return {}
+                # Not an error — no provider is a legitimate configuration. Say so in
+                # the counts rather than reporting a silent zero.
+                return {"ai_skipped": 1}
             # only_new: don't re-spend tokens on candidates that already carry a
             # note; the Junk screen's explicit button refreshes everything.
             result = await ai_review.run_review(
-                self.factory, self.settings, limit=50, only_new=True
+                self.factory,
+                self.settings,
+                limit=50,
+                only_new=True,
+                budget_seconds=AI_BUDGET_SECONDS,
             )
         except Exception as exc:  # noqa: BLE001 - advisory only; never fails the scan
-            log.info("ai analysis skipped: %s", exc)
-            return {}
-        return {"ai_reviewed": int(result.get("reviewed", 0))}
+            log.warning("ai analysis failed, continuing without it: %s", exc)
+            return {"ai_failed": 1}
+        counts = {"ai_reviewed": int(result.get("reviewed", 0))}
+        if result.get("budget_exhausted"):
+            # Surfaced so "only 12 of 50 got notes" reads as a slow provider rather
+            # than a mystery.
+            counts["ai_timed_out"] = 1
+        return counts
 
     def _score(self) -> int:
         from ..services import curated_lists

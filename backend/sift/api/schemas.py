@@ -336,6 +336,9 @@ class CanonMovieOut(BaseModel):
 class CanonMissingResponse(BaseModel):
     items: list[CanonMovieOut]
     total: int
+    # Canon titles hidden from the list because they've already been requested and
+    # are on their way. Surfaced so they're accounted for rather than just gone.
+    requested_total: int = 0
 
 
 class CanonRefreshResponse(BaseModel):

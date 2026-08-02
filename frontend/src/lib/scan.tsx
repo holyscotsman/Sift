@@ -17,6 +17,7 @@ import type { ScanEvent } from "./types";
 
 // Backend pipeline phases (order matters — must mirror ingest/pipeline.PHASES).
 export const SCAN_PHASES: { key: string; label: string }[] = [
+  { key: "preflight", label: "Checking connections" },
   { key: "plex", label: "Reading Plex catalog" },
   { key: "radarr", label: "Reading Radarr catalog" },
   { key: "tautulli", label: "Pulling Tautulli history" },

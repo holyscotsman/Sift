@@ -13,6 +13,7 @@ rule that AI advises but never grades holds here too.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -126,10 +127,19 @@ async def run_review(
     *,
     limit: int = 50,
     only_new: bool = False,
+    budget_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Review the current removal candidates and store an advisory note on each.
-    ``only_new`` skips candidates that already carry a note (the scan-time mode)."""
+
+    ``only_new`` skips candidates that already carry a note (the scan-time mode).
+    ``budget_seconds`` caps the whole walk: candidates go to a real provider one at
+    a time, so fifty of them can take minutes. When the budget runs out the loop
+    stops and everything produced so far is still written — a slow provider should
+    cost coverage, not the work already done.
+    """
     local, anthropic = build_providers(settings)
+    deadline = (time.monotonic() + budget_seconds) if budget_seconds else None
+    exhausted = False
     try:
         if local is not None and not await local.health():
             # A saved-but-dead Ollama URL would otherwise cost a full timeout per
@@ -142,6 +152,14 @@ async def run_review(
         )
         notes: dict[int, ReviewNote] = {}
         for target in targets:
+            if deadline is not None and time.monotonic() >= deadline:
+                exhausted = True
+                log.info(
+                    "ai review stopped at its time budget after %d of %d candidates",
+                    len(notes),
+                    len(targets),
+                )
+                break
             notes[target["tmdb_id"]] = await review_one(target, local=local, anthropic=anthropic)
 
         def _persist(session: Session) -> None:
@@ -160,7 +178,11 @@ async def run_review(
         provider = "anthropic+ollama" if (local and anthropic) else (
             "anthropic" if anthropic else "ollama" if local else "deterministic"
         )
-        return {"reviewed": len(notes), "provider": provider}
+        return {
+            "reviewed": len(notes),
+            "provider": provider,
+            "budget_exhausted": exhausted,
+        }
     finally:
         for prov in (local, anthropic):
             if prov is not None:

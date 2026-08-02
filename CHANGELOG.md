@@ -2,6 +2,30 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.12.0 — Requests stick, dead services don't stall the scan
+
+- **Requested titles leave Missing.** Missing diffed the canon against Plex only,
+  so a film you'd just requested sat there until it finished downloading — days
+  of looking un-actioned, and easy to request twice. Anything with an add that
+  actually left Sift is now filtered out, with the count shown ("N already
+  requested and on the way") so nothing silently disappears. A **staged**
+  (dry-run) add reached nothing, so it correctly stays listed.
+- **Request all on Missing.** Requests the titles currently shown rather than the
+  whole canon, and arms on the first click so a stray tap can't fire hundreds of
+  requests at Overseerr.
+- **Scan pre-flight.** Every configured service is probed first, with a hard
+  15-second bound. Anything that doesn't answer is dropped for that run and its
+  phase becomes a no-op. Previously a saved-but-unreachable service — Tautulli
+  being the usual culprit — raised inside its phase and interrupted the whole
+  scan, so a perfectly healthy Radarr never got read. The phase names what it
+  skipped. It re-runs on resume, because reachability isn't something a previous
+  run's checkpoint can vouch for.
+- **The AI phase can no longer park a scan.** It reviews candidates one at a time
+  against a live provider with no bound, so fifty of them could sit on "AI
+  analysis" for minutes. It now has a two-minute budget and keeps whatever notes
+  it produced, and reports *why* it produced nothing — no provider configured, a
+  failure, or the budget — instead of logging at info and returning silence.
+
 ## 2607.10.1 — Persistence, documented properly
 
 - **`DEPLOY.md` now walks through both persistence routes** step by step instead of
