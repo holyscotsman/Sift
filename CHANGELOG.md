@@ -2,6 +2,49 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.13.0 — Recognition, not reviews, decides what goes
+
+The removal score measured **quality**, and used vote counts only to decide how
+much to trust a rating. That made fame a liability — 3,200 people agreeing a film
+is bad pushed it *further* toward deletion — and obscurity a shield, because a
+handful of votes dragged a mediocre film up toward the neutral prior. Run the
+owner's own examples through the old code and it proposed deleting Animal Farm
+and Battlefield Earth while keeping an unknown 1976 indie.
+
+- **New `analysis/recognition.py`.** Scores a title's public footprint, not its
+  merit: vote volume judged **against same-decade peers** (TMDB's audience skews
+  modern, so a global comparison quietly condemns the entire classics wall), plus
+  theatrical run, studio-scale budget, franchise, and cast. Rating is not an input.
+- **Curated-list membership floors the score.** Without it, culling the obscure
+  would delete exactly the Criterion and cult titles the Missing page tells you to
+  acquire — they look identical to forgotten straight-to-video on votes alone.
+- **Franchise fame is gated on a theatrical release**, so a fourth-tier
+  direct-to-video spin-off can't inherit a famous name it never earned.
+- **Never-played no longer condemns.** It contributed 0.85 of a possible 1.0
+  toward junk, so an unwatched *Schindler's List* scored the same as genuine
+  dross — and most of a well-stocked shelf is unwatched by definition. Watching a
+  film can now save it; not watching one can never remove it.
+- **Rating demoted to a tiebreaker** (weight 1.0 → 0.2) between titles that are
+  equally unrecognised. It can no longer outvote recognition.
+- Titles TMDB hasn't enriched yet fall back to the old composition rather than
+  being scored as unrecognised, so a partial scan can't propose deleting the
+  library.
+- The Junk row now shows the recognition tier, because "obscure" is the actual
+  reason a title is listed.
+
+Also in this release:
+
+- **Overseerr 409 is a success, not an error.** Overseerr answers 409 when it
+  already holds a request; a blanket `except` turned that into "couldn't reach
+  Overseerr", recorded no action, and left the button stuck on something no retry
+  could fix — so the title never left Missing either. It's now recorded as a real
+  request ("Already requested ✓"). A rejected API key gets its own message instead
+  of reading like a network fault.
+- **`keepalive.yml`** — an optional scheduled workflow that pings the public
+  `/api/version` so a free Render instance stops cold-starting. Render spins down
+  on absent *inbound HTTP*; Sift's own timers can't prevent it. Off unless a
+  `SIFT_URL` repository variable is set.
+
 ## 2607.12.0 — Requests stick, dead services don't stall the scan
 
 - **Requested titles leave Missing.** Missing diffed the canon against Plex only,

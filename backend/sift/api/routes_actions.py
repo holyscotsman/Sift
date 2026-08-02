@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..actions.engine import ActionEngine, ApprovalRequiredError
+from ..clients.base import ClientAuthError, ClientHTTPError
 from ..clients.overseerr import OverseerrClient
 from ..config import Settings
 from ..db.models import Action, ActionActor, ActionType
@@ -65,8 +66,25 @@ async def request_movie(
         return await add_movie(body, engine, settings)
 
     client = OverseerrClient(settings.overseerr)
+    already_requested = False
+    result: dict[str, Any] = {}
     try:
         result = await client.request_movie(body.tmdb_id)
+    except ClientHTTPError as exc:
+        # 409 = Overseerr already holds this request. For us that is a *success* —
+        # the title is on its way. Treating it as an error left the button stuck on
+        # something no retry could ever fix, and recorded no action, so the title
+        # never dropped out of Missing either.
+        if exc.status_code != 409:
+            raise HTTPException(status_code=400, detail=f"Overseerr refused: {exc}") from exc
+        already_requested = True
+    except ClientAuthError as exc:
+        # A rejected key is a configuration problem, not a network one — say which,
+        # because "couldn't reach Overseerr" sends you debugging the wrong thing.
+        raise HTTPException(
+            status_code=400,
+            detail="Overseerr rejected the API key — check it in Settings › Connections.",
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - Overseerr down → honest 400, no silent fallback
         raise HTTPException(
             status_code=400,
@@ -84,6 +102,7 @@ async def request_movie(
             "title": body.title,
             "request_id": result.get("id"),
             "request_status": result.get("status"),
+            "already_requested": already_requested,
         },
         actor=ActionActor.USER,
         dry_run=False,

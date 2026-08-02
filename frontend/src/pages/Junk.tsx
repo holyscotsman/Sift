@@ -29,6 +29,15 @@ function fmtSize(bytes: number | null): string {
 
 // Direct title page when the id is known; IMDb's own search otherwise — the
 // link always lands somewhere useful.
+// The recognition signal's detail reads "<tier> — <evidence>"; the tier alone is
+// what belongs on the row. Returns null for titles scored before recognition
+// existed, so old rows degrade quietly instead of showing an empty chip.
+function recognitionTier(c: JunkCandidate): string | null {
+  const detail = c.signals.find((s) => s.key === "recognition")?.detail;
+  const tier = detail?.split("—")[0]?.trim();
+  return tier && ["household", "known", "obscure"].includes(tier) ? tier : null;
+}
+
 function imdbUrl(c: JunkCandidate): string {
   return c.imdb_id
     ? `https://www.imdb.com/title/${c.imdb_id}/`
@@ -472,6 +481,14 @@ function Row({
           {c.quality && <Pill>{c.quality}</Pill>}
           <span className="text-xs text-fg3">{fmtSize(c.file_size)}</span>
           <Pill tone={bandTone(c.band)}>{c.band}</Pill>
+          {/* Recognition is now the axis that decides this, so it belongs on the
+              row itself rather than buried in the breakdown — "obscure" is the
+              actual reason a title is here. */}
+          {recognitionTier(c) && (
+            <Pill tone={recognitionTier(c) === "obscure" ? "junk" : "keep"}>
+              {recognitionTier(c)}
+            </Pill>
+          )}
           <a
             href={imdbUrl(c)}
             target="_blank"

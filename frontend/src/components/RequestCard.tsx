@@ -13,7 +13,11 @@ import type { ActionRecord } from "@/lib/types";
 const tmdbMovieUrl = (tmdbId: number) => `https://www.themoviedb.org/movie/${tmdbId}`;
 
 function requestOutcome(action: ActionRecord): string {
-  if (action.payload?.via === "overseerr") return "Requested ✓";
+  if (action.payload?.via === "overseerr") {
+    // Overseerr already had it — worth saying so rather than implying we just
+    // filed it, but it's still a success and the title is on its way.
+    return action.payload?.already_requested ? "Already requested ✓" : "Requested ✓";
+  }
   return action.dry_run ? "Request staged" : "Added ✓";
 }
 
