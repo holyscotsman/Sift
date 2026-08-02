@@ -97,3 +97,41 @@ def test_watch_history_lands_on_a_non_primary_copy(factory, settings):
     with factory() as session:
         row = session.scalars(select(WatchHistory)).first()
     assert row is not None and row.movie_id == 603 and row.plays == 4
+
+
+def test_the_plex_phase_does_not_query_per_film(factory, settings):
+    """Regression pin. Recording copies was first written with session.merge() per
+    item, which issues its own SELECT and flushes pending work each time — about
+    four statements per film. That is invisible on local SQLite and crippling on a
+    hosted database, where every statement is a network round trip: a few thousand
+    films became minutes of latency and the phase looked hung.
+
+    The bound is deliberately generous (a constant handful, not a per-film budget)
+    so it pins the *shape* — preloaded, not per-item — without being brittle.
+    """
+    from sqlalchemy import event
+
+    from sift.ingest.pipeline import ScanPipeline
+
+    items = [
+        _plex_item(str(10_000 + i), i, f"Film {i}")
+        for i in range(1, 201)
+    ]
+    pipe = ScanPipeline(factory, settings)
+    pipe._persist_plex(items)  # first pass populates
+
+    statements = {"n": 0}
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_a, **_kw):
+        statements["n"] += 1
+
+    try:
+        pipe._persist_plex(items)  # the rescan — the case that runs every scan
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+
+    # 200 films: per-item work would be ~800 statements. A preloaded pass is a
+    # handful regardless of library size.
+    assert statements["n"] < 25, f"{statements['n']} statements for 200 films — per-item again?"
