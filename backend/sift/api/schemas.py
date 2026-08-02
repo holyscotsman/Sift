@@ -503,3 +503,37 @@ class ActionOut(BaseModel):
     approved_at: datetime | None
     executed_at: datetime | None
     error: str | None
+
+
+class DuplicateCopyOut(BaseModel):
+    rating_key: str
+    library_section: str | None = None
+
+
+class DuplicateGroupOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    copies: list[DuplicateCopyOut]
+    # How many copies could go while still keeping the film — always one fewer
+    # than the number held.
+    surplus: int
+
+
+class DuplicatesResponse(BaseModel):
+    items: list[DuplicateGroupOut]
+    # Total removable copies across the whole library, not just this page.
+    total_surplus: int
+
+
+class RestartResponse(BaseModel):
+    ok: bool
+    # False when nothing will bring the process back (a bare local run), so the
+    # UI can warn instead of implying a restart that will not happen.
+    supervised: bool
+    detail: str
+
+
+class UpdateResponse(BaseModel):
+    ok: bool
+    detail: str

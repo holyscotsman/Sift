@@ -268,6 +268,7 @@ function Account() {
 
       <PasswordSection />
       <StorageSection />
+      <MaintenanceSection />
 
       <Section title="Reset">
         <p className="text-sm text-fg2">
@@ -837,3 +838,76 @@ function Autonomy() {
     </>
   );
 }
+
+// Restart and Update. Both hand control to the host rather than doing anything
+// themselves — the app cannot reliably restart or upgrade itself from inside.
+function MaintenanceSection() {
+  const [busy, setBusy] = useState<null | "restart" | "update">(null);
+  const [armed, setArmed] = useState<null | "restart" | "update">(null);
+  const [note, setNote] = useState<string | null>(null);
+  const toastError = useToast();
+
+  async function run(which: "restart" | "update") {
+    setBusy(which);
+    setNote(null);
+    try {
+      if (which === "restart") {
+        const r = await api.restart();
+        setNote(r.detail);
+      } else {
+        const r = await api.update();
+        setNote(r.detail);
+      }
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : `The ${which} request failed.`);
+    } finally {
+      setBusy(null);
+      setArmed(null);
+    }
+  }
+
+  return (
+    <Section title="Maintenance">
+      <p className="text-sm text-fg2">
+        <strong className="text-fg">Restart</strong> stops Sift so the host starts it again —
+        useful if something has got stuck. <strong className="text-fg">Update</strong> asks the
+        host to build and deploy the latest code. Neither touches your library or settings.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          onClick={() => (armed === "restart" ? void run("restart") : setArmed("restart"))}
+          disabled={busy !== null}
+          className={`rounded-md border px-4 py-2 text-sm font-semibold hover:bg-bg2 disabled:opacity-60 ${
+            armed === "restart" ? "border-accent text-accent" : "border-line text-fg2"
+          }`}
+        >
+          {busy === "restart"
+            ? "Restarting…"
+            : armed === "restart"
+              ? "Confirm restart?"
+              : "Restart Sift"}
+        </button>
+        <button
+          onClick={() => (armed === "update" ? void run("update") : setArmed("update"))}
+          disabled={busy !== null}
+          className={`rounded-md border px-4 py-2 text-sm font-semibold hover:bg-bg2 disabled:opacity-60 ${
+            armed === "update" ? "border-accent text-accent" : "border-line text-fg2"
+          }`}
+        >
+          {busy === "update" ? "Starting…" : armed === "update" ? "Confirm update?" : "Update Sift"}
+        </button>
+      </div>
+      {note && (
+        <p className="mt-3 rounded-md border border-line bg-bg2 px-3 py-2 text-xs text-fg2">
+          {note} You may need to reload the page in a moment.
+        </p>
+      )}
+      <p className="mt-2 text-xs text-fg3">
+        Update needs a deploy hook — in Render, your service → Settings → Deploy Hook — saved
+        under Connections › Updates. Without one, Update explains where to find it rather than
+        silently doing nothing.
+      </p>
+    </Section>
+  );
+}
+

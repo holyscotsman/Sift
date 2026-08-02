@@ -56,6 +56,12 @@ export const SERVICE_SPECS: ServiceSpec[] = [
       { name: "api_key", label: "API key", secret: true },
     ],
   },
+    {
+    key: "deploy",
+    label: "Updates",
+    fields: [{ name: "hook_url", label: "Deploy hook URL", secret: true }],
+    hint: "In Render: your service → Settings → Deploy Hook. Powers the Update button in Settings › Account. Stored encrypted — anyone holding this URL can trigger a deploy.",
+  },
   {
     key: "tmdb",
     label: "TMDB",

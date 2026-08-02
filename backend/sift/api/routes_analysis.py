@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import musthave
 from ..analysis import collections as coll_analysis
+from ..analysis import duplicates as dup_analysis
 from ..analysis import junk as junk_analysis
 from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
@@ -25,6 +26,9 @@ from .schemas import (
     CanonRefreshResponse,
     CollectionGap,
     CollectionMemberOut,
+    DuplicateCopyOut,
+    DuplicateGroupOut,
+    DuplicatesResponse,
     JunkCandidate,
     JunkResponse,
     ListMovie,
@@ -218,4 +222,34 @@ async def missing_recommendations(
     return RecommendationsResponse(
         items=[RecommendedMovie(**item) for item in result["items"]],
         note=result["note"],
+    )
+
+
+@router.get("/duplicates", response_model=DuplicatesResponse)
+def list_duplicates(
+    limit: int = 200,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> DuplicatesResponse:
+    """Films held more than once in Plex, most-duplicated first.
+
+    The safest space you can reclaim: every film survives, only the surplus copies
+    go, so there is no curation judgement to get wrong.
+    """
+    with factory() as session:
+        groups, total_surplus = dup_analysis.find(session, limit=max(1, min(limit, 1000)))
+    return DuplicatesResponse(
+        items=[
+            DuplicateGroupOut(
+                tmdb_id=g.tmdb_id,
+                title=g.title,
+                year=g.year,
+                copies=[
+                    DuplicateCopyOut(rating_key=c.rating_key, library_section=c.library_section)
+                    for c in g.copies
+                ],
+                surplus=g.surplus,
+            )
+            for g in groups
+        ],
+        total_surplus=total_surplus,
     )

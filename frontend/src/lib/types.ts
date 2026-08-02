@@ -419,3 +419,34 @@ export interface ScanTerminalEvent {
 }
 
 export type ScanEvent = ScanProgressEvent | ScanTerminalEvent;
+
+export interface DuplicateCopy {
+  rating_key: string;
+  library_section: string | null;
+}
+
+export interface DuplicateGroup {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  copies: DuplicateCopy[];
+  // How many copies could go while still keeping the film.
+  surplus: number;
+}
+
+export interface DuplicatesResponse {
+  items: DuplicateGroup[];
+  total_surplus: number;
+}
+
+export interface RestartResponse {
+  ok: boolean;
+  // False when nothing will bring the process back (a bare local run).
+  supervised: boolean;
+  detail: string;
+}
+
+export interface UpdateResponse {
+  ok: boolean;
+  detail: string;
+}
