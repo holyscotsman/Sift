@@ -29,7 +29,7 @@ _CONN_KEY = "connections"
 _ACTIONS_KEY = "actions"
 
 # Non-secret fields we echo back; secret fields become ``<name>_set`` booleans.
-_SECRET_FIELDS = {"token", "api_key"}
+_SECRET_FIELDS = {"token", "api_key", "hook_url"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
@@ -40,6 +40,9 @@ _ALLOWED: dict[str, set[str]] = {
     "anthropic": {"api_key", "model"},
     # The AI engine mode: tandem (both), anthropic, or ollama.
     "ai": {"mode"},
+    # Host deploy hook for the in-app Update button. A secret URL — anyone with
+    # it can trigger a deploy — so it is stored encrypted like an API key.
+    "deploy": {"hook_url"},
 }
 
 

@@ -42,6 +42,7 @@ from .api import (
     routes_review,
     routes_scan,
     routes_settings,
+    routes_system,
     ws,
 )
 from .api.deps import AppState
@@ -185,6 +186,7 @@ def create_app(
         routes_review,
         routes_musthave,
         routes_settings,
+    routes_system,
         routes_profile,
     ):
         app.include_router(module.router)

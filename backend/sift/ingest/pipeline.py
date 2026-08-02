@@ -33,11 +33,13 @@ from ..db.models import (
     Movie,
     MoviePerson,
     Person,
+    PlexCopy,
     Rating,
     RatingSource,
     ScanRun,
     ScanStatus,
     WatchHistory,
+    utcnow,
 )
 from . import normalize
 
@@ -467,6 +469,7 @@ class ScanPipeline:
 
     def _persist_plex(self, items: list[dict[str, Any]]) -> dict[str, int]:
         written = 0
+        seen_keys: set[str] = set()
         with self.factory() as session:
             for data in items:
                 tmdb_id = data["tmdb_id"]
@@ -490,22 +493,59 @@ class ScanPipeline:
                 movie.title = movie.title or data["title"]
                 movie.year = movie.year if movie.year is not None else data["year"]
                 movie.imdb_id = movie.imdb_id or data["imdb_id"]
+                # Record the *item*, not just the film. Without this a library
+                # holding several rips of one title kept only the last rating key,
+                # so duplicates were invisible and watch history reported against
+                # the other copies was silently dropped.
+                rating_key = data["plex_rating_key"]
+                if rating_key:
+                    session.merge(
+                        PlexCopy(
+                            rating_key=str(rating_key),
+                            movie_tmdb_id=tmdb_id,
+                            library_section=data["library_section"],
+                            is_kids=bool(data["is_kids"]),
+                            title=data["title"],
+                            seen_at=utcnow(),
+                        )
+                    )
+                    seen_keys.add(str(rating_key))
                 written += 1
+            # Copies Plex no longer reports are gone from disk; drop them so a
+            # tidied-up duplicate stops being counted as one.
+            if seen_keys:
+                stale = [
+                    c
+                    for c in session.scalars(select(PlexCopy))
+                    if c.rating_key not in seen_keys
+                ]
+                for copy in stale:
+                    session.delete(copy)
             session.commit()
         return {"plex_items": written}
 
     def _persist_watch(self, aggregates: list[dict[str, Any]]) -> dict[str, int]:
         written = 0
         with self.factory() as session:
-            # Map Plex ratingKey -> tmdb_id from the movies already ingested.
+            # Map Plex ratingKey -> tmdb_id across EVERY copy, not just the one
+            # that happened to land on the movie row. A duplicated title has several
+            # rating keys, and Tautulli reports plays against whichever copy was
+            # actually watched — matching only the primary silently discarded those
+            # plays, which then read as "never played" and counted toward removal.
             rk_to_tmdb = {
                 rk: tmdb
                 for rk, tmdb in session.execute(
-                    select(Movie.plex_rating_key, Movie.tmdb_id).where(
-                        Movie.plex_rating_key.is_not(None)
-                    )
+                    select(PlexCopy.rating_key, PlexCopy.movie_tmdb_id)
                 )
             }
+            # Fall back to the movie row for databases scanned before copies were
+            # recorded, so watch history still lands until the next full scan.
+            for rk, tmdb in session.execute(
+                select(Movie.plex_rating_key, Movie.tmdb_id).where(
+                    Movie.plex_rating_key.is_not(None)
+                )
+            ):
+                rk_to_tmdb.setdefault(rk, tmdb)
             for data in aggregates:
                 tmdb_id = rk_to_tmdb.get(data["plex_rating_key"])
                 if tmdb_id is None:

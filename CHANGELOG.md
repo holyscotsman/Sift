@@ -2,6 +2,40 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.14.0 — Duplicates, and Restart/Update in the app
+
+**Duplicate copies are visible for the first time.** Films are keyed by TMDB id,
+so a library holding three rips of one title collapsed into a single row and only
+the last Plex rating key survived — duplicates were invisible by construction,
+because they were never recorded. A new `plex_copies` table stores one row per
+Plex *item*. A new table rather than extra columns is deliberate: the schema is
+built with `create_all`, which adds tables to an existing database but never
+columns, so this deploys with no migration.
+
+- `GET /api/duplicates` lists films held more than once, most-duplicated first,
+  with the total number of copies that could go while keeping every film.
+- Grouping is by TMDB id, never title — "The Fly" (1958/1986) are different
+  films and a dozen releases are called "Godzilla".
+- Copies Plex stops reporting are dropped, so tidying one up on disk stops it
+  being recommended again.
+- **Fixes a real data loss on the way.** Watch history is matched back by rating
+  key, and only the surviving one was in the map — so plays recorded against any
+  other copy were silently discarded, making a watched film read as never-played.
+  Under the old scoring that counted toward removal.
+
+**Restart and Update, in Settings › Maintenance.** Both hand control to the host,
+because a web app cannot reliably restart or upgrade itself.
+
+- **Restart** asks the process to exit; a managed host brings it back. On a bare
+  local run nothing is watching, so the response says so instead of implying a
+  restart that will not happen.
+- **Update** pokes a deploy hook — a secret URL the host provides — and the host
+  builds the latest code. Sift never pulls or executes anything itself. With no
+  hook set it returns an actionable error rather than silently doing nothing.
+- The hook is stored as a **secret**, encrypted at rest like an API key, since
+  anyone holding it can trigger a deploy.
+- Both buttons arm on the first click and act on the second.
+
 ## 2607.13.0 — Recognition, not reviews, decides what goes
 
 The removal score measured **quality**, and used vote counts only to decide how

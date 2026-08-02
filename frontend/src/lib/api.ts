@@ -2,6 +2,9 @@
 // serves the built UI); the Vite dev server proxies /api and /ws to :8756.
 
 import type {
+  DuplicatesResponse,
+  RestartResponse,
+  UpdateResponse,
   ActionRecord,
   ActionType,
   AskResponse,
@@ -278,6 +281,12 @@ export const api = {
       { method: "POST", body: JSON.stringify({ tmdb_id: tmdbId, title }) },
       30_000,
     ),
+  duplicates: (limit = 200) =>
+    request<DuplicatesResponse>(`/api/duplicates?limit=${limit}`),
+  // Restart hands control to the host: it stops the process and the platform
+  // brings it back. `supervised: false` means nothing will.
+  restart: () => request<RestartResponse>("/api/system/restart", { method: "POST" }, 20_000),
+  update: () => request<UpdateResponse>("/api/system/update", { method: "POST" }, 40_000),
   canonMissing: (limit = 500) =>
     request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
   canonRefresh: () =>

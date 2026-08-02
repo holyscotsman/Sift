@@ -363,3 +363,36 @@ class CanonMovie(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class PlexCopy(Base):
+    """One row per *item* in a Plex movie section — not per film.
+
+    ``movies`` is keyed by tmdb_id, so a library holding three rips of the same
+    film collapsed into a single row and only the last rating key survived. That
+    made duplicates structurally invisible (you cannot report on what you never
+    recorded) and quietly cost watch history: plays are matched back by rating
+    key, so any recorded against the discarded copies were dropped on the floor.
+
+    A separate table rather than extra columns on ``movies`` is deliberate — the
+    schema is created with ``create_all``, which adds new *tables* to an existing
+    database but never new *columns*, so this deploys to a live instance with no
+    migration step.
+    """
+
+    __tablename__ = "plex_copies"
+
+    # Plex's own identifier for the item; the natural key, and what watch history
+    # is reported against.
+    rating_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    movie_tmdb_id: Mapped[int] = mapped_column(
+        ForeignKey("movies.tmdb_id", ondelete="CASCADE"), index=True
+    )
+    library_section: Mapped[str | None] = mapped_column(String(255))
+    is_kids: Mapped[bool] = mapped_column(Boolean, default=False)
+    title: Mapped[str | None] = mapped_column(String(512))
+    # Set when a scan no longer sees this item, so a copy you removed stops being
+    # reported as a duplicate without needing the row deleted mid-scan.
+    seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
