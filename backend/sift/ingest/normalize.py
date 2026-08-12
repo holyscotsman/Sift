@@ -630,3 +630,75 @@ def normalize_plex_episode(item: dict[str, Any]) -> dict[str, Any] | None:
         ),
         "media_files": plex_media_files(item),
     }
+
+
+def normalize_tautulli_episode_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """One episode play, tied to its show by Plex's grandparent rating key.
+
+    Keeps two fields the movie normalizer drops. ``video_resolution`` is what was
+    actually delivered to a player, which is a far better answer to "does this
+    show need to be in HD" than anything about the file — a show only ever
+    watched at 720p on a phone is not being asked for 4K.
+    """
+    show_key = row.get("grandparent_rating_key")
+    if show_key in (None, "", 0, "0"):
+        return None
+    percent = row.get("percent_complete")
+    return {
+        "show_rating_key": str(show_key),
+        "played_at": parse_dt(row.get("date")),
+        "completion_pct": (float(percent) / 100.0) if percent not in (None, "") else None,
+        "stream_height": _stream_height(row.get("video_resolution")),
+    }
+
+
+def _stream_height(value: Any) -> int | None:
+    """Pixel height from Tautulli's delivered-resolution label."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in ("4k", "uhd", "2160", "2160p"):
+        return 2160
+    digits = "".join(c for c in text if c.isdigit())
+    if digits:
+        return int(digits)
+    if text == "sd":
+        return 480
+    return None
+
+
+def aggregate_show_watch(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Collapse episode plays into one record per show."""
+    agg: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = row["show_rating_key"]
+        entry = agg.setdefault(
+            key,
+            {
+                "show_rating_key": key,
+                "plays": 0,
+                "last_played_at": None,
+                "_completions": [],
+                "_heights": [],
+            },
+        )
+        entry["plays"] += 1
+        played = row["played_at"]
+        if played and (entry["last_played_at"] is None or played > entry["last_played_at"]):
+            entry["last_played_at"] = played
+        if row["completion_pct"] is not None:
+            entry["_completions"].append(row["completion_pct"])
+        if row["stream_height"]:
+            entry["_heights"].append(row["stream_height"])
+    for entry in agg.values():
+        completions = entry.pop("_completions")
+        heights = entry.pop("_heights")
+        entry["mean_completion"] = (
+            sum(completions) / len(completions) if completions else None
+        )
+        # The typical delivered height, not the best ever seen: one 4K play on a
+        # borrowed television should not argue that the whole show needs 4K.
+        entry["typical_stream_height"] = (
+            sorted(heights)[len(heights) // 2] if heights else None
+        )
+    return agg

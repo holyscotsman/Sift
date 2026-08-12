@@ -550,7 +550,44 @@ class ScanPipeline:
             normalize.normalize_tautulli_row(r, kids_accounts=kids_accounts) for r in rows
         ]
         aggregates = normalize.aggregate_watch_rows(normalized)
-        return await asyncio.to_thread(self._persist_watch, list(aggregates.values()))
+        counts = await asyncio.to_thread(self._persist_watch, list(aggregates.values()))
+
+        # Episode history, aggregated per show. This is the evidence behind
+        # "how attentively is it actually watched", which is one of the three
+        # things that decide whether a show needs to be in HD.
+        episode_rows = [
+            r
+            for r in (
+                normalize.normalize_tautulli_episode_row(raw)
+                for raw in await self.tautulli.get_history(media_type="episode")
+            )
+            if r is not None
+        ]
+        shows = normalize.aggregate_show_watch(episode_rows)
+        counts.update(await asyncio.to_thread(self._persist_show_watch, list(shows.values())))
+        return counts
+
+    def _persist_show_watch(self, aggregates: list[dict[str, Any]]) -> dict[str, int]:
+        """Attach watch aggregates to shows, matched by Plex rating key."""
+        if not aggregates:
+            return {"show_watch": 0}
+        with self.factory() as session:
+            by_key = {
+                s.plex_rating_key: s
+                for s in session.scalars(select(Show).where(Show.plex_rating_key.is_not(None)))
+            }
+            written = 0
+            for data in aggregates:
+                show = by_key.get(data["show_rating_key"])
+                if show is None:
+                    continue
+                show.plays = data["plays"]
+                show.last_played_at = data["last_played_at"]
+                show.mean_completion = data["mean_completion"]
+                show.typical_stream_height = data["typical_stream_height"]
+                written += 1
+            session.commit()
+        return {"show_watch": written}
 
     async def _phase_tmdb(self) -> dict[str, int]:
         if self.tmdb is None:
