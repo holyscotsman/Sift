@@ -4,7 +4,9 @@
 import type {
   BaselinesResponse,
   DuplicatesResponse,
+  LedgerResponse,
   MovieSizeResponse,
+  PlanResponse,
   VersionStatus,
   RestartResponse,
   UpdateResponse,
@@ -290,6 +292,12 @@ export const api = {
   movieSizes: (limit = 200) =>
     request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`),
   baselines: () => request<BaselinesResponse>("/api/storage/baselines"),
+  ledger: (limit = 500) => request<LedgerResponse>(`/api/storage/ledger?limit=${limit}`),
+  reclaimPlan: (targetBytes: number) =>
+    request<PlanResponse>("/api/storage/plan", {
+      method: "POST",
+      body: JSON.stringify({ target_bytes: targetBytes }),
+    }),
   // Restart hands control to the host: it stops the process and the platform
   // brings it back. `supervised: false` means nothing will.
   versionStatus: () => request<VersionStatus>("/api/system/version"),

@@ -504,3 +504,43 @@ export interface Bucket {
 export interface BaselinesResponse {
   buckets: Bucket[];
 }
+
+export interface LedgerFinding {
+  kind: string;
+  target_kind: string;
+  target_id: string;
+  title: string;
+  detail: string;
+  bytes_reclaimable: number;
+  // 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+  risk_tier: number;
+  reversible: boolean;
+  reasons: string[];
+}
+
+export interface TierSummary {
+  tier: number;
+  label: string;
+  bytes_reclaimable: number;
+  count: number;
+}
+
+export interface LedgerResponse {
+  items: LedgerFinding[];
+  total_reclaimable: number;
+  tiers: TierSummary[];
+}
+
+export interface PlanStep {
+  finding: LedgerFinding;
+  running_total: number;
+}
+
+export interface PlanResponse {
+  target_bytes: number;
+  steps: PlanStep[];
+  // False when the whole library cannot reach the target.
+  reached: boolean;
+  total: number;
+  highest_tier: number;
+}

@@ -596,3 +596,50 @@ class BucketOut(BaseModel):
 
 class BaselinesResponse(BaseModel):
     buckets: list[BucketOut]
+
+
+class LedgerFindingOut(BaseModel):
+    kind: str
+    target_kind: str
+    target_id: str
+    title: str
+    detail: str
+    bytes_reclaimable: int
+    # 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+    risk_tier: int
+    reversible: bool
+    reasons: list[str] = []
+
+
+class TierSummary(BaseModel):
+    tier: int
+    label: str
+    bytes_reclaimable: int
+    count: int
+
+
+class LedgerResponse(BaseModel):
+    items: list[LedgerFindingOut]
+    total_reclaimable: int
+    tiers: list[TierSummary]
+
+
+class PlanRequest(BaseModel):
+    # How much disk you need back, in bytes.
+    target_bytes: int
+
+
+class PlanStepOut(BaseModel):
+    finding: LedgerFindingOut
+    running_total: int
+
+
+class PlanResponse(BaseModel):
+    target_bytes: int
+    steps: list[PlanStepOut]
+    # False when the whole library cannot reach the target — said plainly rather
+    # than implied, since a plan that quietly falls short sends you deleting for
+    # nothing.
+    reached: bool
+    total: int
+    highest_tier: int

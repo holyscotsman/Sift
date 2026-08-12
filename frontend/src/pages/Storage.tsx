@@ -13,7 +13,14 @@ import { useEffect, useState } from "react";
 import { EmptyState, PageTitle, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
-import type { BaselinesResponse, DuplicatesResponse, MovieSizeResponse, SizeFinding } from "@/lib/types";
+import type {
+  BaselinesResponse,
+  DuplicatesResponse,
+  LedgerResponse,
+  MovieSizeResponse,
+  PlanResponse,
+  SizeFinding,
+} from "@/lib/types";
 
 function fmtSize(bytes: number | null | undefined): string {
   if (!bytes) return "—";
@@ -90,28 +97,78 @@ function FindingRow({ finding, onOpen }: { finding: SizeFinding; onOpen: () => v
   );
 }
 
+// The three tiers, in the order they should be worked. Colour carries the
+// meaning as well as the label, so the ordering reads at a glance.
+const TIER: Record<number, { label: string; tone: "keep" | "borderline" | "junk"; note: string }> = {
+  0: { label: "Nothing is lost", tone: "keep", note: "Surplus copies and files that aren't the film" },
+  1: { label: "Reversible", tone: "borderline", note: "Re-encodes — the original survives until the new file checks out" },
+  2: { label: "A judgement call", tone: "junk", note: "Quality you can't get back without re-downloading" },
+};
+
+function TierBoard({ book, plan }: { book: LedgerResponse; plan: PlanResponse | null }) {
+  const spent = new Map<string, number>();
+  for (const step of plan?.steps ?? []) {
+    const key = `${step.finding.target_kind}:${step.finding.target_id}`;
+    spent.set(key, step.running_total);
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {book.tiers.map((tier) => {
+        const meta = TIER[tier.tier];
+        return (
+          <div key={tier.tier} className="panel flex flex-wrap items-center gap-3 p-3.5">
+            <Pill tone={meta.tone}>{meta.label}</Pill>
+            <span className="text-sm font-bold tabular-nums">{fmtSize(tier.bytes_reclaimable)}</span>
+            <span className="text-xs text-fg2">
+              {tier.count} finding{tier.count === 1 ? "" : "s"} · {meta.note}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Storage() {
   const [sizes, setSizes] = useState<MovieSizeResponse | null>(null);
   const [dupes, setDupes] = useState<DuplicatesResponse | null>(null);
   const [baselines, setBaselines] = useState<BaselinesResponse | null>(null);
+  const [book, setBook] = useState<LedgerResponse | null>(null);
+  const [plan, setPlan] = useState<PlanResponse | null>(null);
+  const [targetGb, setTargetGb] = useState("500");
+  const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBaselines, setShowBaselines] = useState(false);
   const drawer = useDrawer();
 
   useEffect(() => {
     let live = true;
-    Promise.all([api.movieSizes(), api.duplicates(), api.baselines()])
-      .then(([s, d, b]) => {
+    Promise.all([api.movieSizes(), api.duplicates(), api.baselines(), api.ledger()])
+      .then(([s, d, b, l]) => {
         if (!live) return;
         setSizes(s);
         setDupes(d);
         setBaselines(b);
+        setBook(l);
       })
       .catch((e) => live && setError(e?.detail || "Couldn't read storage figures."));
     return () => {
       live = false;
     };
   }, []);
+
+  async function makePlan() {
+    const gb = Number(targetGb);
+    if (!Number.isFinite(gb) || gb <= 0) return;
+    setPlanning(true);
+    try {
+      setPlan(await api.reclaimPlan(Math.round(gb * 1e9)));
+    } catch (e) {
+      setError((e as { detail?: string })?.detail || "Couldn't work out a plan.");
+    } finally {
+      setPlanning(false);
+    }
+  }
 
   const loading = !sizes && !error;
 
@@ -163,6 +220,89 @@ export function Storage() {
             hint="checked and left alone"
           />
         </div>
+      ) : null}
+
+      {book && book.items.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+              What to do, in order
+            </h2>
+            <p className="max-w-prose text-sm text-fg2">
+              Safest first, not biggest first. Most of the space comes back before you have to make
+              a single decision about quality.
+            </p>
+          </div>
+
+          <TierBoard book={book} plan={plan} />
+
+          <div className="panel flex flex-wrap items-end gap-3 p-3.5">
+            <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-fg3">
+              How much do you need back?
+              <span className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  value={targetGb}
+                  onChange={(e) => setTargetGb(e.target.value)}
+                  className="w-28 rounded-md border border-line bg-bg2 px-2 py-1.5 text-sm tabular-nums text-fg"
+                />
+                <span className="text-sm font-normal normal-case text-fg2">GB</span>
+              </span>
+            </label>
+            <button
+              onClick={() => void makePlan()}
+              disabled={planning}
+              className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2 disabled:opacity-60"
+            >
+              {planning ? "Working it out…" : "Work out a plan"}
+            </button>
+            {plan ? (
+              <span className="text-sm text-fg2">
+                {plan.reached ? (
+                  <>
+                    <strong>{plan.steps.length}</strong> steps free{" "}
+                    <strong>{fmtSize(plan.total)}</strong> — reaching{" "}
+                    <em>{TIER[plan.highest_tier].label.toLowerCase()}</em>.
+                  </>
+                ) : (
+                  <>
+                    Everything found comes to <strong>{fmtSize(plan.total)}</strong>, which is short
+                    of that. Nothing here can free more.
+                  </>
+                )}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="panel divide-y divide-line">
+            {(plan ? plan.steps.map((s) => s.finding) : book.items).map((finding) => {
+              const meta = TIER[finding.risk_tier];
+              return (
+                <div
+                  key={`${finding.kind}-${finding.target_kind}-${finding.target_id}`}
+                  className="flex flex-wrap items-start gap-3 p-3.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold">{finding.title}</span>
+                      <Pill tone={meta.tone}>{meta.label}</Pill>
+                    </div>
+                    <p className="mt-0.5 text-xs text-fg2">{finding.detail}</p>
+                    <ul className="mt-1 flex flex-col gap-0.5 text-xs text-fg3">
+                      {finding.reasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <span className="shrink-0 text-sm font-bold tabular-nums">
+                    {fmtSize(finding.bytes_reclaimable)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
 
       {sizes && sizes.items.length > 0 ? (

@@ -14,13 +14,20 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..analysis import ledger as ledger_analysis
 from ..analysis import outliers as outlier_analysis
 from .deps import AuthDep, get_session_factory
 from .schemas import (
     BaselinesResponse,
     BucketOut,
+    LedgerFindingOut,
+    LedgerResponse,
     MovieSizeResponse,
+    PlanRequest,
+    PlanResponse,
+    PlanStepOut,
     SizeFindingOut,
+    TierSummary,
 )
 
 router = APIRouter(prefix="/api/storage", tags=["storage"], dependencies=[AuthDep])
@@ -79,4 +86,71 @@ def baselines(
             )
             for b in measured.buckets
         ]
+    )
+
+
+def _finding_out(finding: ledger_analysis.Finding) -> LedgerFindingOut:
+    return LedgerFindingOut(
+        kind=finding.kind,
+        target_kind=finding.target_kind,
+        target_id=finding.target_id,
+        title=finding.title,
+        detail=finding.detail,
+        bytes_reclaimable=finding.bytes_reclaimable,
+        risk_tier=finding.risk_tier,
+        reversible=finding.reversible,
+        reasons=list(finding.reasons),
+    )
+
+
+@router.get("/ledger", response_model=LedgerResponse)
+def reclaim_ledger(
+    limit: int = 500,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> LedgerResponse:
+    """Every finding in one currency, safest first.
+
+    Ordered by risk tier before size on purpose: sorted by size alone the list
+    would routinely put an irreversible downgrade above a duplicate copy that
+    costs nothing to remove.
+    """
+    with factory() as session:
+        book = ledger_analysis.build(session, limit=max(1, min(limit, 2000)))
+    return LedgerResponse(
+        items=[_finding_out(f) for f in book.findings],
+        total_reclaimable=book.total_reclaimable,
+        tiers=[
+            TierSummary(
+                tier=tier,
+                label=ledger_analysis.TIER_LABELS[tier],
+                bytes_reclaimable=book.by_tier.get(tier, 0),
+                count=book.counts_by_tier.get(tier, 0),
+            )
+            for tier in sorted(ledger_analysis.TIER_LABELS)
+        ],
+    )
+
+
+@router.post("/plan", response_model=PlanResponse)
+def reclaim_plan(
+    body: PlanRequest,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> PlanResponse:
+    """The cheapest way to free a given amount, in regret rather than effort.
+
+    Read-only: this proposes nothing and changes nothing. Acting on a step still
+    goes through the action engine, one approval at a time.
+    """
+    with factory() as session:
+        book = ledger_analysis.build(session, limit=2000)
+    result = ledger_analysis.plan(book, max(0, body.target_bytes))
+    return PlanResponse(
+        target_bytes=result.target_bytes,
+        steps=[
+            PlanStepOut(finding=_finding_out(s.finding), running_total=s.running_total)
+            for s in result.steps
+        ],
+        reached=result.reached,
+        total=result.total,
+        highest_tier=result.highest_tier,
     )

@@ -85,3 +85,23 @@ def test_storage_is_read_only(client):
     """NEGATIVE CONTROL: nothing here may mutate. A POST must not be routed."""
     c, _ = client
     assert c.post("/api/storage/movies").status_code == 405
+
+
+def test_ledger_orders_by_risk_then_size(client):
+    c, factory = client
+    _seed(factory)
+    body = c.get("/api/storage/ledger").json()
+    tiers = [i["risk_tier"] for i in body["items"]]
+    assert tiers == sorted(tiers)
+    assert body["total_reclaimable"] >= 0
+    assert [t["tier"] for t in body["tiers"]] == [0, 1, 2]
+
+
+def test_the_planner_reports_falling_short_rather_than_overpromising(client):
+    """NEGATIVE CONTROL: a plan that quietly misses its target sends someone
+    deleting things for nothing."""
+    c, factory = client
+    _seed(factory)
+    body = c.post("/api/storage/plan", json={"target_bytes": 500_000 * GB}).json()
+    assert body["reached"] is False
+    assert body["total"] < 500_000 * GB
