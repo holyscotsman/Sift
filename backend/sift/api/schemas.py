@@ -768,3 +768,25 @@ class ReclaimActOut(BaseModel):
     # governs film deletes.
     dry_run: bool
     detail: str
+
+
+class SectionPlanOut(BaseModel):
+    key: str
+    title: str
+    # What Plex calls it.
+    plex_type: str
+    agent: str | None = None
+    # What Sift will do with it: movie | show | ignore.
+    kind: str
+    reason: str
+    overridden: bool
+
+
+class SectionsResponse(BaseModel):
+    sections: list[SectionPlanOut]
+    detail: str = ""
+
+
+class SectionKindsIn(BaseModel):
+    # {"Cartoons": "show", "Home Videos": "ignore"}
+    section_kinds: dict[str, str]

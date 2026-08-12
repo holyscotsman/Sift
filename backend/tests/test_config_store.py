@@ -239,3 +239,31 @@ def test_mounted_volume_suppresses_the_ephemeral_warning(settings, monkeypatch):
     # Postgres is never "a mounted volume" — it has its own persistence story.
     settings.database.url = "postgresql://u:p@host/db"
     assert settings.database.on_mounted_volume() is False
+
+
+def test_section_overrides_survive_a_save(factory, settings):
+    """The mapping is what keeps Home Videos out of the film library, so it has
+    to persist like any other connection setting."""
+    from sift.services import config_store
+
+    with factory() as session:
+        config_store.set_config(
+            session, {"plex": {"section_kinds": {"Cartoons": "show", "Home Videos": "ignore"}}}
+        )
+        stored = config_store.get_config(session)
+    assert stored["plex"]["section_kinds"]["Home Videos"] == "ignore"
+
+    effective = config_store.apply_to_settings(settings, stored)
+    assert effective.plex.section_kinds["Cartoons"] == "show"
+
+
+def test_a_nonsense_section_kind_is_dropped_on_the_way_in(factory, settings):
+    """NEGATIVE CONTROL: an unknown value must not reach the planner, where it
+    would fall through to 'unknown type' and silently drop the library."""
+    from sift.services import config_store
+
+    with factory() as session:
+        config_store.set_config(session, {"plex": {"section_kinds": {"Movies": "banana"}}})
+        stored = config_store.get_config(session)
+    effective = config_store.apply_to_settings(settings, stored)
+    assert "Movies" not in effective.plex.section_kinds

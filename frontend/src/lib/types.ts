@@ -607,3 +607,20 @@ export interface ReclaimActResult {
   dry_run: boolean;
   detail: string;
 }
+
+export interface SectionPlan {
+  key: string;
+  title: string;
+  // What Plex calls it.
+  plex_type: string;
+  agent: string | null;
+  // What Sift will do: movie | show | ignore.
+  kind: string;
+  reason: string;
+  overridden: boolean;
+}
+
+export interface SectionsResponse {
+  sections: SectionPlan[];
+  detail: string;
+}

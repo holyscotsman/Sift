@@ -31,7 +31,7 @@ _ACTIONS_KEY = "actions"
 # Non-secret fields we echo back; secret fields become ``<name>_set`` booleans.
 _SECRET_FIELDS = {"token", "api_key", "hook_url", "agent_token"}
 _ALLOWED: dict[str, set[str]] = {
-    "plex": {"base_url", "token", "kids_sections"},
+    "plex": {"base_url", "token", "kids_sections", "section_kinds"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
     "sonarr": {"base_url", "api_key"},
     "overseerr": {"base_url", "api_key"},
@@ -195,6 +195,12 @@ def apply_to_settings(
         eff.plex.enabled = True
     if isinstance(plex.get("kids_sections"), list):
         eff.plex.kids_sections = list(plex["kids_sections"])
+    if isinstance(plex.get("section_kinds"), dict):
+        eff.plex.section_kinds = {
+            str(k): str(v)
+            for k, v in plex["section_kinds"].items()
+            if v in ("movie", "show", "ignore")
+        }
 
     radarr = config.get("radarr") or {}
     if _url(radarr.get("base_url")):

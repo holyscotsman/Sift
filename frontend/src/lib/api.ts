@@ -8,6 +8,7 @@ import type {
   MovieSizeResponse,
   PlanResponse,
   ReclaimActResult,
+  SectionsResponse,
   TvStorageResponse,
   VersionStatus,
   RestartResponse,
@@ -184,6 +185,12 @@ export const api = {
     request<ResetResponse>("/api/config/reset", {
       method: "POST",
       body: JSON.stringify({ keep_thumbnails: keepThumbnails }),
+    }),
+  sections: () => request<SectionsResponse>("/api/config/sections"),
+  saveSections: (sectionKinds: Record<string, string>) =>
+    request<SectionsResponse>("/api/config/sections", {
+      method: "PUT",
+      body: JSON.stringify({ section_kinds: sectionKinds }),
     }),
   getActionsConfig: () => request<{ dry_run: boolean }>("/api/config/actions"),
   setActionsConfig: (dryRun: boolean) =>

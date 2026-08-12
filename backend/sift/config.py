@@ -96,6 +96,10 @@ class PlexConfig(BaseModel):
     # Library section titles that belong to children (kids-guardrail). Items in
     # these sections are marked ``is_kids`` and never auto-flagged for removal.
     kids_sections: list[str] = Field(default_factory=list)
+    # Per-library overrides, ``{"Cartoons": "show", "Home Videos": "ignore"}``.
+    # Plex's own type is the default; this is for where it is wrong or where a
+    # library should simply be left alone.
+    section_kinds: dict[str, str] = Field(default_factory=dict)
 
 
 class RadarrConfig(BaseModel):
