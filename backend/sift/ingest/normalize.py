@@ -43,6 +43,129 @@ def _int_or_none(value: Any) -> int | None:
     return n or None
 
 
+# -------------------------------------------------------------------- media info
+
+# Rungs of the resolution ladder, as (exclusive minimum height, label). Judged on
+# height rather than width so 1920x800 scope and 1920x1080 flat both read as
+# 1080p — comparing widths files every letterboxed film one rung too high.
+_RESOLUTION_RUNGS = ((1600, "2160p"), (1080, "1440p"), (720, "1080p"), (576, "720p"), (0, "480p"))
+
+_HHMMSS = re.compile(r"^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$")
+
+
+def resolution_label(height: Any, fallback: Any = None) -> str | None:
+    """Normalise a pixel height onto the ladder.
+
+    ``fallback`` takes a source's own label — Plex reports ``videoResolution`` as
+    "sd"/"720"/"1080"/"4k" — for files that carry no usable height.
+    """
+    h = _int_or_none(height)
+    if h:
+        for floor, label in _RESOLUTION_RUNGS:
+            if h > floor:
+                return label
+    text = str(fallback or "").strip().lower()
+    if text in ("4k", "2160", "2160p", "uhd"):
+        return "2160p"
+    if text in ("1440", "1440p"):
+        return "1440p"
+    if text in ("1080", "1080p", "hd"):
+        return "1080p"
+    if text in ("720", "720p"):
+        return "720p"
+    if text in ("sd", "480", "480p", "576", "576p"):
+        return "480p"
+    return None
+
+
+def parse_duration_ms(value: Any) -> int | None:
+    """Milliseconds, from a raw number or Radarr's ``HH:MM:SS.fff`` runtime string."""
+    if value in (None, "", 0, "0"):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) or None
+    text = str(value).strip()
+    if text.isdigit():
+        return int(text) or None
+    if m := _HHMMSS.match(text):
+        hours, minutes, seconds, frac = m.groups()
+        total = (int(hours) * 3600 + int(minutes) * 60 + int(seconds)) * 1000
+        if frac:
+            total += int(frac[:3].ljust(3, "0"))
+        return total or None
+    return None
+
+
+def _codec(value: Any) -> str | None:
+    """Fold the many spellings of a codec onto one name.
+
+    Sources disagree — ``x265``/``hevc``/``HEVC`` name one codec — and the bitrate
+    baselines are computed per codec, so leaving the spellings distinct would split
+    one population into three too-small ones and make every median untrustworthy.
+    """
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in ("hevc", "h265", "h.265", "x265", "hev1", "hvc1"):
+        return "h265"
+    if text in ("avc", "h264", "h.264", "x264", "avc1"):
+        return "h264"
+    if text in ("av1", "av01"):
+        return "av1"
+    if text in ("mpeg2video", "mpeg2"):
+        return "mpeg2"
+    if text in ("vc1", "vc-1"):
+        return "vc1"
+    return text[:32]
+
+
+def _dimensions(info: dict[str, Any]) -> tuple[int | None, int | None]:
+    """Width/height from explicit fields or from a ``1920x1080`` resolution string."""
+    width = _int_or_none(info.get("width"))
+    height = _int_or_none(info.get("height"))
+    if width and height:
+        return width, height
+    text = str(info.get("resolution") or "").lower()
+    if "x" in text:
+        left, _, right = text.partition("x")
+        return _int_or_none(left) or width, _int_or_none(right) or height
+    return width, height
+
+
+def normalize_media_info(
+    info: dict[str, Any] | None,
+    *,
+    path: Any = None,
+    size: Any = None,
+    container: Any = None,
+    source: str,
+) -> dict[str, Any] | None:
+    """A canonical media-file fragment, or ``None`` when there is nothing to say.
+
+    A record with neither a size nor a duration cannot take part in any bitrate
+    calculation, so it is dropped rather than stored as a hole every later query
+    would have to guard against.
+    """
+    info = info or {}
+    width, height = _dimensions(info)
+    size_bytes = _int_or_none(size)
+    duration = parse_duration_ms(info.get("runTime") or info.get("duration"))
+    if size_bytes is None and duration is None:
+        return None
+    return {
+        "path": (str(path) if path else None),
+        "container": (str(container).lstrip(".").lower() if container else None),
+        "size": size_bytes,
+        "duration_ms": duration,
+        "width": width,
+        "height": height,
+        "resolution": resolution_label(height, info.get("videoResolution")),
+        "video_codec": _codec(info.get("videoCodec")),
+        "audio_codec": _codec(info.get("audioCodec")),
+        "source": source,
+    }
+
+
 # ------------------------------------------------------------------------ Radarr
 
 
@@ -111,6 +234,17 @@ def normalize_radarr_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "added_at": parse_dt(raw.get("added")),
         "ratings": ratings,
         "collection": collection,
+        # The technical detail was always in this payload; it was simply dropped
+        # after ``quality`` was read out of the same dict.
+        "media_file": normalize_media_info(
+            movie_file.get("mediaInfo"),
+            path=movie_file.get("path"),
+            size=movie_file.get("size") or raw.get("sizeOnDisk"),
+            container=(movie_file.get("path") or "").rpartition(".")[2] or None,
+            source="radarr",
+        )
+        if has_file
+        else None,
     }
 
 
@@ -170,7 +304,44 @@ def normalize_plex_item(
         "library_section": section_title,
         "is_kids": is_kids,
         "user_rating": item.get("userRating"),
+        "media_files": plex_media_files(item),
     }
+
+
+def plex_media_files(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every file backing one Plex item.
+
+    A list, not a single record: Plex models an item's alternate versions as
+    several ``Media`` entries, and a long episode split across discs as several
+    ``Part`` entries under one ``Media``. Collapsing either to "the first one"
+    would under-report the disk in use, which is the whole quantity being measured.
+    """
+    out: list[dict[str, Any]] = []
+    for media in item.get("Media", []) or []:
+        if not isinstance(media, dict):
+            continue
+        for part in media.get("Part", []) or []:
+            if not isinstance(part, dict):
+                continue
+            record = normalize_media_info(
+                {
+                    "width": media.get("width"),
+                    "height": media.get("height"),
+                    "videoResolution": media.get("videoResolution"),
+                    "videoCodec": media.get("videoCodec"),
+                    "audioCodec": media.get("audioCodec"),
+                    # Part duration wins: a split file's own length is what the
+                    # bitrate maths needs, not the whole item's.
+                    "duration": part.get("duration") or media.get("duration"),
+                },
+                path=part.get("file"),
+                size=part.get("size"),
+                container=part.get("container") or media.get("container"),
+                source="plex",
+            )
+            if record is not None:
+                out.append(record)
+    return out
 
 
 # ---------------------------------------------------------------------- Tautulli

@@ -30,6 +30,7 @@ from ..config import Settings
 from ..db.models import (
     Collection,
     CollectionMember,
+    MediaFile,
     Movie,
     MoviePerson,
     Person,
@@ -370,6 +371,68 @@ class ScanPipeline:
             session.expunge(run)
             return run
 
+    def _sync_movie_media(
+        self,
+        session: Session,
+        wanted: dict[int, list[dict[str, Any]]],
+        *,
+        source: str,
+        rating_keys: dict[int, str | None] | None = None,
+    ) -> int:
+        """Reconcile ``media_files`` for a set of movies, from one source.
+
+        Preloaded and batched throughout for the reason ``_persist_plex`` explains:
+        on a hosted database a per-file lookup is a network round trip, and a large
+        library has more files than films.
+
+        A file's identity is its path — two sources reporting the same path are
+        describing one file. Where a source gives no path the owner and source
+        alone identify it, which is enough because a pathless record can only ever
+        come from a single item.
+        """
+        ids = list(wanted)
+        existing: dict[tuple[int, str], MediaFile] = {}
+        for start in range(0, len(ids), 500):
+            batch = ids[start : start + 500]
+            rows = session.scalars(
+                select(MediaFile).where(
+                    MediaFile.movie_tmdb_id.in_(batch), MediaFile.source == source
+                )
+            )
+            for row in rows:
+                existing[(row.movie_tmdb_id or 0, row.path or "")] = row
+
+        written = 0
+        seen: set[tuple[int, str]] = set()
+        for tmdb_id, records in wanted.items():
+            for record in records:
+                key = (tmdb_id, record.get("path") or "")
+                if key in seen:
+                    # The same path twice in one payload is one file described
+                    # twice, not two files; counting it twice would inflate the
+                    # very total this feature exists to measure.
+                    continue
+                seen.add(key)
+                found = existing.get(key)
+                if found is None:
+                    row = MediaFile(movie_tmdb_id=tmdb_id, source=source)
+                    session.add(row)
+                    existing[key] = row
+                else:
+                    row = found
+                for field_name, value in record.items():
+                    setattr(row, field_name, value)
+                row.movie_tmdb_id = tmdb_id
+                if rating_keys is not None:
+                    row.rating_key = rating_keys.get(tmdb_id)
+                row.seen_at = utcnow()
+                written += 1
+
+        stale = [row.id for key, row in existing.items() if key not in seen and row.id is not None]
+        for start in range(0, len(stale), 500):
+            session.execute(delete(MediaFile).where(MediaFile.id.in_(stale[start : start + 500])))
+        return written
+
     def _upsert_movie(self, session: Session, tmdb_id: int) -> Movie:
         movie = session.get(Movie, tmdb_id)
         if movie is None:
@@ -407,8 +470,42 @@ class ScanPipeline:
                 written += 1
             for coll in collections:
                 self._upsert_collection(session, coll)
+            # Radarr's file detail fills the gaps Plex left. Plex is the library
+            # authority, so where it already reported a file for a title, Radarr's
+            # view of the same file is not stored a second time — the two mount the
+            # same library at different paths, so both would count as separate
+            # files and double the disk this feature is trying to measure.
+            candidates = {
+                d["tmdb_id"]: [d["media_file"]]
+                for d in movies
+                if d.get("tmdb_id") and d.get("media_file")
+            }
+            covered = self._movies_with_plex_media(session, list(candidates))
+            files = self._sync_movie_media(
+                session,
+                {k: v for k, v in candidates.items() if k not in covered},
+                source="radarr",
+            )
             session.commit()
-        return {"radarr_movies": written, "collections": len(collections)}
+        return {
+            "radarr_movies": written,
+            "collections": len(collections),
+            "radarr_media_files": files,
+        }
+
+    def _movies_with_plex_media(self, session: Session, ids: list[int]) -> set[int]:
+        """Which of these films Plex has already described a file for."""
+        covered: set[int] = set()
+        for start in range(0, len(ids), 500):
+            batch = ids[start : start + 500]
+            covered.update(
+                session.scalars(
+                    select(MediaFile.movie_tmdb_id).where(
+                        MediaFile.movie_tmdb_id.in_(batch), MediaFile.source == "plex"
+                    )
+                )
+            )
+        return covered
 
     def _sync_ratings(self, session: Session, movie_id: int, ratings: list[dict[str, Any]]) -> None:
         existing = {
@@ -548,8 +645,31 @@ class ScanPipeline:
                             PlexCopy.rating_key.in_(stale[start : start + 500])
                         )
                     )
+            # Every file behind every copy, so a title held twice reports the disk
+            # both rips actually occupy.
+            by_movie: dict[int, list[dict[str, Any]]] = {}
+            keys: dict[int, str | None] = {}
+            for data in items:
+                tmdb_id = data.get("tmdb_id")
+                if not tmdb_id or not data.get("media_files"):
+                    continue
+                by_movie.setdefault(tmdb_id, []).extend(data["media_files"])
+                keys.setdefault(tmdb_id, data.get("plex_rating_key"))
+            files = self._sync_movie_media(
+                session, by_movie, source="plex", rating_keys=keys
+            )
+            # Plex is the library authority: once it describes a title's files, a
+            # stale Radarr row for the same title would be counted alongside them.
+            superseded = [k for k in by_movie]
+            for start in range(0, len(superseded), 500):
+                session.execute(
+                    delete(MediaFile).where(
+                        MediaFile.movie_tmdb_id.in_(superseded[start : start + 500]),
+                        MediaFile.source != "plex",
+                    )
+                )
             session.commit()
-        return {"plex_items": written}
+        return {"plex_items": written, "plex_media_files": files}
 
     def _persist_watch(self, aggregates: list[dict[str, Any]]) -> dict[str, int]:
         written = 0
