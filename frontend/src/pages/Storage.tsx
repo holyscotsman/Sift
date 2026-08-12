@@ -228,6 +228,13 @@ export function Storage() {
             value={String(sizes.short_films_cleared)}
             hint="checked and left alone"
           />
+          {tv ? (
+            <Stat
+              label="TV reclaimable"
+              value={fmtSize(tv.duplicate_bytes + tv.season_excess_bytes)}
+              hint="duplicate episodes and heavy seasons"
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -361,6 +368,89 @@ export function Storage() {
                 <Pill tone="borderline">{group.surplus} could go</Pill>
               </div>
             ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tv && tv.duplicates.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Shows holding the same episode twice
+          </h2>
+          <p className="max-w-prose text-sm text-fg2">
+            Ranked by what you would get back, not by how many copies there are — two duplicated
+            hours of 1080p beat six duplicated SD ones. Episodes split across two files are
+            excluded; both halves are needed.
+          </p>
+          <div className="panel divide-y divide-line">
+            {tv.duplicates.map((show) => (
+              <div key={show.tvdb_id} className="flex flex-wrap items-start gap-3 p-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{show.title}</span>
+                    {show.library_section ? (
+                      <span className="text-xs text-fg3">{show.library_section}</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs text-fg2">
+                    {show.episodes.length} episode{show.episodes.length === 1 ? "" : "s"} affected ·{" "}
+                    {show.surplus} file{show.surplus === 1 ? "" : "s"} could go
+                  </p>
+                  <p className="mt-0.5 text-xs text-fg3">
+                    {show.episodes
+                      .slice(0, 6)
+                      .map((e) => `S${e.season_number}E${e.episode_number}`)
+                      .join(", ")}
+                    {show.episodes.length > 6 ? ` +${show.episodes.length - 6} more` : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-bold tabular-nums">
+                  {fmtSize(show.bytes_reclaimable)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tv && tv.seasons.some((s) => s.bloated) ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Seasons heavier than their peers
+          </h2>
+          <p className="max-w-prose text-sm text-fg2">
+            Measured per hour, so a 24-episode season is not penalised for being long and a
+            55-minute drama is not penalised for being slower than a sitcom.
+          </p>
+          <div className="panel divide-y divide-line">
+            {tv.seasons
+              .filter((s) => s.bloated)
+              .map((season) => (
+                <div
+                  key={`${season.tvdb_id}-${season.season_number}`}
+                  className="flex flex-wrap items-start gap-3 p-3.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold">{season.title}</span>
+                      <span className="text-xs text-fg3">season {season.season_number}</span>
+                      {season.air_year ? (
+                        <span className="text-xs text-fg3">{season.air_year}</span>
+                      ) : null}
+                      {season.resolution ? <Pill>{season.resolution}</Pill> : null}
+                      {season.video_codec ? <Pill>{season.video_codec}</Pill> : null}
+                    </div>
+                    <p className="mt-0.5 text-xs text-fg2">
+                      {fmtSize(season.total_bytes)} over {season.episode_count} episodes ·{" "}
+                      {fmtRate(season.bytes_per_hour)} · {fmtSize(season.per_episode)}/episode
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+                    <span className="text-sm font-bold tabular-nums">{fmtSize(season.excess)}</span>
+                    <span className="text-xs text-fg3">over the norm</span>
+                  </div>
+                </div>
+              ))}
           </div>
         </section>
       ) : null}
