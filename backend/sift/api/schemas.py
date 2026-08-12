@@ -547,3 +547,52 @@ class VersionStatus(BaseModel):
     update_available: bool = False
     # True when an in-app Update can actually do something about it.
     can_update: bool = False
+
+
+# ------------------------------------------------------------------------ storage
+
+
+class SizeFindingOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    # oversized | truncated | bad_rip
+    kind: str
+    path: str | None = None
+    size: int
+    duration_ms: int | None = None
+    runtime_minutes: int | None = None
+    resolution: str | None = None
+    video_codec: str | None = None
+    # Disk this finding would return. Zero for a bad rip: the file is the whole
+    # film and stays on disk until a better copy replaces it.
+    bytes_reclaimable: int
+    # 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+    risk_tier: int
+    reasons: list[str] = []
+
+
+class MovieSizeResponse(BaseModel):
+    items: list[SizeFindingOut]
+    # Totals span the whole library, not just this page.
+    total_reclaimable: int
+    oversized_count: int
+    truncated_count: int
+    bad_rip_count: int
+    # Small files inspected and cleared — almost all genuine short films. Reported
+    # so the number reads as considered rather than silently dropped.
+    short_films_cleared: int
+
+
+class BucketOut(BaseModel):
+    resolution: str
+    codec: str
+    samples: int
+    median_rate: float
+    # False when this is a seeded default because the library holds too few files
+    # of this kind to establish a norm of its own.
+    observed: bool
+
+
+class BaselinesResponse(BaseModel):
+    buckets: list[BucketOut]
