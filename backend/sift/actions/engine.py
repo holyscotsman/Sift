@@ -128,6 +128,14 @@ class ActionEngine:
             )
         if action_type not in AUTONOMOUS_TYPES and action_type not in REQUIRES_APPROVAL:
             raise ValueError(f"unknown action type {action_type}")
+        if payload.get("via") == "agent":
+            # A file the host holds and Sift cannot reach. Approving it makes the
+            # job claimable; it does not make Sift able to do it. Raising rather
+            # than quietly succeeding keeps the impossibility visible.
+            raise ValueError(
+                "this is carried out by the host, not executed here — "
+                "approve it and let the agent claim it"
+            )
         if action_type == ActionType.TRANSCODE:
             # Sift has no access to the files and never will. An approved
             # transcode becomes a job the host claims; nothing is dispatched to a

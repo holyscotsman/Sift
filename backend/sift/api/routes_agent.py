@@ -1,7 +1,7 @@
-"""Transcode jobs — approved here, carried out by the host.
+"""File jobs — approved here, carried out by the host.
 
 Sift runs on a machine that has never seen the media and cannot reach it, so it
-does not transcode anything. It records an approved intention; an agent on the
+neither deletes nor re-encodes anything. It records an approved intention; an agent on the
 box holding the files claims the job, runs the encode, verifies the result, and
 reports back. Same philosophy as the restart and update endpoints: hand control
 to the host rather than pretend to have it.
@@ -14,6 +14,11 @@ rather than your machine. Polling also means no inbound port is opened for this.
 **Nothing becomes claimable without an approval.** ``/claim`` only ever returns
 jobs whose action is APPROVED, which is the same guard that governs deletes,
 reached from the other side.
+
+**Why a delete comes through here rather than through Sonarr.** Sonarr can
+remove an episode file it imported. The surplus copies duplicate detection finds
+are the ones it never imported — manual copies, failed imports, leftovers — so
+its API has no handle on them. The path is the only thing that does.
 
 **The re-grab guard is not optional.** Sonarr will re-upgrade a downgraded season
 on its next search unless its quality profile is changed too, and without that
@@ -31,24 +36,24 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..db.models import Action, ActionStatus, ActionType, TranscodeJob, utcnow
+from ..db.models import Action, ActionStatus, FileJob, utcnow
 from ..services import config_store
 from .deps import AuthDep, get_session_factory
 from .schemas import (
-    TranscodeCapability,
-    TranscodeClaimOut,
-    TranscodeJobOut,
-    TranscodeResultIn,
+    AgentCapability,
+    FileJobClaimOut,
+    FileJobOut,
+    FileJobResultIn,
 )
 
 log = logging.getLogger("sift.transcode")
 
 # Owner-facing: listing and capability. Behind the normal session auth.
-router = APIRouter(prefix="/api/transcode", tags=["transcode"], dependencies=[AuthDep])
+router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[AuthDep])
 
 # Agent-facing: claim and report. Authenticated by the shared agent token
 # instead, because the agent is a daemon with no session.
-agent_router = APIRouter(prefix="/api/transcode", tags=["transcode"])
+agent_router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
 def _agent_token(factory: sessionmaker[Session]) -> str | None:
@@ -75,9 +80,11 @@ def _require_agent(
         raise HTTPException(status_code=401, detail="bad agent token")
 
 
-def _job_out(job: TranscodeJob) -> TranscodeJobOut:
-    return TranscodeJobOut(
+def _job_out(job: FileJob) -> FileJobOut:
+    return FileJobOut(
         id=job.id,
+        kind=job.kind,
+        label=job.label,
         action_id=job.action_id,
         status=job.status,
         source_path=job.source_path,
@@ -90,11 +97,11 @@ def _job_out(job: TranscodeJob) -> TranscodeJobOut:
     )
 
 
-@router.get("/capability", response_model=TranscodeCapability)
+@router.get("/capability", response_model=AgentCapability)
 def capability(
     request: Request,
     factory: sessionmaker[Session] = Depends(get_session_factory),
-) -> TranscodeCapability:
+) -> AgentCapability:
     """Whether the host can actually honour a transcode.
 
     Reported rather than assumed, so the UI never offers a button that leads
@@ -103,7 +110,7 @@ def capability(
     from .deps import get_state
 
     state = get_state(request)
-    return TranscodeCapability(
+    return AgentCapability(
         agent_configured=bool(_agent_token(factory)),
         # Without Sonarr a downgrade cannot be written back, and Sonarr would
         # simply re-upgrade the season on its next search.
@@ -111,20 +118,20 @@ def capability(
     )
 
 
-@router.get("/jobs", response_model=list[TranscodeJobOut])
+@router.get("/jobs", response_model=list[FileJobOut])
 def list_jobs(
     factory: sessionmaker[Session] = Depends(get_session_factory),
-) -> list[TranscodeJobOut]:
+) -> list[FileJobOut]:
     with factory() as session:
-        jobs = list(session.scalars(select(TranscodeJob).order_by(TranscodeJob.id.desc())))
+        jobs = list(session.scalars(select(FileJob).order_by(FileJob.id.desc())))
         return [_job_out(j) for j in jobs]
 
 
-@agent_router.post("/claim", response_model=TranscodeClaimOut)
+@agent_router.post("/claim", response_model=FileJobClaimOut)
 def claim(
     x_sift_agent_token: str | None = Header(default=None),
     factory: sessionmaker[Session] = Depends(get_session_factory),
-) -> TranscodeClaimOut:
+) -> FileJobClaimOut:
     """Hand the agent the next approved job, or nothing.
 
     The approval check is done here rather than trusted from job creation: a job
@@ -134,7 +141,7 @@ def claim(
     _require_agent(factory, x_sift_agent_token)
     with factory() as session:
         queued = session.scalars(
-            select(TranscodeJob).where(TranscodeJob.status == "queued").order_by(TranscodeJob.id)
+            select(FileJob).where(FileJob.status == "queued").order_by(FileJob.id)
         )
         for job in queued:
             action = session.get(Action, job.action_id)
@@ -151,17 +158,17 @@ def claim(
             session.commit()
             session.refresh(job)
             log.info("transcode job %s claimed by the agent", job.id)
-            return TranscodeClaimOut(job=_job_out(job))
-    return TranscodeClaimOut(job=None)
+            return FileJobClaimOut(job=_job_out(job))
+    return FileJobClaimOut(job=None)
 
 
-@agent_router.post("/{job_id}/result", response_model=TranscodeJobOut)
+@agent_router.post("/{job_id}/result", response_model=FileJobOut)
 def report(
     job_id: int,
-    body: TranscodeResultIn,
+    body: FileJobResultIn,
     x_sift_agent_token: str | None = Header(default=None),
     factory: sessionmaker[Session] = Depends(get_session_factory),
-) -> TranscodeJobOut:
+) -> FileJobOut:
     """Record what the agent actually did.
 
     Sift does not decide whether the encode was good — the agent has the file and
@@ -171,11 +178,11 @@ def report(
     """
     _require_agent(factory, x_sift_agent_token)
     with factory() as session:
-        job = session.get(TranscodeJob, job_id)
+        job = session.get(FileJob, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail=f"no transcode job {job_id}")
 
-        if body.ok:
+        if body.ok and job.kind == "transcode":
             if not body.output_size or not body.output_duration_ms:
                 raise HTTPException(
                     status_code=400,
@@ -215,22 +222,26 @@ def create_job(
     session: Session,
     *,
     action_id: int,
+    kind: str = "transcode",
     source_path: str,
-    source_size: int | None,
-    source_duration_ms: int | None,
-    target_resolution: str | None,
-    target_codec: str | None,
-    expected_max_bytes: int | None,
-) -> TranscodeJob:
+    source_size: int | None = None,
+    source_duration_ms: int | None = None,
+    target_resolution: str | None = None,
+    target_codec: str | None = None,
+    expected_max_bytes: int | None = None,
+    label: str | None = None,
+) -> FileJob:
     """Record an approved intention. Called from the action layer, not the wire."""
-    job = TranscodeJob(
+    job = FileJob(
         action_id=action_id,
+        kind=kind,
         source_path=source_path,
         source_size=source_size,
         source_duration_ms=source_duration_ms,
         target_resolution=target_resolution,
         target_codec=target_codec,
         expected_max_bytes=expected_max_bytes,
+        label=label,
     )
     session.add(job)
     session.commit()
@@ -238,4 +249,4 @@ def create_job(
     return job
 
 
-__all__ = ["router", "agent_router", "create_job", "ActionType"]
+__all__ = ["router", "agent_router", "create_job"]

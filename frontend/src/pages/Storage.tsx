@@ -10,6 +10,8 @@
 
 import { useEffect, useState } from "react";
 
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { useToast } from "@/components/Toast";
 import { EmptyState, PageTitle, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
@@ -20,6 +22,7 @@ import type {
   MovieSizeResponse,
   PlanResponse,
   SizeFinding,
+  ShowDuplicates,
   TvStorageResponse,
 } from "@/lib/types";
 
@@ -141,7 +144,11 @@ export function Storage() {
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBaselines, setShowBaselines] = useState(false);
+  const [confirming, setConfirming] = useState<ShowDuplicates | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<Record<number, string>>({});
   const drawer = useDrawer();
+  const toastError = useToast();
 
   useEffect(() => {
     let live = true;
@@ -176,6 +183,27 @@ export function Storage() {
       setError((e as { detail?: string })?.detail || "Couldn't work out a plan.");
     } finally {
       setPlanning(false);
+    }
+  }
+
+  async function removeSurplus(show: ShowDuplicates) {
+    setBusy(true);
+    try {
+      const result = await api.actOnFinding({
+        target_kind: "show",
+        target_id: String(show.tvdb_id),
+        paths: show.surplus_paths,
+        label: `${show.title} — ${show.surplus} surplus episode file(s)`,
+      });
+      // Proposed, not done: it needs your approval on Activity, and then the
+      // agent on your media box has to pick it up. Say so rather than implying
+      // the space is already back.
+      setDone((d) => ({ ...d, [show.tvdb_id]: result.detail }));
+      setConfirming(null);
+    } catch (e) {
+      toastError((e as { message?: string })?.message || "Couldn't queue that removal.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -228,6 +256,13 @@ export function Storage() {
             value={String(sizes.short_films_cleared)}
             hint="checked and left alone"
           />
+          {tv ? (
+            <Stat
+              label="TV reclaimable"
+              value={fmtSize(tv.duplicate_bytes + tv.season_excess_bytes)}
+              hint="duplicate episodes and heavy seasons"
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -365,6 +400,105 @@ export function Storage() {
         </section>
       ) : null}
 
+      {tv && tv.duplicates.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Shows holding the same episode twice
+          </h2>
+          <p className="max-w-prose text-sm text-fg2">
+            Ranked by what you would get back, not by how many copies there are — two duplicated
+            hours of 1080p beat six duplicated SD ones. Episodes split across two files are
+            excluded; both halves are needed.
+          </p>
+          <div className="panel divide-y divide-line">
+            {tv.duplicates.map((show) => (
+              <div key={show.tvdb_id} className="flex flex-wrap items-start gap-3 p-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{show.title}</span>
+                    {show.library_section ? (
+                      <span className="text-xs text-fg3">{show.library_section}</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs text-fg2">
+                    {show.episodes.length} episode{show.episodes.length === 1 ? "" : "s"} affected ·{" "}
+                    {show.surplus} file{show.surplus === 1 ? "" : "s"} could go
+                  </p>
+                  <p className="mt-0.5 text-xs text-fg3">
+                    {show.episodes
+                      .slice(0, 6)
+                      .map((e) => `S${e.season_number}E${e.episode_number}`)
+                      .join(", ")}
+                    {show.episodes.length > 6 ? ` +${show.episodes.length - 6} more` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-sm font-bold tabular-nums">
+                    {fmtSize(show.bytes_reclaimable)}
+                  </span>
+                  {done[show.tvdb_id] ? (
+                    <span className="max-w-56 text-right text-xs text-fg2">
+                      {done[show.tvdb_id]}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirming(show)}
+                      disabled={show.surplus_paths.length === 0}
+                      className="rounded-md px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+                      style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+                    >
+                      Remove {show.surplus} surplus file{show.surplus === 1 ? "" : "s"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tv && tv.seasons.some((s) => s.bloated) ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Seasons heavier than their peers
+          </h2>
+          <p className="max-w-prose text-sm text-fg2">
+            Measured per hour, so a 24-episode season is not penalised for being long and a
+            55-minute drama is not penalised for being slower than a sitcom.
+          </p>
+          <div className="panel divide-y divide-line">
+            {tv.seasons
+              .filter((s) => s.bloated)
+              .map((season) => (
+                <div
+                  key={`${season.tvdb_id}-${season.season_number}`}
+                  className="flex flex-wrap items-start gap-3 p-3.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold">{season.title}</span>
+                      <span className="text-xs text-fg3">season {season.season_number}</span>
+                      {season.air_year ? (
+                        <span className="text-xs text-fg3">{season.air_year}</span>
+                      ) : null}
+                      {season.resolution ? <Pill>{season.resolution}</Pill> : null}
+                      {season.video_codec ? <Pill>{season.video_codec}</Pill> : null}
+                    </div>
+                    <p className="mt-0.5 text-xs text-fg2">
+                      {fmtSize(season.total_bytes)} over {season.episode_count} episodes ·{" "}
+                      {fmtRate(season.bytes_per_hour)} · {fmtSize(season.per_episode)}/episode
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+                    <span className="text-sm font-bold tabular-nums">{fmtSize(season.excess)}</span>
+                    <span className="text-xs text-fg3">over the norm</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </section>
+      ) : null}
+
       {tv && tv.inconsistencies.length > 0 ? (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
@@ -401,6 +535,35 @@ export function Storage() {
           </div>
         </section>
       ) : null}
+
+      <ConfirmModal
+        open={confirming !== null}
+        title={`Remove ${confirming?.surplus ?? 0} surplus file(s) from ${confirming?.title ?? ""}?`}
+        confirmLabel="Queue removal"
+        busy={busy}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => confirming && void removeSurplus(confirming)}
+        body={
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              Every episode stays. Only the extra copies go, and the best copy of each is kept.
+            </p>
+            <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
+              This records the request and needs your approval on <strong>Activity</strong> before
+              anything happens. The files are then removed by the agent on your media box — Sift has
+              no access to them — and it moves them to a trash folder rather than deleting them, so
+              a mistake is recoverable.
+            </p>
+            <ul className="max-h-40 overflow-y-auto text-xs text-fg3">
+              {(confirming?.surplus_paths ?? []).slice(0, 20).map((path) => (
+                <li key={path} className="truncate">
+                  {path}
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      />
 
       {baselines && baselines.buckets.length > 0 ? (
         <section className="flex flex-col gap-2">

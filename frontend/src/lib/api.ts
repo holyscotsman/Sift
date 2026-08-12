@@ -7,6 +7,7 @@ import type {
   LedgerResponse,
   MovieSizeResponse,
   PlanResponse,
+  ReclaimActResult,
   TvStorageResponse,
   VersionStatus,
   RestartResponse,
@@ -294,6 +295,16 @@ export const api = {
     request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`),
   baselines: () => request<BaselinesResponse>("/api/storage/baselines"),
   tvStorage: (limit = 200) => request<TvStorageResponse>(`/api/storage/tv?limit=${limit}`),
+  actOnFinding: (body: {
+    target_kind: string;
+    target_id: string;
+    paths: string[];
+    label?: string;
+  }) =>
+    request<ReclaimActResult>("/api/storage/act", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   ledger: (limit = 500) => request<LedgerResponse>(`/api/storage/ledger?limit=${limit}`),
   reclaimPlan: (targetBytes: number) =>
     request<PlanResponse>("/api/storage/plan", {
