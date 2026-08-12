@@ -7,6 +7,7 @@ import type {
   LedgerResponse,
   MovieSizeResponse,
   PlanResponse,
+  TvStorageResponse,
   VersionStatus,
   RestartResponse,
   UpdateResponse,
@@ -292,6 +293,7 @@ export const api = {
   movieSizes: (limit = 200) =>
     request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`),
   baselines: () => request<BaselinesResponse>("/api/storage/baselines"),
+  tvStorage: (limit = 200) => request<TvStorageResponse>(`/api/storage/tv?limit=${limit}`),
   ledger: (limit = 500) => request<LedgerResponse>(`/api/storage/ledger?limit=${limit}`),
   reclaimPlan: (targetBytes: number) =>
     request<PlanResponse>("/api/storage/plan", {

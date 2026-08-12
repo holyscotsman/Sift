@@ -16,18 +16,25 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import ledger as ledger_analysis
 from ..analysis import outliers as outlier_analysis
+from ..analysis import tv_duplicates as tv_dup_analysis
+from ..analysis import tv_size as tv_size_analysis
 from .deps import AuthDep, get_session_factory
 from .schemas import (
     BaselinesResponse,
     BucketOut,
+    DuplicateEpisodeOut,
+    InconsistencyOut,
     LedgerFindingOut,
     LedgerResponse,
     MovieSizeResponse,
     PlanRequest,
     PlanResponse,
     PlanStepOut,
+    SeasonSizeOut,
+    ShowDuplicatesOut,
     SizeFindingOut,
     TierSummary,
+    TvStorageResponse,
 )
 
 router = APIRouter(prefix="/api/storage", tags=["storage"], dependencies=[AuthDep])
@@ -153,4 +160,82 @@ def reclaim_plan(
         reached=result.reached,
         total=result.total,
         highest_tier=result.highest_tier,
+    )
+
+
+@router.get("/tv", response_model=TvStorageResponse)
+def tv_storage(
+    limit: int = 200,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> TvStorageResponse:
+    """The three TV questions, side by side.
+
+    Which shows hold duplicate episodes, which seasons weigh more than their
+    peers, and which seasons disagree with themselves.
+
+    Inconsistency is reported here rather than in the ledger on purpose: fixing
+    a season with one SD episode among nineteen HD ones usually *costs* space,
+    so folding it into a list of reclaimable bytes would misrepresent it.
+    """
+    capped = max(1, min(limit, 1000))
+    with factory() as session:
+        shows, duplicate_bytes = tv_dup_analysis.find(session, limit=capped)
+        baselines = outlier_analysis.load_baselines(session)
+        sized, excess = tv_size_analysis.seasons(session, baselines=baselines, limit=capped)
+        odd = tv_size_analysis.inconsistencies(session, limit=capped)
+
+    return TvStorageResponse(
+        duplicates=[
+            ShowDuplicatesOut(
+                tvdb_id=show.tvdb_id,
+                title=show.title,
+                library_section=show.library_section,
+                episodes=[
+                    DuplicateEpisodeOut(
+                        season_number=e.season_number,
+                        episode_number=e.episode_number,
+                        title=e.title,
+                        copies=len(e.copies),
+                        surplus=e.surplus,
+                        bytes_reclaimable=e.reclaimable,
+                    )
+                    for e in show.episodes
+                ],
+                surplus=show.surplus,
+                bytes_reclaimable=show.reclaimable,
+            )
+            for show in shows
+        ],
+        duplicate_bytes=duplicate_bytes,
+        seasons=[
+            SeasonSizeOut(
+                tvdb_id=s.tvdb_id,
+                title=s.title,
+                season_number=s.season_number,
+                air_year=s.air_year,
+                episode_count=s.episode_count,
+                total_bytes=s.total_bytes,
+                bytes_per_hour=s.bytes_per_hour,
+                per_episode=s.per_episode,
+                resolution=s.resolution,
+                video_codec=s.video_codec,
+                excess=s.excess,
+                bloated=s.bloated,
+            )
+            for s in sized
+        ],
+        season_excess_bytes=excess,
+        inconsistencies=[
+            InconsistencyOut(
+                tvdb_id=i.tvdb_id,
+                title=i.title,
+                season_number=i.season_number,
+                common_resolution=i.common_resolution,
+                odd_resolutions=dict(i.odd_resolutions),
+                rate_outliers=i.rate_outliers,
+                episodes_affected=i.episodes_affected,
+                reasons=list(i.reasons),
+            )
+            for i in odd
+        ],
     )

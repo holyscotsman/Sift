@@ -20,6 +20,7 @@ import type {
   MovieSizeResponse,
   PlanResponse,
   SizeFinding,
+  TvStorageResponse,
 } from "@/lib/types";
 
 function fmtSize(bytes: number | null | undefined): string {
@@ -134,6 +135,7 @@ export function Storage() {
   const [dupes, setDupes] = useState<DuplicatesResponse | null>(null);
   const [baselines, setBaselines] = useState<BaselinesResponse | null>(null);
   const [book, setBook] = useState<LedgerResponse | null>(null);
+  const [tv, setTv] = useState<TvStorageResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [targetGb, setTargetGb] = useState("500");
   const [planning, setPlanning] = useState(false);
@@ -143,13 +145,20 @@ export function Storage() {
 
   useEffect(() => {
     let live = true;
-    Promise.all([api.movieSizes(), api.duplicates(), api.baselines(), api.ledger()])
-      .then(([s, d, b, l]) => {
+    Promise.all([
+      api.movieSizes(),
+      api.duplicates(),
+      api.baselines(),
+      api.ledger(),
+      api.tvStorage(),
+    ])
+      .then(([s, d, b, l, t]) => {
         if (!live) return;
         setSizes(s);
         setDupes(d);
         setBaselines(b);
         setBook(l);
+        setTv(t);
       })
       .catch((e) => live && setError(e?.detail || "Couldn't read storage figures."));
     return () => {
@@ -350,6 +359,43 @@ export function Storage() {
                   {[...new Set(group.copies.map((c) => c.library_section ?? "?"))].join(", ")}
                 </span>
                 <Pill tone="borderline">{group.surplus} could go</Pill>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tv && tv.inconsistencies.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Seasons that disagree with themselves
+          </h2>
+          <p className="max-w-prose text-sm text-fg2">
+            An all-SD season is a decision. One SD episode among nineteen HD ones is an accident —
+            and it usually costs a little space to put right rather than saving any, which is why
+            it sits outside the list above.
+          </p>
+          <div className="panel divide-y divide-line">
+            {tv.inconsistencies.map((odd) => (
+              <div
+                key={`${odd.tvdb_id}-${odd.season_number}`}
+                className="flex flex-wrap items-start gap-3 p-3.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{odd.title}</span>
+                    <span className="text-xs text-fg3">season {odd.season_number}</span>
+                    {odd.common_resolution ? <Pill>{odd.common_resolution}</Pill> : null}
+                  </div>
+                  <ul className="mt-1 flex flex-col gap-0.5 text-xs text-fg2">
+                    {odd.reasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+                <Pill tone="borderline">
+                  {odd.episodes_affected} episode{odd.episodes_affected === 1 ? "" : "s"}
+                </Pill>
               </div>
             ))}
           </div>

@@ -544,3 +544,56 @@ export interface PlanResponse {
   total: number;
   highest_tier: number;
 }
+
+export interface DuplicateEpisode {
+  season_number: number;
+  episode_number: number;
+  title: string | null;
+  copies: number;
+  surplus: number;
+  bytes_reclaimable: number;
+}
+
+export interface ShowDuplicates {
+  tvdb_id: number;
+  title: string;
+  library_section: string | null;
+  episodes: DuplicateEpisode[];
+  surplus: number;
+  bytes_reclaimable: number;
+}
+
+export interface SeasonSize {
+  tvdb_id: number;
+  title: string;
+  season_number: number;
+  air_year: number | null;
+  episode_count: number;
+  total_bytes: number;
+  bytes_per_hour: number;
+  per_episode: number;
+  resolution: string | null;
+  video_codec: string | null;
+  excess: number;
+  bloated: boolean;
+}
+
+export interface Inconsistency {
+  tvdb_id: number;
+  title: string;
+  season_number: number;
+  common_resolution: string | null;
+  odd_resolutions: Record<string, number>;
+  rate_outliers: number;
+  episodes_affected: number;
+  reasons: string[];
+}
+
+export interface TvStorageResponse {
+  duplicates: ShowDuplicates[];
+  duplicate_bytes: number;
+  seasons: SeasonSize[];
+  season_excess_bytes: number;
+  // Not a reclaim figure — fixing one usually costs space.
+  inconsistencies: Inconsistency[];
+}

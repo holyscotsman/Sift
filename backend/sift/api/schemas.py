@@ -684,3 +684,59 @@ class TranscodeCapability(BaseModel):
     # Without Sonarr a downgrade cannot be written back, so Sonarr would simply
     # re-upgrade the season on its next search.
     sonarr_connected: bool
+
+
+class DuplicateEpisodeOut(BaseModel):
+    season_number: int
+    episode_number: int
+    title: str | None = None
+    copies: int
+    surplus: int
+    bytes_reclaimable: int
+
+
+class ShowDuplicatesOut(BaseModel):
+    tvdb_id: int
+    title: str
+    library_section: str | None = None
+    episodes: list[DuplicateEpisodeOut]
+    surplus: int
+    bytes_reclaimable: int
+
+
+class SeasonSizeOut(BaseModel):
+    tvdb_id: int
+    title: str
+    season_number: int
+    air_year: int | None = None
+    episode_count: int
+    total_bytes: int
+    bytes_per_hour: float
+    per_episode: int
+    resolution: str | None = None
+    video_codec: str | None = None
+    excess: int
+    bloated: bool
+
+
+class InconsistencyOut(BaseModel):
+    tvdb_id: int
+    title: str
+    season_number: int
+    # What most of the season is in — the thing the odd episodes differ from.
+    common_resolution: str | None = None
+    odd_resolutions: dict[str, int] = {}
+    rate_outliers: int
+    episodes_affected: int
+    reasons: list[str] = []
+
+
+class TvStorageResponse(BaseModel):
+    duplicates: list[ShowDuplicatesOut]
+    duplicate_bytes: int
+    seasons: list[SeasonSizeOut]
+    season_excess_bytes: int
+    # Seasons that disagree with themselves. Not a reclaim figure — fixing one
+    # usually costs space rather than saving it, which is why it is reported
+    # separately from the ledger instead of inside it.
+    inconsistencies: list[InconsistencyOut]

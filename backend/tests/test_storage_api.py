@@ -105,3 +105,69 @@ def test_the_planner_reports_falling_short_rather_than_overpromising(client):
     body = c.post("/api/storage/plan", json={"target_bytes": 500_000 * GB}).json()
     assert body["reached"] is False
     assert body["total"] < 500_000 * GB
+
+
+def _seed_tv(factory) -> None:
+    from sift.db.models import Episode, MediaFile, Season, Show
+
+    with factory() as session:
+        session.add(Show(tvdb_id=76156, title="Scrubs", library_section="TV", in_plex=True))
+        season = Season(show_id=76156, season_number=1, air_year=2001)
+        session.add(season)
+        session.flush()
+        for n in range(1, 11):
+            episode = Episode(season_id=season.id, episode_number=n, has_file=True)
+            session.add(episode)
+            session.flush()
+            # One episode in SD among nine in HD — an accident, not a decision.
+            hd = n != 10
+            session.add(
+                MediaFile(
+                    episode_id=episode.id,
+                    path=f"/tv/s01e{n:02d}.mkv",
+                    part_group=f"g{n}",
+                    size=3 * GB if hd else 400_000_000,
+                    duration_ms=22 * MIN_MS,
+                    resolution="1080p" if hd else "480p",
+                    video_codec="h264",
+                    source="plex",
+                )
+            )
+        session.commit()
+
+
+def test_inconsistent_seasons_are_reachable(client):
+    """The odd-episode-out report was asked for by name. Built, tested, and for
+    a while reachable from nowhere — this pins that it is served."""
+    c, factory = client
+    _seed_tv(factory)
+    body = c.get("/api/storage/tv").json()
+    odd = body["inconsistencies"]
+    assert len(odd) == 1
+    assert odd[0]["common_resolution"] == "1080p"
+    assert odd[0]["odd_resolutions"] == {"480p": 1}
+    assert odd[0]["episodes_affected"] >= 1
+
+
+def test_inconsistency_is_not_counted_as_reclaimable(client):
+    """NEGATIVE CONTROL: fixing a season with one SD episode among nineteen HD
+    ones usually costs space. Folding it into a reclaim total would overstate
+    what the library can give back."""
+    c, factory = client
+    _seed_tv(factory)
+    tv = c.get("/api/storage/tv").json()
+    assert tv["inconsistencies"]
+
+    ledger = c.get("/api/storage/ledger").json()
+    kinds = {i["kind"] for i in ledger["items"]}
+    assert "inconsistency" not in kinds
+    assert "inconsistent_season" not in kinds
+
+
+def test_tv_storage_is_empty_on_a_movies_only_library(client):
+    """NEGATIVE CONTROL."""
+    c, _ = client
+    body = c.get("/api/storage/tv").json()
+    assert body["duplicates"] == []
+    assert body["inconsistencies"] == []
+    assert body["duplicate_bytes"] == 0
