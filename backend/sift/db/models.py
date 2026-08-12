@@ -556,6 +556,12 @@ class MediaFile(Base):
     resolution: Mapped[str | None] = mapped_column(String(16), index=True)
     video_codec: Mapped[str | None] = mapped_column(String(32))
     audio_codec: Mapped[str | None] = mapped_column(String(32))
+    # Which presentation this file belongs to. Files sharing a group are one
+    # thing split across several files — the two halves of a long episode — and
+    # every one of them is needed. Separate groups are separate copies, and those
+    # are the ones that can go. Plex models exactly this distinction as Part
+    # entries under a Media, so the answer is read rather than guessed.
+    part_group: Mapped[str | None] = mapped_column(String(64), index=True)
     source: Mapped[str] = mapped_column(String(16), default="plex")
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow

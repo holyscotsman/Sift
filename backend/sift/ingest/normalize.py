@@ -317,9 +317,12 @@ def plex_media_files(item: dict[str, Any]) -> list[dict[str, Any]]:
     would under-report the disk in use, which is the whole quantity being measured.
     """
     out: list[dict[str, Any]] = []
-    for media in item.get("Media", []) or []:
+    for index, media in enumerate(item.get("Media", []) or []):
         if not isinstance(media, dict):
             continue
+        # One Media is one presentation. Its Parts are that presentation split
+        # across files, which is why they must never be mistaken for copies.
+        group = str(media.get("id") or f"media{index}")
         for part in media.get("Part", []) or []:
             if not isinstance(part, dict):
                 continue
@@ -340,6 +343,7 @@ def plex_media_files(item: dict[str, Any]) -> list[dict[str, Any]]:
                 source="plex",
             )
             if record is not None:
+                record["part_group"] = group
                 out.append(record)
     return out
 
@@ -568,6 +572,8 @@ def normalize_sonarr_episode_file(raw: dict[str, Any]) -> dict[str, Any] | None:
     if record is None:
         return None
     record["sonarr_episode_file_id"] = file_id
+    # Sonarr reports one file per presentation, so each is its own group.
+    record["part_group"] = str(file_id)
     return record
 
 
