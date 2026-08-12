@@ -10,6 +10,8 @@
 
 import { useEffect, useState } from "react";
 
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { useToast } from "@/components/Toast";
 import { EmptyState, PageTitle, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
@@ -20,6 +22,7 @@ import type {
   MovieSizeResponse,
   PlanResponse,
   SizeFinding,
+  ShowDuplicates,
   TvStorageResponse,
 } from "@/lib/types";
 
@@ -141,7 +144,11 @@ export function Storage() {
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showBaselines, setShowBaselines] = useState(false);
+  const [confirming, setConfirming] = useState<ShowDuplicates | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<Record<number, string>>({});
   const drawer = useDrawer();
+  const toastError = useToast();
 
   useEffect(() => {
     let live = true;
@@ -176,6 +183,27 @@ export function Storage() {
       setError((e as { detail?: string })?.detail || "Couldn't work out a plan.");
     } finally {
       setPlanning(false);
+    }
+  }
+
+  async function removeSurplus(show: ShowDuplicates) {
+    setBusy(true);
+    try {
+      const result = await api.actOnFinding({
+        target_kind: "show",
+        target_id: String(show.tvdb_id),
+        paths: show.surplus_paths,
+        label: `${show.title} — ${show.surplus} surplus episode file(s)`,
+      });
+      // Proposed, not done: it needs your approval on Activity, and then the
+      // agent on your media box has to pick it up. Say so rather than implying
+      // the space is already back.
+      setDone((d) => ({ ...d, [show.tvdb_id]: result.detail }));
+      setConfirming(null);
+    } catch (e) {
+      toastError((e as { message?: string })?.message || "Couldn't queue that removal.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -404,9 +432,25 @@ export function Storage() {
                     {show.episodes.length > 6 ? ` +${show.episodes.length - 6} more` : ""}
                   </p>
                 </div>
-                <span className="shrink-0 text-sm font-bold tabular-nums">
-                  {fmtSize(show.bytes_reclaimable)}
-                </span>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-sm font-bold tabular-nums">
+                    {fmtSize(show.bytes_reclaimable)}
+                  </span>
+                  {done[show.tvdb_id] ? (
+                    <span className="max-w-56 text-right text-xs text-fg2">
+                      {done[show.tvdb_id]}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirming(show)}
+                      disabled={show.surplus_paths.length === 0}
+                      className="rounded-md px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+                      style={{ background: "var(--junk)", color: "var(--accent-fg)" }}
+                    >
+                      Remove {show.surplus} surplus file{show.surplus === 1 ? "" : "s"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -491,6 +535,35 @@ export function Storage() {
           </div>
         </section>
       ) : null}
+
+      <ConfirmModal
+        open={confirming !== null}
+        title={`Remove ${confirming?.surplus ?? 0} surplus file(s) from ${confirming?.title ?? ""}?`}
+        confirmLabel="Queue removal"
+        busy={busy}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => confirming && void removeSurplus(confirming)}
+        body={
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              Every episode stays. Only the extra copies go, and the best copy of each is kept.
+            </p>
+            <p className="rounded-md border border-line bg-bg2 p-2.5 text-xs text-fg2">
+              This records the request and needs your approval on <strong>Activity</strong> before
+              anything happens. The files are then removed by the agent on your media box — Sift has
+              no access to them — and it moves them to a trash folder rather than deleting them, so
+              a mistake is recoverable.
+            </p>
+            <ul className="max-h-40 overflow-y-auto text-xs text-fg3">
+              {(confirming?.surplus_paths ?? []).slice(0, 20).map((path) => (
+                <li key={path} className="truncate">
+                  {path}
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      />
 
       {baselines && baselines.buckets.length > 0 ? (
         <section className="flex flex-col gap-2">

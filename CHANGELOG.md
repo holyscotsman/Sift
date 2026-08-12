@@ -2,6 +2,45 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.17.0 — Findings you can act on
+
+2607.16.0 could tell you a show held the same episode twice and exactly how much
+disk that cost. It could not remove it, and there was no button anywhere that
+would. Seeing the problem was the whole feature.
+
+**Nothing in Sift can delete a TV file, and nothing can be made to.** The only
+writer that exists talks to Radarr, and the surplus copies duplicate detection
+finds are precisely the files Sonarr never imported — manual copies, failed
+imports, leftovers — so its API has no handle on them either. The path is the
+only thing that does, and Sift runs where the paths are not.
+
+So the mechanism is the agent protocol built for transcodes, generalised:
+
+- `file_jobs` replaces `transcode_jobs`, which never held a row because nothing
+  created one, and could not gain a `kind` column — `create_all` adds tables to a
+  live database but never columns. The old table is left empty and unreferenced.
+- `POST /api/storage/act` turns a finding into one audited action and the jobs
+  behind it. It proposes; it does not do. Approval is still per item and dry-run
+  is still the server's floor.
+- **Paths are checked against the library snapshot before anything is recorded.**
+  Without that this endpoint is a way to have a process with filesystem access
+  delete anything on the box. A path Sift has never seen is refused.
+- The paths come from the finding you were looking at rather than being
+  recomputed, so what gets approved is what was on screen. The best copy of each
+  episode is never among them.
+
+**`tools/sift-agent.py` is the part that makes any of it real.** Standard library
+only, runs on the machine holding the media, polls for approved work. It moves
+deleted files to a trash folder rather than unlinking them — the approval gate
+means you meant it, and the trash folder allows for meaning it and being wrong.
+A re-encode is verified before the original is displaced: an encode that fails
+halfway produces a file that plays, is much smaller, and is not the episode, and
+every one of those properties reads as success.
+
+349 tests. The new controls: a path outside the snapshot is refused, the kept
+copy never appears in the surplus list, and a staged instance records your
+approval while handing the agent nothing.
+
 ## 2607.16.0 — Where the disk went, and the safest way to get it back
 
 Sift could tell you whether a film deserved to be on the server. It could not

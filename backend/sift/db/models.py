@@ -509,31 +509,42 @@ class Episode(Base):
     season: Mapped[Season] = relationship(back_populates="episodes")
 
 
-class TranscodeJob(Base):
-    """A re-encode the host has been asked to carry out.
+class FileJob(Base):
+    """Work on a file that only the machine holding it can do.
 
-    Sift runs on a machine that has never seen the media and cannot reach it, so
-    it does not transcode anything — it records an approved intention and waits.
-    An agent on the box holding the files claims the job, runs the encode, checks
-    the result, and reports back. The same philosophy as the restart and update
-    endpoints: hand control to the host rather than pretend to have it.
+    Sift runs where the media is not. It cannot delete a surplus episode or
+    re-encode a season, and pretending otherwise is how a tool like this loses
+    someone's library. So it records an approved intention and waits: an agent on
+    the box with the files claims the job, does the work, checks the result, and
+    reports back. Same philosophy as the restart and update endpoints — hand
+    control to the host rather than pretend to have it.
 
-    The direction of travel is deliberate. A hook Sift calls out to would need the
-    media host to be reachable from wherever Sift runs, which behind NAT it is
-    not, so the agent polls instead. That also means no inbound port has to be
-    opened for this to work.
+    The agent polls. A hook would need the media box reachable from wherever Sift
+    runs, which behind NAT it is not, and polling opens no inbound port.
 
-    ``source_size`` and ``source_duration_ms`` are recorded at approval time so
-    the result can be checked against what was actually there. An encode that
-    comes back materially shorter than the source is a failed encode, and
-    swapping it in would destroy the episode quietly.
+    **Why this exists rather than a Sonarr call.** Sonarr can delete an episode
+    file it imported. The surplus copies duplicate detection finds are the ones
+    Sonarr never imported — manual copies, failed imports, leftovers — so its API
+    has no handle on them. The file path is the only thing that does.
+
+    ``source_size`` and ``source_duration_ms`` are recorded at approval time so a
+    result can be checked against what was actually there. An encode that comes
+    back materially shorter than its source is a failed encode, and swapping it in
+    would destroy the episode quietly.
+
+    (Supersedes the ``transcode_jobs`` table from 2607.16.0, which never held a
+    row because nothing created one. That table cannot gain a ``kind`` column —
+    ``create_all`` adds tables to a live database but never columns — so this is a
+    new one. The old table is left in place, empty and unreferenced.)
     """
 
-    __tablename__ = "transcode_jobs"
+    __tablename__ = "file_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Not a hard FK: the action is the authority, and a job with no live action
-    # row must fail closed rather than cascade away unnoticed.
+    # delete | transcode
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    # Not a hard FK: the action is the authority, and a job whose action has gone
+    # must fail closed rather than cascade away unnoticed.
     action_id: Mapped[int] = mapped_column(Integer, index=True)
     # queued | claimed | done | failed
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
@@ -541,10 +552,13 @@ class TranscodeJob(Base):
     source_path: Mapped[str] = mapped_column(String(1024))
     source_size: Mapped[int | None] = mapped_column(BigInteger)
     source_duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    # Transcode only.
     target_resolution: Mapped[str | None] = mapped_column(String(16))
     target_codec: Mapped[str | None] = mapped_column(String(32))
-    # Refuse anything larger than this — an encode that grew is a mistake.
     expected_max_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    # What this job is for, in the owner's words, so the agent log and the
+    # Activity feed both read as something a person decided.
+    label: Mapped[str | None] = mapped_column(String(512))
 
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

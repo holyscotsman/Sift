@@ -11,14 +11,17 @@ inspect directly rather than taking on trust from whatever the outlier list says
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import ledger as ledger_analysis
 from ..analysis import outliers as outlier_analysis
 from ..analysis import tv_duplicates as tv_dup_analysis
 from ..analysis import tv_size as tv_size_analysis
-from .deps import AuthDep, get_session_factory
+from ..db.models import ActionActor, ActionType, MediaFile
+from . import routes_agent as agent_routes
+from .deps import AuthDep, get_action_engine, get_session_factory, get_settings
 from .schemas import (
     BaselinesResponse,
     BucketOut,
@@ -30,6 +33,8 @@ from .schemas import (
     PlanRequest,
     PlanResponse,
     PlanStepOut,
+    ReclaimActIn,
+    ReclaimActOut,
     SeasonSizeOut,
     ShowDuplicatesOut,
     SizeFindingOut,
@@ -203,6 +208,13 @@ def tv_storage(
                 ],
                 surplus=show.surplus,
                 bytes_reclaimable=show.reclaimable,
+                surplus_paths=[
+                    path
+                    for episode in show.episodes
+                    for copy in episode.copies
+                    if not copy.keep
+                    for path in copy.paths
+                ],
             )
             for show in shows
         ],
@@ -238,4 +250,88 @@ def tv_storage(
             )
             for i in odd
         ],
+    )
+
+
+@router.post("/act", response_model=ReclaimActOut)
+def act_on_finding(
+    body: ReclaimActIn,
+    request: Request,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> ReclaimActOut:
+    """Turn a finding into an approval-gated job the host can carry out.
+
+    Nothing is deleted here, and nothing is deleted when this returns. This
+    records one audited action and the jobs behind it; the files go only once you
+    approve, and only when an agent on the media box claims the work. Sift has no
+    access to your files and this endpoint does not change that.
+
+    The paths come from the finding you were looking at rather than being
+    recomputed, so what gets approved is exactly what was on screen. They are
+    checked against ``media_files`` before anything is recorded — a path Sift has
+    never seen is refused outright, which stops this being a way to have the agent
+    delete arbitrary things.
+    """
+    engine = get_action_engine(request)
+    settings = get_settings(request)
+    if not body.paths:
+        raise HTTPException(status_code=400, detail="nothing selected")
+
+    with factory() as session:
+        known = set(
+            session.scalars(select(MediaFile.path).where(MediaFile.path.in_(body.paths)))
+        )
+    unknown = [p for p in body.paths if p not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{len(unknown)} of those files aren't in the library snapshot — rescan first",
+        )
+
+    # dry_run is the server's floor, exactly as it is for film deletes: a client
+    # may ask for a live write and never force one.
+    dry_run = settings.actions.dry_run
+    action = engine.propose(
+        ActionType.DELETE,
+        movie_tmdb_id=int(body.target_id) if body.target_kind == "movie" else None,
+        payload={
+            "via": "agent",
+            "target_kind": body.target_kind,
+            "target_id": body.target_id,
+            "paths": list(body.paths),
+            "label": body.label,
+        },
+        actor=ActionActor.USER,
+        dry_run=dry_run,
+    )
+
+    job_ids: list[int] = []
+    with factory() as session:
+        sizes = {
+            path: size
+            for path, size in session.execute(
+                select(MediaFile.path, MediaFile.size).where(MediaFile.path.in_(body.paths))
+            )
+        }
+        for path in body.paths:
+            job = agent_routes.create_job(
+                session,
+                action_id=action.id,
+                kind="delete",
+                source_path=path,
+                source_size=sizes.get(path),
+                label=body.label,
+            )
+            job_ids.append(job.id)
+
+    return ReclaimActOut(
+        action_id=action.id,
+        job_ids=job_ids,
+        dry_run=dry_run,
+        detail=(
+            "Staged. Your approval is recorded and nothing will be removed while "
+            "the server is in dry-run."
+            if dry_run
+            else "Approve it and the agent on your media box will remove these files."
+        ),
     )

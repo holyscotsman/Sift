@@ -171,3 +171,153 @@ def test_tv_storage_is_empty_on_a_movies_only_library(client):
     assert body["duplicates"] == []
     assert body["inconsistencies"] == []
     assert body["duplicate_bytes"] == 0
+
+
+def _seed_actionable(factory) -> list[str]:
+    """One episode held twice, so there is a real surplus to act on."""
+    from sift.db.models import Episode, MediaFile, Season, Show
+
+    paths = ["/tv/scrubs/s01e01.1080p.mkv", "/tv/scrubs/s01e01.sd.mkv"]
+    with factory() as session:
+        session.add(Show(tvdb_id=76156, title="Scrubs", library_section="TV", in_plex=True))
+        season = Season(show_id=76156, season_number=1, air_year=2001)
+        session.add(season)
+        session.flush()
+        episode = Episode(season_id=season.id, episode_number=1, has_file=True)
+        session.add(episode)
+        session.flush()
+        for path, size, res in ((paths[0], 3 * GB, "1080p"), (paths[1], 1 * GB, "480p")):
+            session.add(
+                MediaFile(
+                    episode_id=episode.id,
+                    path=path,
+                    part_group=path,
+                    size=size,
+                    duration_ms=22 * MIN_MS,
+                    resolution=res,
+                    video_codec="h264",
+                    source="plex",
+                )
+            )
+        session.commit()
+    return paths
+
+
+def test_acting_on_a_finding_records_an_action_and_its_jobs(client):
+    c, factory = client
+    paths = _seed_actionable(factory)
+    body = c.post(
+        "/api/storage/act",
+        json={
+            "target_kind": "show",
+            "target_id": "76156",
+            "paths": [paths[1]],
+            "label": "Scrubs S1E1 surplus copy",
+        },
+    ).json()
+    assert len(body["job_ids"]) == 1
+
+    from sift.db.models import Action, ActionStatus, FileJob
+
+    with factory() as session:
+        action = session.get(Action, body["action_id"])
+        assert action is not None
+        # Proposed, not approved — asking is not agreeing.
+        assert action.status == ActionStatus.PROPOSED
+        assert action.payload["via"] == "agent"
+        job = session.get(FileJob, body["job_ids"][0])
+        assert job is not None and job.kind == "delete"
+        assert job.source_path == paths[1]
+
+
+def test_a_path_sift_has_never_seen_is_refused(client):
+    """NEGATIVE CONTROL, and the one that matters most. Without it this endpoint
+    is a way to have an agent with filesystem access delete anything on the box."""
+    c, factory = client
+    _seed_actionable(factory)
+    response = c.post(
+        "/api/storage/act",
+        json={"target_kind": "show", "target_id": "76156", "paths": ["/etc/passwd"]},
+    )
+    assert response.status_code == 400
+
+    from sift.db.models import FileJob
+
+    with factory() as session:
+        assert session.query(FileJob).count() == 0
+
+
+def test_an_empty_selection_is_refused(client):
+    """NEGATIVE CONTROL."""
+    c, factory = client
+    _seed_actionable(factory)
+    assert (
+        c.post(
+            "/api/storage/act",
+            json={"target_kind": "show", "target_id": "76156", "paths": []},
+        ).status_code
+        == 400
+    )
+
+
+def test_a_proposed_job_is_not_claimable_until_approved(client, factory):
+    """The whole point of proposing rather than doing, pinned from both sides:
+    unapproved hands out nothing, approved-and-live hands out exactly the file
+    that was selected."""
+    from sift.services import config_store
+
+    c, factory = client
+    paths = _seed_actionable(factory)
+    with factory() as session:
+        config_store.set_config(session, {"transcode": {"agent_token": "tok"}})
+    # Let the instance issue real writes; dry-run is the server's floor and would
+    # otherwise (correctly) hand out nothing at all.
+    c.put("/api/config/actions", json={"dry_run": False})
+
+    body = c.post(
+        "/api/storage/act",
+        json={"target_kind": "show", "target_id": "76156", "paths": [paths[1]]},
+    ).json()
+    assert body["dry_run"] is False
+
+    before = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": "tok"})
+    assert before.json()["job"] is None
+
+    c.post(f"/api/actions/{body['action_id']}/approve")
+    after = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": "tok"}).json()
+    assert after["job"]["source_path"] == paths[1]
+    assert after["job"]["kind"] == "delete"
+
+
+def test_a_staged_instance_records_the_approval_but_frees_nothing(client, factory):
+    """NEGATIVE CONTROL: dry-run means your decision is audited and the disk is
+    untouched. The agent must be handed nothing even after you approve."""
+    from sift.services import config_store
+
+    c, factory = client
+    paths = _seed_actionable(factory)
+    with factory() as session:
+        config_store.set_config(session, {"transcode": {"agent_token": "tok"}})
+    c.put("/api/config/actions", json={"dry_run": True})
+
+    body = c.post(
+        "/api/storage/act",
+        json={"target_kind": "show", "target_id": "76156", "paths": [paths[1]]},
+    ).json()
+    assert body["dry_run"] is True
+
+    c.post(f"/api/actions/{body['action_id']}/approve")
+    claimed = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": "tok"})
+    assert claimed.json()["job"] is None
+
+
+def test_the_surplus_paths_never_include_the_copy_being_kept(client):
+    """NEGATIVE CONTROL, and the one that decides whether this is safe. These
+    paths are what a click sends to be deleted; the best copy of each episode
+    must not be among them."""
+    c, factory = client
+    paths = _seed_actionable(factory)
+    body = c.get("/api/storage/tv").json()
+    show = body["duplicates"][0]
+    assert show["surplus_paths"] == [paths[1]]  # the 480p one
+    assert paths[0] not in show["surplus_paths"]  # the 1080p one is kept

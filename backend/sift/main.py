@@ -29,6 +29,7 @@ from .actions.radarr_writes import RadarrWriter
 from .ai.registry import build_llm_provider
 from .api import (
     routes_actions,
+    routes_agent,
     routes_analysis,
     routes_ask,
     routes_auth,
@@ -44,7 +45,6 @@ from .api import (
     routes_settings,
     routes_storage,
     routes_system,
-    routes_transcode,
     ws,
 )
 from .api.deps import AppState
@@ -190,12 +190,12 @@ def create_app(
         routes_settings,
         routes_storage,
         routes_system,
-        routes_transcode,
+        routes_agent,
         routes_profile,
     ):
         app.include_router(module.router)
     # The agent surface authenticates with its own shared token, not a session.
-    app.include_router(routes_transcode.agent_router)
+    app.include_router(routes_agent.agent_router)
     app.include_router(ws.router)
 
     @app.get("/api/version")

@@ -561,6 +561,8 @@ export interface ShowDuplicates {
   episodes: DuplicateEpisode[];
   surplus: number;
   bytes_reclaimable: number;
+  // The files that would go. The best copy of each episode is not among them.
+  surplus_paths: string[];
 }
 
 export interface SeasonSize {
@@ -596,4 +598,12 @@ export interface TvStorageResponse {
   season_excess_bytes: number;
   // Not a reclaim figure — fixing one usually costs space.
   inconsistencies: Inconsistency[];
+}
+
+export interface ReclaimActResult {
+  action_id: number;
+  job_ids: number[];
+  // False when the server is staging rather than issuing.
+  dry_run: boolean;
+  detail: string;
 }

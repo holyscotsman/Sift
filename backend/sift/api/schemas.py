@@ -648,8 +648,12 @@ class PlanResponse(BaseModel):
 # ---------------------------------------------------------------------- transcode
 
 
-class TranscodeJobOut(BaseModel):
+class FileJobOut(BaseModel):
     id: int
+    # delete | transcode
+    kind: str = "transcode"
+    # What this job is for, in the owner's words.
+    label: str | None = None
     action_id: int
     # queued | claimed | done | failed
     status: str
@@ -663,22 +667,23 @@ class TranscodeJobOut(BaseModel):
     error: str | None = None
 
 
-class TranscodeClaimOut(BaseModel):
+class FileJobClaimOut(BaseModel):
     # None when there is nothing approved and waiting.
-    job: TranscodeJobOut | None = None
+    job: FileJobOut | None = None
 
 
-class TranscodeResultIn(BaseModel):
+class FileJobResultIn(BaseModel):
     ok: bool
     output_path: str | None = None
-    # Required when ok — a success with no numbers behind it cannot be verified,
-    # and an unverifiable success is how a failed encode gets swapped in.
+    # Required for a successful transcode — a success with no numbers behind it
+    # cannot be verified, and an unverifiable success is how a failed encode gets
+    # swapped in. A delete has nothing to measure, so it is exempt.
     output_size: int | None = None
     output_duration_ms: int | None = None
     error: str | None = None
 
 
-class TranscodeCapability(BaseModel):
+class AgentCapability(BaseModel):
     # Whether an agent could authenticate at all.
     agent_configured: bool
     # Without Sonarr a downgrade cannot be written back, so Sonarr would simply
@@ -702,6 +707,10 @@ class ShowDuplicatesOut(BaseModel):
     episodes: list[DuplicateEpisodeOut]
     surplus: int
     bytes_reclaimable: int
+    # The files that would go — the best copy of each episode is not among them.
+    # Sent so that what you approve is exactly what you were shown, rather than
+    # something recomputed after the fact.
+    surplus_paths: list[str] = []
 
 
 class SeasonSizeOut(BaseModel):
@@ -740,3 +749,22 @@ class TvStorageResponse(BaseModel):
     # usually costs space rather than saving it, which is why it is reported
     # separately from the ledger instead of inside it.
     inconsistencies: list[InconsistencyOut]
+
+
+class ReclaimActIn(BaseModel):
+    # show | movie
+    target_kind: str
+    target_id: str
+    # Paths of the surplus copies to remove. Sent by the client from a finding
+    # rather than recomputed here, so what you approve is exactly what you saw.
+    paths: list[str]
+    label: str | None = None
+
+
+class ReclaimActOut(BaseModel):
+    action_id: int
+    job_ids: list[int]
+    # False when the server is staging rather than issuing — the same floor that
+    # governs film deletes.
+    dry_run: bool
+    detail: str
