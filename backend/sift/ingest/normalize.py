@@ -475,3 +475,152 @@ def normalize_tmdb_movie(raw: dict[str, Any]) -> dict[str, Any]:
         "us_theatrical": _us_theatrical(raw),
         "is_independent": _is_independent(raw),
     }
+
+
+# ---------------------------------------------------------------------- Sonarr
+
+_TVDB_GUID = re.compile(r"tvdb://(\d+)")
+
+
+def normalize_sonarr_series(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """A series and its per-season statistics.
+
+    Sonarr reports ``sizeOnDisk`` and episode counts per season on this one
+    payload, so the "which show is heaviest" question is answered for the whole
+    library without touching a single episode.
+    """
+    tvdb_id = _int_or_none(raw.get("tvdbId"))
+    if not tvdb_id:
+        # Without the id there is nothing to key on and nothing Plex can be
+        # matched against, so the row would be unreachable rather than merely
+        # incomplete.
+        return None
+    seasons = []
+    for season in raw.get("seasons", []) or []:
+        if not isinstance(season, dict):
+            continue
+        number = season.get("seasonNumber")
+        if number is None:
+            continue
+        stats = season.get("statistics") or {}
+        seasons.append(
+            {
+                "season_number": int(number),
+                "size_on_disk": _int_or_none(stats.get("sizeOnDisk")),
+                "episode_count": int(
+                    stats.get("totalEpisodeCount") or stats.get("episodeCount") or 0
+                ),
+                "episode_file_count": int(stats.get("episodeFileCount") or 0),
+            }
+        )
+    return {
+        "tvdb_id": tvdb_id,
+        "tmdb_id": _int_or_none(raw.get("tmdbId")),
+        "sonarr_id": _int_or_none(raw.get("id")),
+        "title": raw.get("title") or "",
+        "year": _int_or_none(raw.get("year")),
+        "status": raw.get("status") or None,
+        "network": raw.get("network") or None,
+        "genres": list(raw.get("genres", []) or []),
+        # Sonarr's runtime is the typical episode length, which is exactly the
+        # signal wanted: a 22-minute comedy and a 55-minute drama ask different
+        # things of the picture.
+        "runtime": _int_or_none(raw.get("runtime")),
+        "monitored": bool(raw.get("monitored", False)),
+        "quality_profile_id": _int_or_none(raw.get("qualityProfileId")),
+        "original_language": (raw.get("originalLanguage") or {}).get("name")
+        if isinstance(raw.get("originalLanguage"), dict)
+        else None,
+        "seasons": seasons,
+    }
+
+
+def normalize_sonarr_episode(raw: dict[str, Any]) -> dict[str, Any] | None:
+    season = raw.get("seasonNumber")
+    number = raw.get("episodeNumber")
+    if season is None or number is None:
+        return None
+    return {
+        "season_number": int(season),
+        "episode_number": int(number),
+        "title": raw.get("title") or None,
+        "air_date": parse_dt(raw.get("airDateUtc") or raw.get("airDate")),
+        "sonarr_episode_id": _int_or_none(raw.get("id")),
+        # The exact discriminator for multi-episode files: two episodes sharing a
+        # file id are one file, not a duplicate.
+        "sonarr_episode_file_id": _int_or_none(raw.get("episodeFileId")),
+        "has_file": bool(raw.get("hasFile", False)),
+    }
+
+
+def normalize_sonarr_episode_file(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """One episode file, as a media-file fragment tagged with its Sonarr id."""
+    file_id = _int_or_none(raw.get("id"))
+    if not file_id:
+        return None
+    record = normalize_media_info(
+        raw.get("mediaInfo"),
+        path=raw.get("path"),
+        size=raw.get("size"),
+        container=(raw.get("path") or "").rpartition(".")[2] or None,
+        source="sonarr",
+    )
+    if record is None:
+        return None
+    record["sonarr_episode_file_id"] = file_id
+    return record
+
+
+# ------------------------------------------------------------------- Plex (TV)
+
+
+def normalize_plex_show(
+    item: dict[str, Any], *, section_title: str, is_kids: bool
+) -> dict[str, Any] | None:
+    """A show, keyed on the TVDB id Sonarr also speaks."""
+    tvdb_id = None
+    for guid in item.get("Guid", []) or []:
+        value = guid.get("id", "") if isinstance(guid, dict) else ""
+        if m := _TVDB_GUID.search(value):
+            tvdb_id = int(m.group(1))
+            break
+    if tvdb_id is None and (m := _TVDB_GUID.search(item.get("guid", "") or "")):
+        tvdb_id = int(m.group(1))
+    if tvdb_id is None:
+        return None
+    tmdb_id, _imdb = extract_plex_ids(item)
+    return {
+        "tvdb_id": tvdb_id,
+        "tmdb_id": tmdb_id,
+        "plex_rating_key": (
+            str(item.get("ratingKey")) if item.get("ratingKey") is not None else None
+        ),
+        "title": item.get("title") or "",
+        "year": _int_or_none(item.get("year")),
+        "library_section": section_title,
+        "is_kids": is_kids,
+    }
+
+
+def normalize_plex_episode(item: dict[str, Any]) -> dict[str, Any] | None:
+    """One episode, tied back to its show by Plex's grandparent rating key.
+
+    ``parentIndex``/``index`` are the season and episode numbers. An episode
+    missing either cannot be placed in a season, and a duplicate detector that
+    guessed their position would group unrelated files together.
+    """
+    season = item.get("parentIndex")
+    number = item.get("index")
+    show_key = item.get("grandparentRatingKey")
+    if season is None or number is None or show_key is None:
+        return None
+    return {
+        "show_rating_key": str(show_key),
+        "season_number": int(season),
+        "episode_number": int(number),
+        "title": item.get("title") or None,
+        "plex_rating_key": (
+            str(item.get("ratingKey")) if item.get("ratingKey") is not None else None
+        ),
+        "media_files": plex_media_files(item),
+    }

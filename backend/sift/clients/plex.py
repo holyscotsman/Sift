@@ -17,6 +17,12 @@ from .base import BaseClient, HealthStatus, RateLimiter, RetryPolicy
 
 _PAGE_SIZE = 200
 
+# Plex's library item types. A show section holds all three; which one you ask for
+# decides what comes back.
+MOVIE = 1
+SHOW = 2
+EPISODE = 4
+
 
 class PlexClient(BaseClient):
     def __init__(
@@ -61,8 +67,15 @@ class PlexClient(BaseClient):
         container = data.get("MediaContainer", {}) if isinstance(data, dict) else {}
         return list(container.get("Directory", []))
 
-    async def get_section_items(self, section_key: str | int) -> list[dict[str, Any]]:
-        """All items in a section, paged to keep memory flat on large libraries."""
+    async def get_section_items(
+        self, section_key: str | int, *, item_type: int = MOVIE
+    ) -> list[dict[str, Any]]:
+        """All items of one type in a section, paged to keep memory flat.
+
+        ``item_type`` selects the level to read: a show section holds shows,
+        seasons and episodes, and asking for episodes directly returns them flat
+        across the whole section rather than requiring a walk down the tree.
+        """
         items: list[dict[str, Any]] = []
         start = 0
         while True:
@@ -72,7 +85,7 @@ class PlexClient(BaseClient):
                 # includeGuids=1 makes Plex return the `Guid` array (tmdb://, imdb://)
                 # in the listing — without it, modern-agent items carry only a
                 # `plex://` guid and can't be resolved to a tmdb_id.
-                params={"type": 1, "includeGuids": 1},
+                params={"type": item_type, "includeGuids": 1},
                 headers={
                     "X-Plex-Container-Start": str(start),
                     "X-Plex-Container-Size": str(_PAGE_SIZE),

@@ -22,6 +22,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import junk
+from ..clients.plex import EPISODE as PLEX_EPISODE
+from ..clients.plex import SHOW as PLEX_SHOW
 from ..clients.plex import PlexClient
 from ..clients.radarr import RadarrClient
 from ..clients.sonarr import SonarrClient
@@ -31,6 +33,7 @@ from ..config import Settings
 from ..db.models import (
     Collection,
     CollectionMember,
+    Episode,
     MediaFile,
     Movie,
     MoviePerson,
@@ -40,6 +43,8 @@ from ..db.models import (
     RatingSource,
     ScanRun,
     ScanStatus,
+    Season,
+    Show,
     WatchHistory,
     utcnow,
 )
@@ -47,7 +52,17 @@ from . import normalize
 
 log = logging.getLogger("sift.ingest")
 
-PHASES = ("preflight", "plex", "radarr", "tautulli", "tmdb", "finalize", "score", "ai")
+PHASES = (
+    "preflight",
+    "plex",
+    "radarr",
+    "sonarr",
+    "tautulli",
+    "tmdb",
+    "finalize",
+    "score",
+    "ai",
+)
 
 # A configured service that doesn't answer this fast is treated as down for the run.
 # Generous enough for a cold Plex behind a slow tunnel, short enough that a dead
@@ -211,17 +226,320 @@ class ScanPipeline:
         kids = {s.lower() for s in self.settings.plex.kids_sections}
         sections = await self.plex.get_sections()
         items: list[dict[str, Any]] = []
+        shows: list[dict[str, Any]] = []
+        episodes: list[dict[str, Any]] = []
         for section in sections:
-            if section.get("type") != "movie":
-                continue
+            kind = section.get("type")
             title = section.get("title", "")
             is_kids = title.lower() in kids
-            raw_items = await self.plex.get_section_items(section["key"])
-            for raw in raw_items:
-                items.append(
-                    normalize.normalize_plex_item(raw, section_title=title, is_kids=is_kids)
+            if kind == "movie":
+                raw_items = await self.plex.get_section_items(section["key"])
+                for raw in raw_items:
+                    items.append(
+                        normalize.normalize_plex_item(raw, section_title=title, is_kids=is_kids)
+                    )
+            elif kind == "show":
+                # Two passes over the section. Shows carry the TVDB guid that keys
+                # them to Sonarr; episodes carry the files. Episodes are read flat
+                # across the section rather than walked per series, which is a
+                # request per page instead of one per show.
+                for raw in await self.plex.get_section_items(section["key"], item_type=PLEX_SHOW):
+                    show = normalize.normalize_plex_show(
+                        raw, section_title=title, is_kids=is_kids
+                    )
+                    if show is not None:
+                        shows.append(show)
+                for raw in await self.plex.get_section_items(
+                    section["key"], item_type=PLEX_EPISODE
+                ):
+                    episode = normalize.normalize_plex_episode(raw)
+                    if episode is not None:
+                        episodes.append(episode)
+        counts = await asyncio.to_thread(self._persist_plex, items)
+        if shows or episodes:
+            counts.update(await asyncio.to_thread(self._persist_plex_tv, shows, episodes))
+        return counts
+
+    def _persist_plex_tv(
+        self, shows: list[dict[str, Any]], episodes: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        """Record what Plex holds for TV, and every file behind it.
+
+        Sonarr describes one file per episode, which is the right answer to "what
+        should be there" and the wrong one for "what is actually on disk". Plex
+        reports every copy it can see, so this is what makes a duplicated episode
+        visible at all — the same reason ``plex_copies`` exists for films.
+        """
+        with self.factory() as session:
+            existing: dict[int, Show] = {s.tvdb_id: s for s in session.scalars(select(Show))}
+            by_rating_key: dict[str, Show] = {}
+            for data in shows:
+                tvdb_id = data["tvdb_id"]
+                show = existing.get(tvdb_id)
+                if show is None:
+                    show = Show(tvdb_id=tvdb_id, title=data["title"])
+                    session.add(show)
+                    existing[tvdb_id] = show
+                # Presence in a Plex show section IS library membership, exactly
+                # as for films.
+                show.in_plex = True
+                show.plex_rating_key = data["plex_rating_key"]
+                show.library_section = data["library_section"]
+                show.is_kids = data["is_kids"]
+                show.title = show.title or data["title"]
+                show.year = show.year if show.year is not None else data["year"]
+                show.tmdb_id = show.tmdb_id or data["tmdb_id"]
+                if data["plex_rating_key"]:
+                    by_rating_key[data["plex_rating_key"]] = show
+            session.flush()
+
+            seasons: dict[tuple[int, int], Season] = {
+                (s.show_id, s.season_number): s for s in session.scalars(select(Season))
+            }
+            known: dict[tuple[int, int], Episode] = {}
+            for episode_row in session.scalars(select(Episode)):
+                known[(episode_row.season_id, episode_row.episode_number)] = episode_row
+
+            records: list[tuple[Episode, dict[str, Any]]] = []
+            written = 0
+            for data in episodes:
+                show = by_rating_key.get(data["show_rating_key"])
+                if show is None:
+                    # An episode whose show carried no TVDB guid. Filing it under a
+                    # guessed show would group unrelated files together, which is
+                    # exactly the mistake duplicate detection must not make.
+                    continue
+                key = (show.tvdb_id, data["season_number"])
+                season = seasons.get(key)
+                if season is None:
+                    season = Season(show_id=show.tvdb_id, season_number=data["season_number"])
+                    session.add(season)
+                    session.flush()
+                    seasons[key] = season
+                episode_key = (season.id, data["episode_number"])
+                episode = known.get(episode_key)
+                if episode is None:
+                    episode = Episode(season_id=season.id, episode_number=data["episode_number"])
+                    session.add(episode)
+                    known[episode_key] = episode
+                episode.title = episode.title or data["title"]
+                episode.plex_rating_key = data["plex_rating_key"]
+                if data["media_files"]:
+                    episode.has_file = True
+                written += 1
+                for record in data["media_files"]:
+                    records.append((episode, record))
+            session.flush()
+            files = self._sync_episode_media(session, records, source="plex")
+            # Plex has spoken for these episodes, so Sonarr's view of the same
+            # files must not be counted alongside its own.
+            superseded = [e.id for e, _ in records if e.id is not None]
+            for start in range(0, len(superseded), 500):
+                session.execute(
+                    delete(MediaFile).where(
+                        MediaFile.episode_id.in_(superseded[start : start + 500]),
+                        MediaFile.source != "plex",
+                    )
                 )
-        return await asyncio.to_thread(self._persist_plex, items)
+            session.commit()
+        return {
+            "plex_shows": len(shows),
+            "plex_episodes": written,
+            "plex_episode_files": files,
+        }
+
+    async def _phase_sonarr(self) -> dict[str, int]:
+        """Read the TV catalog: the shows, their seasons, and what backs each episode.
+
+        One request returns every series with per-season ``sizeOnDisk``, which is
+        already enough to rank shows by weight. The per-series calls that follow
+        are what make the finer questions answerable — ``episodeFileId`` is the
+        exact test for a multi-episode file, and the file records carry the media
+        detail the bitrate baselines need.
+        """
+        if self.sonarr is None:
+            return {}
+        raw_series = await self.sonarr.get_series()
+        series = [
+            s for s in (normalize.normalize_sonarr_series(r) for r in raw_series) if s is not None
+        ]
+        detail: dict[int, dict[str, Any]] = {}
+        for show in series:
+            sonarr_id = show["sonarr_id"]
+            if not sonarr_id:
+                continue
+            episodes = [
+                e
+                for e in (
+                    normalize.normalize_sonarr_episode(r)
+                    for r in await self.sonarr.get_episodes(sonarr_id)
+                )
+                if e is not None
+            ]
+            files = [
+                f
+                for f in (
+                    normalize.normalize_sonarr_episode_file(r)
+                    for r in await self.sonarr.get_episode_files(sonarr_id)
+                )
+                if f is not None
+            ]
+            detail[show["tvdb_id"]] = {"episodes": episodes, "files": files}
+        return await asyncio.to_thread(self._persist_sonarr, series, detail)
+
+    def _persist_sonarr(
+        self, series: list[dict[str, Any]], detail: dict[int, dict[str, Any]]
+    ) -> dict[str, int]:
+        """Persist shows, seasons, episodes and their files.
+
+        Preloaded and batched throughout: a TV library has an order of magnitude
+        more episodes than a film library has films, so the per-row lookups that
+        merely slowed the Plex phase would be far worse here.
+        """
+        with self.factory() as session:
+            tvdb_ids = [s["tvdb_id"] for s in series]
+            shows: dict[int, Show] = {}
+            for start in range(0, len(tvdb_ids), 500):
+                batch = tvdb_ids[start : start + 500]
+                for show_row in session.scalars(select(Show).where(Show.tvdb_id.in_(batch))):
+                    shows[show_row.tvdb_id] = show_row
+            seasons: dict[tuple[int, int], Season] = {
+                (s.show_id, s.season_number): s for s in session.scalars(select(Season))
+            }
+            episodes: dict[tuple[int, int], Episode] = {}
+            for episode_row in session.scalars(select(Episode)):
+                episodes[(episode_row.season_id, episode_row.episode_number)] = episode_row
+
+            episode_count = 0
+            file_records: list[tuple[Episode, dict[str, Any]]] = []
+            for data in series:
+                tvdb_id = data["tvdb_id"]
+                show = shows.get(tvdb_id)
+                if show is None:
+                    show = Show(tvdb_id=tvdb_id, title=data["title"])
+                    session.add(show)
+                    shows[tvdb_id] = show
+                show.tmdb_id = data["tmdb_id"] or show.tmdb_id
+                show.sonarr_id = data["sonarr_id"]
+                show.title = data["title"] or show.title
+                show.year = data["year"] if data["year"] is not None else show.year
+                show.status = data["status"]
+                show.network = data["network"]
+                show.genres = data["genres"]
+                show.runtime = data["runtime"]
+                show.monitored = data["monitored"]
+                show.quality_profile_id = data["quality_profile_id"]
+
+                found = detail.get(tvdb_id, {})
+                by_number = {e["episode_number"]: e for e in found.get("episodes", [])}
+                files_by_id = {
+                    f["sonarr_episode_file_id"]: f for f in found.get("files", [])
+                }
+                # Air year is taken per season from the episodes themselves. The
+                # series payload carries only one year, and a show's first year is
+                # the wrong ceiling for its later seasons — Scrubs began in 2001
+                # and ended in HD.
+                years: dict[int, list[int]] = {}
+                for episode in found.get("episodes", []):
+                    if episode["air_date"]:
+                        years.setdefault(episode["season_number"], []).append(
+                            episode["air_date"].year
+                        )
+
+                for season_data in data["seasons"]:
+                    number = season_data["season_number"]
+                    season = seasons.get((tvdb_id, number))
+                    if season is None:
+                        season = Season(show_id=tvdb_id, season_number=number)
+                        session.add(season)
+                        session.flush()  # need the id to hang episodes off
+                        seasons[(tvdb_id, number)] = season
+                    season.size_on_disk = season_data["size_on_disk"]
+                    season.episode_count = season_data["episode_count"]
+                    season.episode_file_count = season_data["episode_file_count"]
+                    season_years = years.get(number)
+                    season.air_year = min(season_years) if season_years else season.air_year
+
+                    for episode_data in found.get("episodes", []):
+                        if episode_data["season_number"] != number:
+                            continue
+                        key = (season.id, episode_data["episode_number"])
+                        episode = episodes.get(key)
+                        if episode is None:
+                            episode = Episode(
+                                season_id=season.id,
+                                episode_number=episode_data["episode_number"],
+                            )
+                            session.add(episode)
+                            episodes[key] = episode
+                        episode.title = episode_data["title"]
+                        episode.air_date = episode_data["air_date"]
+                        episode.sonarr_episode_id = episode_data["sonarr_episode_id"]
+                        episode.sonarr_episode_file_id = episode_data["sonarr_episode_file_id"]
+                        episode.has_file = episode_data["has_file"]
+                        episode_count += 1
+                        record = files_by_id.get(episode_data["sonarr_episode_file_id"])
+                        if record is not None:
+                            file_records.append((episode, record))
+                _ = by_number
+            session.flush()
+            files = self._sync_episode_media(session, file_records, source="sonarr")
+            session.commit()
+        return {
+            "sonarr_shows": len(series),
+            "sonarr_episodes": episode_count,
+            "sonarr_media_files": files,
+        }
+
+    def _sync_episode_media(
+        self,
+        session: Session,
+        records: list[tuple[Episode, dict[str, Any]]],
+        *,
+        source: str,
+    ) -> int:
+        """Reconcile ``media_files`` for episodes, from one source.
+
+        Identity is the **path**, not the episode. A single "S01E01-E02" file is
+        one file on disk that two episodes both point at, so keying on the episode
+        would store it twice and report double the space it occupies. It is
+        recorded once, against the first episode it covers.
+        """
+
+        def identity(path: str | None, episode_id: int | None) -> str:
+            return path or f"episode:{episode_id}"
+
+        existing: dict[str, MediaFile] = {}
+        for row in session.scalars(
+            select(MediaFile).where(MediaFile.episode_id.is_not(None), MediaFile.source == source)
+        ):
+            existing[identity(row.path, row.episode_id)] = row
+
+        written = 0
+        seen: set[str] = set()
+        for episode, record in records:
+            payload = {k: v for k, v in record.items() if k != "sonarr_episode_file_id"}
+            key = identity(payload.get("path"), episode.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            found = existing.get(key)
+            if found is None:
+                row = MediaFile(episode_id=episode.id, source=source)
+                session.add(row)
+                existing[key] = row
+            else:
+                row = found
+            for name, value in payload.items():
+                setattr(row, name, value)
+            row.episode_id = episode.id
+            row.seen_at = utcnow()
+            written += 1
+
+        stale = [row.id for key, row in existing.items() if key not in seen and row.id is not None]
+        for start in range(0, len(stale), 500):
+            session.execute(delete(MediaFile).where(MediaFile.id.in_(stale[start : start + 500])))
+        return written
 
     async def _phase_tautulli(self) -> dict[str, int]:
         if self.tautulli is None:
