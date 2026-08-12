@@ -1,0 +1,265 @@
+// Storage — where the disk went, ranked by what you would actually get back.
+//
+// Read-only by design. This ships before anything can act on a finding, because
+// the verdicts rest on baselines measured from your own library and those numbers
+// deserve to be checked against reality before they drive a delete. The baselines
+// panel is here for exactly that.
+//
+// Duplicate copies come from /api/duplicates, which the backend has served since
+// 2607.14.0 with nothing on screen to show it.
+
+import { useEffect, useState } from "react";
+
+import { EmptyState, PageTitle, Pill, Skeleton } from "@/components/ui";
+import { api } from "@/lib/api";
+import { useDrawer } from "@/lib/drawer";
+import type { BaselinesResponse, DuplicatesResponse, MovieSizeResponse, SizeFinding } from "@/lib/types";
+
+function fmtSize(bytes: number | null | undefined): string {
+  if (!bytes) return "—";
+  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
+  return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function fmtRate(bytesPerHour: number): string {
+  return `${(bytesPerHour / 1e9).toFixed(2)} GB/h`;
+}
+
+function fmtRuntime(ms: number | null): string {
+  if (!ms) return "—";
+  const total = Math.round(ms / 60000);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// Each kind is a different remedy, so each gets its own words rather than a
+// single "problem" label that leaves you to work out what to do.
+const KIND: Record<string, { label: string; tone: "junk" | "borderline" | "accent"; note: string }> =
+  {
+    oversized: { label: "Oversized", tone: "borderline", note: "Shrink it" },
+    truncated: { label: "Not the film", tone: "junk", note: "Safe to delete" },
+    bad_rip: { label: "Bad rip", tone: "accent", note: "Replace it" },
+  };
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-fg3">{label}</span>
+      <span className="text-2xl font-bold tabular-nums">{value}</span>
+      {hint ? <span className="text-xs text-fg2">{hint}</span> : null}
+    </div>
+  );
+}
+
+function FindingRow({ finding, onOpen }: { finding: SizeFinding; onOpen: () => void }) {
+  const kind = KIND[finding.kind] ?? { label: finding.kind, tone: "accent" as const, note: "" };
+  return (
+    <div className="flex flex-wrap items-start gap-3 p-3.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onOpen}
+            className="truncate text-left text-sm font-semibold hover:underline"
+          >
+            {finding.title}
+          </button>
+          {finding.year ? <span className="text-xs text-fg3">{finding.year}</span> : null}
+          <Pill tone={kind.tone}>{kind.label}</Pill>
+          {finding.resolution ? <Pill>{finding.resolution}</Pill> : null}
+          {finding.video_codec ? <Pill>{finding.video_codec}</Pill> : null}
+        </div>
+        <ul className="mt-1 flex flex-col gap-0.5 text-xs text-fg2">
+          {finding.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+        <span className="text-sm font-bold tabular-nums">{fmtSize(finding.size)}</span>
+        <span className="text-xs text-fg3 tabular-nums">{fmtRuntime(finding.duration_ms)}</span>
+        {finding.bytes_reclaimable > 0 ? (
+          <span className="text-xs font-semibold" style={{ color: "var(--keep)" }}>
+            {fmtSize(finding.bytes_reclaimable)} back
+          </span>
+        ) : (
+          <span className="text-xs text-fg3">{kind.note}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Storage() {
+  const [sizes, setSizes] = useState<MovieSizeResponse | null>(null);
+  const [dupes, setDupes] = useState<DuplicatesResponse | null>(null);
+  const [baselines, setBaselines] = useState<BaselinesResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showBaselines, setShowBaselines] = useState(false);
+  const drawer = useDrawer();
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([api.movieSizes(), api.duplicates(), api.baselines()])
+      .then(([s, d, b]) => {
+        if (!live) return;
+        setSizes(s);
+        setDupes(d);
+        setBaselines(b);
+      })
+      .catch((e) => live && setError(e?.detail || "Couldn't read storage figures."));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const loading = !sizes && !error;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageTitle
+        title="Storage"
+        subhead="Where the disk went, ranked by what you would actually get back. Nothing here removes anything — findings become actions on the Junk screen, one approval at a time."
+      />
+
+      {error ? (
+        <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="panel flex flex-col gap-3 p-4" aria-busy="true">
+          <span className="sr-only" role="status">
+            Reading storage figures
+          </span>
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+      ) : null}
+
+      {sizes ? (
+        <div className="panel flex flex-wrap gap-8 p-4">
+          <Stat
+            label="Reclaimable"
+            value={fmtSize(sizes.total_reclaimable)}
+            hint="from film files alone"
+          />
+          <Stat
+            label="Surplus copies"
+            value={String(dupes?.total_surplus ?? 0)}
+            hint="every film still kept"
+          />
+          <Stat label="Oversized" value={String(sizes.oversized_count)} hint="worth shrinking" />
+          <Stat
+            label="Not the film"
+            value={String(sizes.truncated_count)}
+            hint="samples and part downloads"
+          />
+          <Stat
+            label="Short films"
+            value={String(sizes.short_films_cleared)}
+            hint="checked and left alone"
+          />
+        </div>
+      ) : null}
+
+      {sizes && sizes.items.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">Film files</h2>
+          <div className="panel divide-y divide-line">
+            {sizes.items.map((finding) => (
+              <FindingRow
+                key={`${finding.tmdb_id}-${finding.path ?? ""}`}
+                finding={finding}
+                onOpen={() => drawer.open(finding.tmdb_id)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {sizes && sizes.items.length === 0 && !error ? (
+        <EmptyState
+          title="Nothing is out of place"
+          hint="Every film file is about the size it should be for its length, resolution and codec."
+        />
+      ) : null}
+
+      {dupes && dupes.items.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-fg2">
+            Films held more than once
+          </h2>
+          <p className="text-sm text-fg2">
+            The safest space there is — every film survives, only the surplus copies go.
+          </p>
+          <div className="panel divide-y divide-line">
+            {dupes.items.map((group) => (
+              <div key={group.tmdb_id} className="flex items-center gap-3 p-3.5">
+                <button
+                  onClick={() => drawer.open(group.tmdb_id)}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-semibold hover:underline"
+                >
+                  {group.title}
+                  {group.year ? <span className="ml-2 text-xs text-fg3">{group.year}</span> : null}
+                </button>
+                <span className="text-xs text-fg2">
+                  {group.copies.length} copies in{" "}
+                  {[...new Set(group.copies.map((c) => c.library_section ?? "?"))].join(", ")}
+                </span>
+                <Pill tone="borderline">{group.surplus} could go</Pill>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {baselines && baselines.buckets.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <button
+            onClick={() => setShowBaselines((v) => !v)}
+            className="self-start text-sm font-bold uppercase tracking-wide text-fg2 hover:underline"
+            aria-expanded={showBaselines}
+          >
+            {showBaselines ? "Hide" : "Show"} what counts as normal here
+          </button>
+          {showBaselines ? (
+            <>
+              <p className="max-w-prose text-sm text-fg2">
+                Every verdict above compares a file with others of its resolution and codec. These
+                are those figures, measured from your own library. Where a row says “seeded”, there
+                were too few files of that kind to measure and a default was used instead.
+              </p>
+              <div className="panel overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-fg3">
+                      <th className="p-3 font-semibold">Resolution</th>
+                      <th className="p-3 font-semibold">Codec</th>
+                      <th className="p-3 font-semibold">Typical rate</th>
+                      <th className="p-3 font-semibold">Files</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {baselines.buckets.map((b) => (
+                      <tr key={`${b.resolution}-${b.codec}`} className="border-t border-line">
+                        <td className="p-3 font-semibold">{b.resolution}</td>
+                        <td className="p-3">{b.codec}</td>
+                        <td className="p-3 tabular-nums">{fmtRate(b.median_rate)}</td>
+                        <td className="p-3 tabular-nums">
+                          {b.observed ? b.samples : <span className="text-fg3">seeded</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+    </div>
+  );
+}

@@ -2,7 +2,9 @@
 // serves the built UI); the Vite dev server proxies /api and /ws to :8756.
 
 import type {
+  BaselinesResponse,
   DuplicatesResponse,
+  MovieSizeResponse,
   VersionStatus,
   RestartResponse,
   UpdateResponse,
@@ -284,6 +286,10 @@ export const api = {
     ),
   duplicates: (limit = 200) =>
     request<DuplicatesResponse>(`/api/duplicates?limit=${limit}`),
+
+  movieSizes: (limit = 200) =>
+    request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`),
+  baselines: () => request<BaselinesResponse>("/api/storage/baselines"),
   // Restart hands control to the host: it stops the process and the platform
   // brings it back. `supervised: false` means nothing will.
   versionStatus: () => request<VersionStatus>("/api/system/version"),

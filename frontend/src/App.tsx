@@ -21,6 +21,7 @@ const Ask = lazy(() => import("@/pages/Ask").then((m) => ({ default: m.Ask })));
 const TasteProfile = lazy(() =>
   import("@/pages/TasteProfile").then((m) => ({ default: m.TasteProfile })),
 );
+const Storage = lazy(() => import("@/pages/Storage").then((m) => ({ default: m.Storage })));
 const Activity = lazy(() => import("@/pages/Activity").then((m) => ({ default: m.Activity })));
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.Settings })));
 
@@ -39,6 +40,7 @@ export default function App() {
                     <Route path="missing" element={<Missing />} />
                     <Route path="collections" element={<Collections />} />
                     <Route path="junk" element={<Junk />} />
+                    <Route path="storage" element={<Storage />} />
                     <Route path="ask" element={<Ask />} />
                     <Route path="profile" element={<TasteProfile />} />
                     <Route path="activity" element={<Activity />} />

@@ -460,3 +460,47 @@ export interface VersionStatus {
   // Whether an in-app Update can actually act (a deploy hook is configured).
   can_update: boolean;
 }
+
+// ------------------------------------------------------------------- storage
+
+export interface SizeFinding {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  // oversized | truncated | bad_rip
+  kind: string;
+  path: string | null;
+  size: number;
+  duration_ms: number | null;
+  runtime_minutes: number | null;
+  resolution: string | null;
+  video_codec: string | null;
+  // Zero for a bad rip: the file is the whole film and stays on disk until a
+  // better copy replaces it.
+  bytes_reclaimable: number;
+  // 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+  risk_tier: number;
+  reasons: string[];
+}
+
+export interface MovieSizeResponse {
+  items: SizeFinding[];
+  total_reclaimable: number;
+  oversized_count: number;
+  truncated_count: number;
+  bad_rip_count: number;
+  short_films_cleared: number;
+}
+
+export interface Bucket {
+  resolution: string;
+  codec: string;
+  samples: number;
+  median_rate: number;
+  // False when this is a seeded default rather than measured from your library.
+  observed: boolean;
+}
+
+export interface BaselinesResponse {
+  buckets: Bucket[];
+}

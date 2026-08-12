@@ -11,6 +11,7 @@ const NAV = [
   { to: "/missing", label: "Missing" },
   { to: "/collections", label: "Collections" },
   { to: "/junk", label: "Junk" },
+  { to: "/storage", label: "Storage" },
   { to: "/ask", label: "Ask" },
   { to: "/profile", label: "Taste Profile" },
   { to: "/activity", label: "Activity" },
