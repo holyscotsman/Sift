@@ -44,6 +44,7 @@ from .api import (
     routes_settings,
     routes_storage,
     routes_system,
+    routes_transcode,
     ws,
 )
 from .api.deps import AppState
@@ -189,9 +190,12 @@ def create_app(
         routes_settings,
         routes_storage,
         routes_system,
+        routes_transcode,
         routes_profile,
     ):
         app.include_router(module.router)
+    # The agent surface authenticates with its own shared token, not a session.
+    app.include_router(routes_transcode.agent_router)
     app.include_router(ws.router)
 
     @app.get("/api/version")

@@ -50,6 +50,9 @@ class ActionType(enum.StrEnum):
     MONITOR = "monitor"
     UNMONITOR = "unmonitor"
     DELETE = "delete"
+    # Replaces a file with a smaller one. Destructive, so it is gated exactly as
+    # a delete is — and never executed by Sift, which has no access to the files.
+    TRANSCODE = "transcode"
 
 
 class ActionStatus(enum.StrEnum):
@@ -504,6 +507,50 @@ class Episode(Base):
     has_file: Mapped[bool] = mapped_column(Boolean, default=False)
 
     season: Mapped[Season] = relationship(back_populates="episodes")
+
+
+class TranscodeJob(Base):
+    """A re-encode the host has been asked to carry out.
+
+    Sift runs on a machine that has never seen the media and cannot reach it, so
+    it does not transcode anything — it records an approved intention and waits.
+    An agent on the box holding the files claims the job, runs the encode, checks
+    the result, and reports back. The same philosophy as the restart and update
+    endpoints: hand control to the host rather than pretend to have it.
+
+    The direction of travel is deliberate. A hook Sift calls out to would need the
+    media host to be reachable from wherever Sift runs, which behind NAT it is
+    not, so the agent polls instead. That also means no inbound port has to be
+    opened for this to work.
+
+    ``source_size`` and ``source_duration_ms`` are recorded at approval time so
+    the result can be checked against what was actually there. An encode that
+    comes back materially shorter than the source is a failed encode, and
+    swapping it in would destroy the episode quietly.
+    """
+
+    __tablename__ = "transcode_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Not a hard FK: the action is the authority, and a job with no live action
+    # row must fail closed rather than cascade away unnoticed.
+    action_id: Mapped[int] = mapped_column(Integer, index=True)
+    # queued | claimed | done | failed
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+
+    source_path: Mapped[str] = mapped_column(String(1024))
+    source_size: Mapped[int | None] = mapped_column(BigInteger)
+    source_duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    target_resolution: Mapped[str | None] = mapped_column(String(16))
+    target_codec: Mapped[str | None] = mapped_column(String(32))
+    # Refuse anything larger than this — an encode that grew is a mistake.
+    expected_max_bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class MediaFile(Base):

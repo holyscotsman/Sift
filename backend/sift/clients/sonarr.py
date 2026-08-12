@@ -80,3 +80,24 @@ class SonarrClient(BaseClient):
     async def get_quality_profiles(self) -> list[dict[str, Any]]:
         data = await self.get_json("/api/v3/qualityprofile")
         return list(data) if isinstance(data, list) else []
+
+    async def set_quality_profile(
+        self, series: dict[str, Any], profile_id: int, *, dry_run: bool = True
+    ) -> dict[str, Any]:
+        """Point a series at a different quality profile.
+
+        Without this a downgrade is undone: Sonarr's next search sees a season
+        below its cutoff and fetches the larger file straight back, so the space
+        is returned and then quietly spent again. Applying a downgrade and not
+        writing this back is worse than doing nothing, because it costs the
+        picture and keeps the disk.
+
+        Sonarr's series endpoint is a whole-object PUT, so the payload it gave us
+        is sent back with one field changed rather than reconstructed.
+        """
+        payload = {**series, "qualityProfileId": profile_id}
+        if dry_run:
+            return {"dry_run": True, "seriesId": series.get("id"), "qualityProfileId": profile_id}
+        return dict(
+            await self.request_json("PUT", f"/api/v3/series/{series.get('id')}", json=payload)
+        )

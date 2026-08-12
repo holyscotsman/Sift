@@ -27,6 +27,11 @@ log = logging.getLogger("sift.actions")
 # Actions that are reversible and therefore allowed to run without an approval.
 AUTONOMOUS_TYPES = frozenset({ActionType.ADD, ActionType.MONITOR, ActionType.UNMONITOR})
 
+# Actions that destroy something. A delete removes the file; a transcode replaces
+# it with a lossier one, which is the same thing spread over time. Both need an
+# explicit, recorded approval before they are issued at all.
+REQUIRES_APPROVAL = frozenset({ActionType.DELETE, ActionType.TRANSCODE})
+
 
 class ApprovalRequiredError(Exception):
     """Raised when an irreversible action is executed without a recorded approval."""
@@ -112,15 +117,26 @@ class ActionEngine:
             raise ValueError(f"action {action_id} is already {status}")
 
         # --- GOLDEN SAFETY RULE -------------------------------------------------
-        # An irreversible delete is refused unless it has been explicitly approved.
-        # This check is intentionally *before* any RadarrWriter call.
-        if action_type == ActionType.DELETE and status != ActionStatus.APPROVED:
-            self._mark(action_id, ActionStatus.FAILED, error="approval required for delete")
-            raise ApprovalRequiredError(
-                f"action {action_id}: a file delete requires explicit approval"
+        # An irreversible action is refused unless it has been explicitly approved.
+        # This check is intentionally *before* any writer call.
+        if action_type in REQUIRES_APPROVAL and status != ActionStatus.APPROVED:
+            self._mark(
+                action_id, ActionStatus.FAILED, error=f"approval required for {action_type}"
             )
-        if action_type not in AUTONOMOUS_TYPES and action_type != ActionType.DELETE:
+            raise ApprovalRequiredError(
+                f"action {action_id}: a {action_type} requires explicit approval"
+            )
+        if action_type not in AUTONOMOUS_TYPES and action_type not in REQUIRES_APPROVAL:
             raise ValueError(f"unknown action type {action_type}")
+        if action_type == ActionType.TRANSCODE:
+            # Sift has no access to the files and never will. An approved
+            # transcode becomes a job the host claims; nothing is dispatched to a
+            # writer here, which is why the delete guard above stays the only
+            # path to an irreversible write.
+            raise ValueError(
+                "a transcode is carried out by the host, not executed here — "
+                "approve it and let the transcode agent claim it"
+            )
 
         try:
             result = await self._dispatch(action_type, movie_id, payload, dry_run)

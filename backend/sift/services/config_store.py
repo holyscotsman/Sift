@@ -29,7 +29,7 @@ _CONN_KEY = "connections"
 _ACTIONS_KEY = "actions"
 
 # Non-secret fields we echo back; secret fields become ``<name>_set`` booleans.
-_SECRET_FIELDS = {"token", "api_key", "hook_url"}
+_SECRET_FIELDS = {"token", "api_key", "hook_url", "agent_token"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
@@ -44,6 +44,10 @@ _ALLOWED: dict[str, set[str]] = {
     # Host deploy hook for the in-app Update button. A secret URL — anyone with
     # it can trigger a deploy — so it is stored encrypted like an API key.
     "deploy": {"hook_url"},
+    # Shared secret the transcode agent presents when claiming work. Anyone
+    # holding it can read job paths and report results, so it is stored
+    # encrypted like an API key.
+    "transcode": {"agent_token"},
 }
 
 

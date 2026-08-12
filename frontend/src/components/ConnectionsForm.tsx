@@ -57,6 +57,12 @@ export const SERVICE_SPECS: ServiceSpec[] = [
     ],
   },
   {
+    key: "transcode",
+    label: "Transcoding",
+    hint: "Optional — a shared secret the transcode agent on your media box presents when claiming approved jobs. Sift never touches a file itself. Stored encrypted; anyone holding it can read job paths.",
+    fields: [{ name: "agent_token", label: "Agent token", secret: true }],
+  },
+  {
     key: "overseerr",
     label: "Overseerr",
     hint: "Optional — when connected, add-requests go through Overseerr's approval pipeline instead of straight to Radarr.",

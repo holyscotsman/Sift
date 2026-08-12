@@ -643,3 +643,44 @@ class PlanResponse(BaseModel):
     reached: bool
     total: int
     highest_tier: int
+
+
+# ---------------------------------------------------------------------- transcode
+
+
+class TranscodeJobOut(BaseModel):
+    id: int
+    action_id: int
+    # queued | claimed | done | failed
+    status: str
+    source_path: str
+    source_size: int | None = None
+    source_duration_ms: int | None = None
+    target_resolution: str | None = None
+    target_codec: str | None = None
+    # An encode larger than this is a mistake, not a result.
+    expected_max_bytes: int | None = None
+    error: str | None = None
+
+
+class TranscodeClaimOut(BaseModel):
+    # None when there is nothing approved and waiting.
+    job: TranscodeJobOut | None = None
+
+
+class TranscodeResultIn(BaseModel):
+    ok: bool
+    output_path: str | None = None
+    # Required when ok — a success with no numbers behind it cannot be verified,
+    # and an unverifiable success is how a failed encode gets swapped in.
+    output_size: int | None = None
+    output_duration_ms: int | None = None
+    error: str | None = None
+
+
+class TranscodeCapability(BaseModel):
+    # Whether an agent could authenticate at all.
+    agent_configured: bool
+    # Without Sonarr a downgrade cannot be written back, so Sonarr would simply
+    # re-upgrade the season on its next search.
+    sonarr_connected: bool
