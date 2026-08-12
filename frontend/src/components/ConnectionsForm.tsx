@@ -48,6 +48,21 @@ export const SERVICE_SPECS: ServiceSpec[] = [
     ],
   },
   {
+    key: "sonarr",
+    label: "Sonarr",
+    hint: "Optional — your TV catalogue. Needed for episode-level size and quality figures, and for writing a quality decision back so it isn't undone on the next search.",
+    fields: [
+      { name: "base_url", label: "URL", placeholder: "http://host:8989" },
+      { name: "api_key", label: "API key", secret: true },
+    ],
+  },
+  {
+    key: "transcode",
+    label: "Transcoding",
+    hint: "Optional — a shared secret the transcode agent on your media box presents when claiming approved jobs. Sift never touches a file itself. Stored encrypted; anyone holding it can read job paths.",
+    fields: [{ name: "agent_token", label: "Agent token", secret: true }],
+  },
+  {
     key: "overseerr",
     label: "Overseerr",
     hint: "Optional — when connected, add-requests go through Overseerr's approval pipeline instead of straight to Radarr.",

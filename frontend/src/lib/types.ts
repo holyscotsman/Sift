@@ -460,3 +460,140 @@ export interface VersionStatus {
   // Whether an in-app Update can actually act (a deploy hook is configured).
   can_update: boolean;
 }
+
+// ------------------------------------------------------------------- storage
+
+export interface SizeFinding {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  // oversized | truncated | bad_rip
+  kind: string;
+  path: string | null;
+  size: number;
+  duration_ms: number | null;
+  runtime_minutes: number | null;
+  resolution: string | null;
+  video_codec: string | null;
+  // Zero for a bad rip: the file is the whole film and stays on disk until a
+  // better copy replaces it.
+  bytes_reclaimable: number;
+  // 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+  risk_tier: number;
+  reasons: string[];
+}
+
+export interface MovieSizeResponse {
+  items: SizeFinding[];
+  total_reclaimable: number;
+  oversized_count: number;
+  truncated_count: number;
+  bad_rip_count: number;
+  short_films_cleared: number;
+}
+
+export interface Bucket {
+  resolution: string;
+  codec: string;
+  samples: number;
+  median_rate: number;
+  // False when this is a seeded default rather than measured from your library.
+  observed: boolean;
+}
+
+export interface BaselinesResponse {
+  buckets: Bucket[];
+}
+
+export interface LedgerFinding {
+  kind: string;
+  target_kind: string;
+  target_id: string;
+  title: string;
+  detail: string;
+  bytes_reclaimable: number;
+  // 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+  risk_tier: number;
+  reversible: boolean;
+  reasons: string[];
+}
+
+export interface TierSummary {
+  tier: number;
+  label: string;
+  bytes_reclaimable: number;
+  count: number;
+}
+
+export interface LedgerResponse {
+  items: LedgerFinding[];
+  total_reclaimable: number;
+  tiers: TierSummary[];
+}
+
+export interface PlanStep {
+  finding: LedgerFinding;
+  running_total: number;
+}
+
+export interface PlanResponse {
+  target_bytes: number;
+  steps: PlanStep[];
+  // False when the whole library cannot reach the target.
+  reached: boolean;
+  total: number;
+  highest_tier: number;
+}
+
+export interface DuplicateEpisode {
+  season_number: number;
+  episode_number: number;
+  title: string | null;
+  copies: number;
+  surplus: number;
+  bytes_reclaimable: number;
+}
+
+export interface ShowDuplicates {
+  tvdb_id: number;
+  title: string;
+  library_section: string | null;
+  episodes: DuplicateEpisode[];
+  surplus: number;
+  bytes_reclaimable: number;
+}
+
+export interface SeasonSize {
+  tvdb_id: number;
+  title: string;
+  season_number: number;
+  air_year: number | null;
+  episode_count: number;
+  total_bytes: number;
+  bytes_per_hour: number;
+  per_episode: number;
+  resolution: string | null;
+  video_codec: string | null;
+  excess: number;
+  bloated: boolean;
+}
+
+export interface Inconsistency {
+  tvdb_id: number;
+  title: string;
+  season_number: number;
+  common_resolution: string | null;
+  odd_resolutions: Record<string, number>;
+  rate_outliers: number;
+  episodes_affected: number;
+  reasons: string[];
+}
+
+export interface TvStorageResponse {
+  duplicates: ShowDuplicates[];
+  duplicate_bytes: number;
+  seasons: SeasonSize[];
+  season_excess_bytes: number;
+  // Not a reclaim figure — fixing one usually costs space.
+  inconsistencies: Inconsistency[];
+}

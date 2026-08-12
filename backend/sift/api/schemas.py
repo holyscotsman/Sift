@@ -547,3 +547,196 @@ class VersionStatus(BaseModel):
     update_available: bool = False
     # True when an in-app Update can actually do something about it.
     can_update: bool = False
+
+
+# ------------------------------------------------------------------------ storage
+
+
+class SizeFindingOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    # oversized | truncated | bad_rip
+    kind: str
+    path: str | None = None
+    size: int
+    duration_ms: int | None = None
+    runtime_minutes: int | None = None
+    resolution: str | None = None
+    video_codec: str | None = None
+    # Disk this finding would return. Zero for a bad rip: the file is the whole
+    # film and stays on disk until a better copy replaces it.
+    bytes_reclaimable: int
+    # 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+    risk_tier: int
+    reasons: list[str] = []
+
+
+class MovieSizeResponse(BaseModel):
+    items: list[SizeFindingOut]
+    # Totals span the whole library, not just this page.
+    total_reclaimable: int
+    oversized_count: int
+    truncated_count: int
+    bad_rip_count: int
+    # Small files inspected and cleared — almost all genuine short films. Reported
+    # so the number reads as considered rather than silently dropped.
+    short_films_cleared: int
+
+
+class BucketOut(BaseModel):
+    resolution: str
+    codec: str
+    samples: int
+    median_rate: float
+    # False when this is a seeded default because the library holds too few files
+    # of this kind to establish a norm of its own.
+    observed: bool
+
+
+class BaselinesResponse(BaseModel):
+    buckets: list[BucketOut]
+
+
+class LedgerFindingOut(BaseModel):
+    kind: str
+    target_kind: str
+    target_id: str
+    title: str
+    detail: str
+    bytes_reclaimable: int
+    # 0 = nothing of value is lost, 1 = reversible, 2 = a judgement call.
+    risk_tier: int
+    reversible: bool
+    reasons: list[str] = []
+
+
+class TierSummary(BaseModel):
+    tier: int
+    label: str
+    bytes_reclaimable: int
+    count: int
+
+
+class LedgerResponse(BaseModel):
+    items: list[LedgerFindingOut]
+    total_reclaimable: int
+    tiers: list[TierSummary]
+
+
+class PlanRequest(BaseModel):
+    # How much disk you need back, in bytes.
+    target_bytes: int
+
+
+class PlanStepOut(BaseModel):
+    finding: LedgerFindingOut
+    running_total: int
+
+
+class PlanResponse(BaseModel):
+    target_bytes: int
+    steps: list[PlanStepOut]
+    # False when the whole library cannot reach the target — said plainly rather
+    # than implied, since a plan that quietly falls short sends you deleting for
+    # nothing.
+    reached: bool
+    total: int
+    highest_tier: int
+
+
+# ---------------------------------------------------------------------- transcode
+
+
+class TranscodeJobOut(BaseModel):
+    id: int
+    action_id: int
+    # queued | claimed | done | failed
+    status: str
+    source_path: str
+    source_size: int | None = None
+    source_duration_ms: int | None = None
+    target_resolution: str | None = None
+    target_codec: str | None = None
+    # An encode larger than this is a mistake, not a result.
+    expected_max_bytes: int | None = None
+    error: str | None = None
+
+
+class TranscodeClaimOut(BaseModel):
+    # None when there is nothing approved and waiting.
+    job: TranscodeJobOut | None = None
+
+
+class TranscodeResultIn(BaseModel):
+    ok: bool
+    output_path: str | None = None
+    # Required when ok — a success with no numbers behind it cannot be verified,
+    # and an unverifiable success is how a failed encode gets swapped in.
+    output_size: int | None = None
+    output_duration_ms: int | None = None
+    error: str | None = None
+
+
+class TranscodeCapability(BaseModel):
+    # Whether an agent could authenticate at all.
+    agent_configured: bool
+    # Without Sonarr a downgrade cannot be written back, so Sonarr would simply
+    # re-upgrade the season on its next search.
+    sonarr_connected: bool
+
+
+class DuplicateEpisodeOut(BaseModel):
+    season_number: int
+    episode_number: int
+    title: str | None = None
+    copies: int
+    surplus: int
+    bytes_reclaimable: int
+
+
+class ShowDuplicatesOut(BaseModel):
+    tvdb_id: int
+    title: str
+    library_section: str | None = None
+    episodes: list[DuplicateEpisodeOut]
+    surplus: int
+    bytes_reclaimable: int
+
+
+class SeasonSizeOut(BaseModel):
+    tvdb_id: int
+    title: str
+    season_number: int
+    air_year: int | None = None
+    episode_count: int
+    total_bytes: int
+    bytes_per_hour: float
+    per_episode: int
+    resolution: str | None = None
+    video_codec: str | None = None
+    excess: int
+    bloated: bool
+
+
+class InconsistencyOut(BaseModel):
+    tvdb_id: int
+    title: str
+    season_number: int
+    # What most of the season is in — the thing the odd episodes differ from.
+    common_resolution: str | None = None
+    odd_resolutions: dict[str, int] = {}
+    rate_outliers: int
+    episodes_affected: int
+    reasons: list[str] = []
+
+
+class TvStorageResponse(BaseModel):
+    duplicates: list[ShowDuplicatesOut]
+    duplicate_bytes: int
+    seasons: list[SeasonSizeOut]
+    season_excess_bytes: int
+    # Seasons that disagree with themselves. Not a reclaim figure — fixing one
+    # usually costs space rather than saving it, which is why it is reported
+    # separately from the ledger instead of inside it.
+    inconsistencies: list[InconsistencyOut]

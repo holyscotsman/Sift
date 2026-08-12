@@ -29,10 +29,11 @@ _CONN_KEY = "connections"
 _ACTIONS_KEY = "actions"
 
 # Non-secret fields we echo back; secret fields become ``<name>_set`` booleans.
-_SECRET_FIELDS = {"token", "api_key", "hook_url"}
+_SECRET_FIELDS = {"token", "api_key", "hook_url", "agent_token"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
+    "sonarr": {"base_url", "api_key"},
     "overseerr": {"base_url", "api_key"},
     "tautulli": {"base_url", "api_key", "kids_accounts"},
     "tmdb": {"api_key", "language"},
@@ -43,6 +44,10 @@ _ALLOWED: dict[str, set[str]] = {
     # Host deploy hook for the in-app Update button. A secret URL — anyone with
     # it can trigger a deploy — so it is stored encrypted like an API key.
     "deploy": {"hook_url"},
+    # Shared secret the transcode agent presents when claiming work. Anyone
+    # holding it can read job paths and report results, so it is stored
+    # encrypted like an API key.
+    "transcode": {"agent_token"},
 }
 
 
@@ -202,6 +207,13 @@ def apply_to_settings(
     profile_id = radarr.get("quality_profile_id")
     if isinstance(profile_id, int | str) and str(profile_id).strip().isdigit():
         eff.radarr.default_quality_profile_id = int(profile_id)
+
+    sonarr = config.get("sonarr") or {}
+    if _url(sonarr.get("base_url")):
+        eff.sonarr.base_url = _url(sonarr["base_url"])
+    if _s(sonarr.get("api_key")):
+        eff.sonarr.api_key = SecretStr(sonarr["api_key"])
+        eff.sonarr.enabled = True
 
     overseerr = config.get("overseerr") or {}
     if _url(overseerr.get("base_url")):

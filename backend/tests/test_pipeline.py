@@ -43,6 +43,35 @@ PLEX_ITEMS = {
         {"ratingKey": 2001, "title": "Toy Story", "year": 1995, "Guid": [{"id": "tmdb://862"}]},
     ],
 }
+# The TV section, keyed by (section, Plex item type). Shows carry the TVDB guid
+# that ties them to Sonarr; episodes carry the files.
+PLEX_TV = {
+    ("3", 2): [
+        {"ratingKey": 3001, "title": "Scrubs", "year": 2001, "Guid": [{"id": "tvdb://76156"}]},
+    ],
+    ("3", 4): [
+        {
+            "ratingKey": 3101,
+            "grandparentRatingKey": 3001,
+            "parentIndex": 1,
+            "index": 1,
+            "title": "My First Day",
+            "Media": [
+                {
+                    "height": 480,
+                    "videoCodec": "h264",
+                    "Part": [
+                        {
+                            "file": "/tv/scrubs/s01e01.mkv",
+                            "size": 700_000_000,
+                            "duration": 1_320_000,
+                        }
+                    ],
+                }
+            ],
+        },
+    ],
+}
 TAUTULLI_HISTORY = [
     {"rating_key": 1001, "user": "Dad", "date": 1700000000, "percent_complete": 100},
     {"rating_key": 1001, "user": "Dad", "date": 1700100000, "percent_complete": 100},
@@ -81,8 +110,10 @@ class FakePlex(FakeService):
     async def get_sections(self):
         return PLEX_SECTIONS
 
-    async def get_section_items(self, key):
-        return PLEX_ITEMS.get(str(key), [])
+    async def get_section_items(self, key, *, item_type=1):
+        if item_type == 1:
+            return PLEX_ITEMS.get(str(key), [])
+        return PLEX_TV.get((str(key), item_type), [])
 
 
 class FakeTautulli(FakeService):

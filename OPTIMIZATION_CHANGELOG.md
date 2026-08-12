@@ -7,6 +7,25 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ---
 
+## 2607.16.0 — Cycle 09
+
+**Plan:** `docs/optimization/CYCLE_09.md` (8 changes, shipped as 11 slices).
+
+Disk-space reclamation across TV and movies. Measurement first: `media_files`
+records the size, duration, resolution and codec that Radarr and Plex were
+already sending and Sift was discarding, and every verdict is expressed in bytes
+per hour against the library's own median.
+
+TV exists at all for the first time — a Sonarr client, shows/seasons/episodes, a
+new scan phase, and the Plex show sections that one line in `_phase_plex` had
+been skipping since the beginning.
+
+Findings converge on one queue ordered by risk before size, so the free space is
+spent before any question of quality. Transcodes join deletes behind the golden
+guard and are carried out by an agent on the media box, never by Sift.
+
+---
+
 ## 2607.8.0 — Cycle 08
 
 **Plan:** `docs/optimization/CYCLE_08.md` (10/10 approved after change review, 4 amended).

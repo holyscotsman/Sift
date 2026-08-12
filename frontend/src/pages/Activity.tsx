@@ -12,13 +12,15 @@ import { useActivity } from "@/lib/hooks";
 import { relativeTime } from "@/lib/time";
 import type { ActionRecord, ScanRun } from "@/lib/types";
 
-type Filter = "all" | "add" | "monitor" | "unmonitor" | "delete";
+type Filter = "all" | "add" | "monitor" | "unmonitor" | "delete" | "transcode";
 
 const TIER: Record<string, { label: string; tone: "keep" | "borderline" | "junk" | "accent" }> = {
   add: { label: "Auto", tone: "keep" },
   monitor: { label: "Auto", tone: "keep" },
   unmonitor: { label: "Auto + Audit", tone: "borderline" },
   delete: { label: "Approval", tone: "junk" },
+  // Replacing a file with a lossier one is a delete spread over time.
+  transcode: { label: "Approval", tone: "junk" },
 };
 
 export function Activity() {

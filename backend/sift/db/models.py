@@ -50,6 +50,9 @@ class ActionType(enum.StrEnum):
     MONITOR = "monitor"
     UNMONITOR = "unmonitor"
     DELETE = "delete"
+    # Replaces a file with a smaller one. Destructive, so it is gated exactly as
+    # a delete is — and never executed by Sift, which has no access to the files.
+    TRANSCODE = "transcode"
 
 
 class ActionStatus(enum.StrEnum):
@@ -393,6 +396,220 @@ class PlexCopy(Base):
     title: Mapped[str | None] = mapped_column(String(512))
     # Set when a scan no longer sees this item, so a copy you removed stops being
     # reported as a duplicate without needing the row deleted mid-scan.
+    seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class Show(Base):
+    """A TV series. Keyed on ``tvdb_id`` because that is the id Sonarr and Plex's
+    TV agent both speak; ``tmdb_id`` rides along for metadata enrichment.
+
+    Watch aggregates live here rather than in a TV twin of ``watch_history``:
+    ``watch_history`` is foreign-keyed to ``movies.tmdb_id`` and cannot hold a TV
+    row at all, and the quality heuristic only ever asks show-level questions —
+    how completely it is watched, how recently, and at what resolution it is
+    actually streamed. Per-episode play rows would be a larger table answering a
+    question nobody asks.
+    """
+
+    __tablename__ = "shows"
+
+    tvdb_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    sonarr_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    plex_rating_key: Mapped[str | None] = mapped_column(String(64), index=True)
+
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer, index=True)
+    status: Mapped[str | None] = mapped_column(String(32))
+    network: Mapped[str | None] = mapped_column(String(255))
+    genres: Mapped[list[str]] = mapped_column(JSON, default=list)
+    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    original_language: Mapped[str | None] = mapped_column(String(8))
+    # Typical episode length in minutes; separates a 22-minute sitcom from a
+    # 55-minute drama, which is a real signal for how much the picture matters.
+    runtime: Mapped[int | None] = mapped_column(Integer)
+
+    library_section: Mapped[str | None] = mapped_column(String(255), index=True)
+    is_kids: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    monitored: Mapped[bool] = mapped_column(Boolean, default=False)
+    in_plex: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    quality_profile_id: Mapped[int | None] = mapped_column(Integer)
+
+    # Watch aggregates (Tautulli). Absent means "no evidence", never "unwatched".
+    plays: Mapped[int] = mapped_column(Integer, default=0)
+    last_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mean_completion: Mapped[float | None] = mapped_column(Float)
+    # The height actually delivered to a player, which is what the library is
+    # really being asked for — a show only ever streamed at 720p does not need 4K.
+    typical_stream_height: Mapped[int | None] = mapped_column(Integer)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    seasons: Mapped[list[Season]] = relationship(
+        back_populates="show", cascade="all, delete-orphan"
+    )
+
+
+class Season(Base):
+    """A season, and the grain at which quality is judged.
+
+    Per-show is the wrong grain and it matters: Scrubs season 1 (2001) is
+    SD-native while season 9 (2010) is HD-native, and SpongeBob runs from 1999
+    into the 2020s. ``air_year`` is what the source-ceiling rule reads.
+    """
+
+    __tablename__ = "seasons"
+    __table_args__ = (UniqueConstraint("show_id", "season_number", name="uq_season_show_number"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    show_id: Mapped[int] = mapped_column(
+        ForeignKey("shows.tvdb_id", ondelete="CASCADE"), index=True
+    )
+    season_number: Mapped[int] = mapped_column(Integer)
+    air_year: Mapped[int | None] = mapped_column(Integer)
+    episode_count: Mapped[int] = mapped_column(Integer, default=0)
+    episode_file_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Sonarr reports this per season for free on the series payload, so a rough
+    # size is available without walking every episode file.
+    size_on_disk: Mapped[int | None] = mapped_column(BigInteger)
+
+    show: Mapped[Show] = relationship(back_populates="seasons")
+    episodes: Mapped[list[Episode]] = relationship(
+        back_populates="season", cascade="all, delete-orphan"
+    )
+
+
+class Episode(Base):
+    __tablename__ = "episodes"
+    __table_args__ = (
+        UniqueConstraint("season_id", "episode_number", name="uq_episode_season_number"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    season_id: Mapped[int] = mapped_column(
+        ForeignKey("seasons.id", ondelete="CASCADE"), index=True
+    )
+    episode_number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(String(512))
+    air_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    sonarr_episode_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    # The duplicate detector's exactness rests on this. A single "S01E01-E02" file
+    # is one file covering two episodes, and Sonarr gives both episodes the same
+    # file id — so a shared id is a multi-episode file, not a duplicate, with no
+    # heuristic required.
+    sonarr_episode_file_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    plex_rating_key: Mapped[str | None] = mapped_column(String(64), index=True)
+    has_file: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    season: Mapped[Season] = relationship(back_populates="episodes")
+
+
+class TranscodeJob(Base):
+    """A re-encode the host has been asked to carry out.
+
+    Sift runs on a machine that has never seen the media and cannot reach it, so
+    it does not transcode anything — it records an approved intention and waits.
+    An agent on the box holding the files claims the job, runs the encode, checks
+    the result, and reports back. The same philosophy as the restart and update
+    endpoints: hand control to the host rather than pretend to have it.
+
+    The direction of travel is deliberate. A hook Sift calls out to would need the
+    media host to be reachable from wherever Sift runs, which behind NAT it is
+    not, so the agent polls instead. That also means no inbound port has to be
+    opened for this to work.
+
+    ``source_size`` and ``source_duration_ms`` are recorded at approval time so
+    the result can be checked against what was actually there. An encode that
+    comes back materially shorter than the source is a failed encode, and
+    swapping it in would destroy the episode quietly.
+    """
+
+    __tablename__ = "transcode_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Not a hard FK: the action is the authority, and a job with no live action
+    # row must fail closed rather than cascade away unnoticed.
+    action_id: Mapped[int] = mapped_column(Integer, index=True)
+    # queued | claimed | done | failed
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+
+    source_path: Mapped[str] = mapped_column(String(1024))
+    source_size: Mapped[int | None] = mapped_column(BigInteger)
+    source_duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    target_resolution: Mapped[str | None] = mapped_column(String(16))
+    target_codec: Mapped[str | None] = mapped_column(String(32))
+    # Refuse anything larger than this — an encode that grew is a mistake.
+    expected_max_bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MediaFile(Base):
+    """One row per video file on disk — for a movie or a TV episode alike.
+
+    Size alone cannot tell you whether a file is wasteful. A 30 GB film is
+    unremarkable as a three-hour 4K remux and absurd as a ninety-minute 1080p, and
+    the only thing that separates them is **bytes per hour at a given resolution
+    and codec**. That calculation needs duration, resolution and codec, none of
+    which Sift recorded: ``Movie.file_size`` is a bare byte count and
+    ``Movie.quality`` is Radarr's free-text profile name.
+
+    The data was already arriving and being discarded. ``normalize_radarr_movie``
+    opens ``raw["movieFile"]`` to read the quality name and drops ``mediaInfo``,
+    ``path`` and ``size`` from the same dict; Plex's section listing carries a
+    ``Media``/``Part`` block and the normalizer keeps seven fields. So this costs
+    no extra requests — only the parsing.
+
+    One table for both movies and episodes rather than two is deliberate: every
+    bitrate query, outlier rule and test then works on one shape, and the movie
+    half of the feature ships before any TV model exists. Exactly one of
+    ``movie_tmdb_id`` / ``episode_id`` is set.
+
+    A separate table rather than columns on ``movies`` follows ``PlexCopy`` above —
+    ``create_all`` adds new tables to a live database but never new columns.
+    """
+
+    __tablename__ = "media_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Plex's identity for the item this file belongs to. Nullable because Radarr
+    # can report a file for a title Plex has not scanned yet.
+    rating_key: Mapped[str | None] = mapped_column(String(64), index=True)
+    movie_tmdb_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    episode_id: Mapped[int | None] = mapped_column(
+        ForeignKey("episodes.id", ondelete="CASCADE"), index=True
+    )
+
+    # The natural key for de-duplication across sources: two sources reporting the
+    # same path are describing one file, not two.
+    path: Mapped[str | None] = mapped_column(String(1024), index=True)
+    container: Mapped[str | None] = mapped_column(String(32))
+    size: Mapped[int | None] = mapped_column(BigInteger)
+    duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    # Normalised rung on the ladder ("480p"/"720p"/"1080p"/"2160p"), derived from
+    # height where possible. Stored rather than computed so the outlier queries can
+    # group in SQL.
+    resolution: Mapped[str | None] = mapped_column(String(16), index=True)
+    video_codec: Mapped[str | None] = mapped_column(String(32))
+    audio_codec: Mapped[str | None] = mapped_column(String(32))
+    # Which presentation this file belongs to. Files sharing a group are one
+    # thing split across several files — the two halves of a long episode — and
+    # every one of them is needed. Separate groups are separate copies, and those
+    # are the ones that can go. Plex models exactly this distinction as Part
+    # entries under a Media, so the answer is read rather than guessed.
+    part_group: Mapped[str | None] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(16), default="plex")
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )

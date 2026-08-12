@@ -108,6 +108,15 @@ class RadarrConfig(BaseModel):
     default_quality_profile_id: int | None = None
 
 
+class SonarrConfig(BaseModel):
+    """The TV counterpart to Radarr: authoritative for episode files, and the
+    place a quality decision is written back so Sonarr does not simply undo it."""
+
+    enabled: bool = True
+    base_url: str | None = None
+    api_key: SecretStr | None = None
+
+
 class OverseerrConfig(BaseModel):
     """Optional request front-door. When configured, add-requests go through
     Overseerr (its own approval/quality pipeline) instead of straight to Radarr."""
@@ -200,6 +209,7 @@ class Settings(BaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     plex: PlexConfig = Field(default_factory=PlexConfig)
     radarr: RadarrConfig = Field(default_factory=RadarrConfig)
+    sonarr: SonarrConfig = Field(default_factory=SonarrConfig)
     overseerr: OverseerrConfig = Field(default_factory=OverseerrConfig)
     tautulli: TautulliConfig = Field(default_factory=TautulliConfig)
     tmdb: TmdbConfig = Field(default_factory=TmdbConfig)
