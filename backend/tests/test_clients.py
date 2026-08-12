@@ -1,4 +1,4 @@
-"""Contract tests for the four source clients against a mock transport."""
+"""Contract tests for the source clients against a mock transport."""
 
 from __future__ import annotations
 
@@ -7,9 +7,16 @@ from pydantic import SecretStr
 
 from sift.clients.plex import PlexClient
 from sift.clients.radarr import RadarrClient
+from sift.clients.sonarr import SonarrClient
 from sift.clients.tautulli import TautulliClient
 from sift.clients.tmdb import TmdbClient
-from sift.config import PlexConfig, RadarrConfig, TautulliConfig, TmdbConfig
+from sift.config import (
+    PlexConfig,
+    RadarrConfig,
+    SonarrConfig,
+    TautulliConfig,
+    TmdbConfig,
+)
 
 
 async def _noop_sleep(_seconds: float) -> None:
@@ -132,3 +139,64 @@ async def test_tmdb_v4_bearer_token():
     )
     assert (await client.health()).ok
     await client.aclose()
+
+
+async def test_sonarr_series_episodes_and_health():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-Api-Key"] == "sk"
+        path = request.url.path
+        if path == "/api/v3/system/status":
+            return httpx.Response(200, json={"version": "4.0.9"})
+        if path == "/api/v3/series":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 7,
+                        "tvdbId": 121361,
+                        "title": "Game of Thrones",
+                        "seasons": [
+                            {
+                                "seasonNumber": 1,
+                                "statistics": {
+                                    "sizeOnDisk": 40_000_000_000,
+                                    "episodeFileCount": 10,
+                                },
+                            }
+                        ],
+                    }
+                ],
+            )
+        if path == "/api/v3/episode":
+            assert request.url.params["seriesId"] == "7"
+            return httpx.Response(200, json=[{"id": 1, "episodeNumber": 1, "episodeFileId": 55}])
+        if path == "/api/v3/episodefile":
+            assert request.url.params["seriesId"] == "7"
+            return httpx.Response(200, json=[{"id": 55, "size": 4_000_000_000}])
+        return httpx.Response(404)
+
+    cfg = SonarrConfig(base_url="http://sonarr", api_key=SecretStr("sk"))
+    client = SonarrClient(cfg, transport=httpx.MockTransport(handler), sleep=_noop_sleep)
+
+    series = await client.get_series()
+    assert series[0]["tvdbId"] == 121361
+    assert series[0]["seasons"][0]["statistics"]["sizeOnDisk"] == 40_000_000_000
+
+    assert (await client.get_episodes(7))[0]["episodeFileId"] == 55
+    assert (await client.get_episode_files(7))[0]["size"] == 4_000_000_000
+
+    health = await client.health()
+    assert health.ok and "4.0.9" in health.detail
+    await client.aclose()
+
+
+async def test_sonarr_without_a_url_is_not_configured_rather_than_broken():
+    """NEGATIVE CONTROL: an unconfigured optional service must raise the error the
+    scanner already treats as \"skip this one\", not construct a client that fails
+    later inside a phase and takes the whole scan down."""
+    import pytest
+
+    from sift.clients.base import ClientError
+
+    with pytest.raises(ClientError):
+        SonarrClient(SonarrConfig())

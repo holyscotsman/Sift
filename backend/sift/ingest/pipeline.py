@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..analysis import junk
 from ..clients.plex import PlexClient
 from ..clients.radarr import RadarrClient
+from ..clients.sonarr import SonarrClient
 from ..clients.tautulli import TautulliClient
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
@@ -81,6 +82,7 @@ class ScanPipeline:
         *,
         radarr: RadarrClient | None = None,
         plex: PlexClient | None = None,
+        sonarr: SonarrClient | None = None,
         tautulli: TautulliClient | None = None,
         tmdb: TmdbClient | None = None,
         progress_cb: ProgressCallback | None = None,
@@ -90,6 +92,7 @@ class ScanPipeline:
         self.settings = settings
         self.radarr = radarr
         self.plex = plex
+        self.sonarr = sonarr
         self.tautulli = tautulli
         self.tmdb = tmdb
         self.progress_cb = progress_cb
@@ -165,7 +168,7 @@ class ScanPipeline:
         goes on the outside where it can actually cap the wait.
         """
         skipped: list[str] = []
-        for name in ("plex", "radarr", "tautulli", "tmdb"):
+        for name in ("plex", "radarr", "sonarr", "tautulli", "tmdb"):
             client = getattr(self, name)
             if client is None:
                 continue
@@ -185,7 +188,9 @@ class ScanPipeline:
                 skipped.append(name)
         self.skipped_services = skipped
         ready = sum(
-            1 for n in ("plex", "radarr", "tautulli", "tmdb") if getattr(self, n) is not None
+            1
+            for n in ("plex", "radarr", "sonarr", "tautulli", "tmdb")
+            if getattr(self, n) is not None
         )
         return {"services_ready": ready, "services_skipped": len(skipped)}
 

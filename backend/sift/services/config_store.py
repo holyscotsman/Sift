@@ -33,6 +33,7 @@ _SECRET_FIELDS = {"token", "api_key", "hook_url"}
 _ALLOWED: dict[str, set[str]] = {
     "plex": {"base_url", "token", "kids_sections"},
     "radarr": {"base_url", "api_key", "root_folder", "quality_profile_id"},
+    "sonarr": {"base_url", "api_key"},
     "overseerr": {"base_url", "api_key"},
     "tautulli": {"base_url", "api_key", "kids_accounts"},
     "tmdb": {"api_key", "language"},
@@ -202,6 +203,13 @@ def apply_to_settings(
     profile_id = radarr.get("quality_profile_id")
     if isinstance(profile_id, int | str) and str(profile_id).strip().isdigit():
         eff.radarr.default_quality_profile_id = int(profile_id)
+
+    sonarr = config.get("sonarr") or {}
+    if _url(sonarr.get("base_url")):
+        eff.sonarr.base_url = _url(sonarr["base_url"])
+    if _s(sonarr.get("api_key")):
+        eff.sonarr.api_key = SecretStr(sonarr["api_key"])
+        eff.sonarr.enabled = True
 
     overseerr = config.get("overseerr") or {}
     if _url(overseerr.get("base_url")):

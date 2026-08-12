@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..clients.base import BaseClient, ClientError
 from ..clients.plex import PlexClient
 from ..clients.radarr import RadarrClient
+from ..clients.sonarr import SonarrClient
 from ..clients.tautulli import TautulliClient
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
@@ -129,6 +130,7 @@ async def run_scan(
 ) -> None:
     radarr = _maybe_client(settings, "radarr", RadarrClient)
     plex = _maybe_client(settings, "plex", PlexClient)
+    sonarr = _maybe_client(settings, "sonarr", SonarrClient)
     tautulli = _maybe_client(settings, "tautulli", TautulliClient)
     tmdb = _maybe_client(settings, "tmdb", TmdbClient)
     pipeline = ScanPipeline(
@@ -136,6 +138,7 @@ async def run_scan(
         settings,
         radarr=radarr,
         plex=plex,
+        sonarr=sonarr,
         tautulli=tautulli,
         tmdb=tmdb,
         progress_cb=hub.publish_progress,
@@ -152,6 +155,6 @@ async def run_scan(
             scan_run_id, {"event": "terminal", "status": "interrupted", "error": str(exc)}
         )
     finally:
-        for client in (radarr, plex, tautulli, tmdb):
+        for client in (radarr, plex, sonarr, tautulli, tmdb):
             if client is not None:
                 await client.aclose()
