@@ -2,6 +2,97 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.16.0 — Where the disk went, and the safest way to get it back
+
+Sift could tell you whether a film deserved to be on the server. It could not
+tell you where the space was going, and for TV it could not tell you anything at
+all: every one of the sixteen tables was keyed on `Movie.tmdb_id`, and one line
+in the Plex phase skipped any section that was not a movie section.
+
+**Size is now measured in bytes per hour, against the library's own norms.**
+Raw size is not a verdict — thirty gigabytes is unremarkable as a three-hour 4K
+remux and absurd as a ninety-minute 1080p — so any rule phrased in gigabytes
+flags the wrong files in both directions. Baselines are the median per
+(resolution, codec) bucket measured from your own files, with spread taken as the
+median absolute deviation rather than the standard deviation: the outliers are
+what is being looked for, and a handful of remuxes drag a mean upward far enough
+to hide behind it.
+
+**The file detail this needs was already being downloaded and thrown away.**
+`normalize_radarr_movie` opened `movieFile` to read the quality name and dropped
+`mediaInfo`, `path` and `size` from the same dict; Plex's listing carries a
+`Media`/`Part` block and the normalizer kept seven fields. The movie half of this
+release costs no extra requests, only the parsing.
+
+**Small files are judged by duration against the published runtime**, not by
+size. Under a gigabyte describes three different situations, and the worst
+mistake available was deleting a genuine short film for being short. A file that
+stops after eight minutes of a two-hour feature is a sample or an unfinished
+download and is free disk; a full-length file at a fraction of its peers' bitrate
+is a bad rip that wants replacing, and is reported with *zero* reclaimable
+because you keep using that disk until a better copy arrives; a 22-minute film in
+a 400 MB file is simply correct. With no published runtime there is no verdict at
+all.
+
+**TV arrives whole.** Sonarr supplies the catalog and the files; Plex supplies
+membership and every copy it can see, which is what makes a duplicated episode
+findable — Sonarr tracks one file per episode, so a second copy on disk is
+invisible to it. Season is the grain that matters, and air year is taken per
+season from the episodes: Scrubs began in 2001 on SD video and ended in HD, so
+one answer per show is wrong for every long-running series.
+
+**Duplicate episodes exclude the two cases that look identical.** A single
+S01E01-E02 file is identified by path rather than by the episodes pointing at it,
+so it counts its disk once. Split parts are the dangerous one, because duration
+cannot separate them — two halves of a sixty-minute episode and two copies of a
+thirty-minute one are both two files of thirty minutes, and deleting the
+"duplicate" loses half the episode. Plex already draws the distinction
+structurally, so it is read rather than inferred.
+
+**HD or SD is decided from three deterministic signals**: what the season's
+master can deliver, how much the picture rewards pixels, and how attentively the
+show is actually watched. That separates anime from SpongeBob and Severance from
+Scrubs. Recognition is deliberately *not* consulted and a test pins that it never
+is — it measures fame, and SpongeBob is one of the most recognised shows ever
+made, so feeding it in inverts the decision. The bar is asymmetric: an upgrade
+only costs disk and can be undone, so one signal justifies it; a downgrade
+destroys picture that cannot be recovered without re-acquiring the show, so it
+needs low demand, low or absent attention, and a known air year. Thin evidence
+returns "not enough to say" rather than a guess.
+
+**Everything lands in one queue, ordered by risk before size.** Five separate
+reports leave you to work out which to act on first, and no one of them can
+answer it. Findings carry a tier — nothing is lost, reversible, a judgement call
+— and the ordering is the substance: sorted by size alone the list routinely puts
+an irreversible downgrade above a duplicate copy that costs nothing to remove.
+Most of the disk comes back at tier 0, before a single question of taste. The
+planner takes a target and returns the cheapest way to reach it, cheapest
+measured in regret, and says plainly when the library cannot reach it.
+
+**Transcodes are gated as deletes are, and Sonarr is stopped from undoing them.**
+Replacing a file with a lossier one is a delete spread over time, so the golden
+guard generalises from "is this a delete" to "is this irreversible". Sift never
+carries one out — it has no access to the media — so an approved job is claimed
+by an agent on the media box, which polls because a hook would need that box
+reachable from wherever Sift runs. Approval is checked at claim time rather than
+trusted from job creation, a staged instance hands out nothing, and a reported
+success must bring its output size and duration, because an unverifiable success
+is how a failed encode gets swapped in for the real file. Every applied downgrade
+writes the quality profile back to Sonarr: without that its next search fetches
+the larger file straight back, which costs the picture and keeps the disk.
+
+Storage is a new screen and is read-only. It ships before anything can act on a
+finding, and shows the baselines it used, because these verdicts rest on the
+claim that your library's own median describes it — worth checking against
+reality before it drives a delete. It also surfaces `GET /api/duplicates`, which
+the backend has served since 2607.14.0 with nothing on screen to show it.
+
+341 tests, each new pin mutation-verified. The TV ingest pin counts *lookups*
+rather than statements: the defect 2607.15.1 fixed was a SELECT per row, while
+inserting new episodes genuinely requires writes and how a driver batches those
+varies by dialect. Ten episodes and a hundred cost the same number of lookups,
+and a rescan of a hundred costs six statements.
+
 ## 2607.15.1 — Fix the Plex phase stalling
 
 Recording duplicate copies (2607.14.0) was written with a `session.merge()` per
