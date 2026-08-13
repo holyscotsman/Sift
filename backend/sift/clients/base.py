@@ -15,11 +15,13 @@ fast and deterministic — no real sleeping, no wall-clock flakiness.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import random
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -101,6 +103,57 @@ class RateLimiter:
             self._next_allowed = now + self.min_interval
 
 
+# Hosts a media client has no business talking to. Every cloud provider serves
+# instance credentials from a link-local address with no authentication at all, so
+# a service URL pointing there turns "check my Radarr is reachable" into "fetch the
+# deploy's own keys" — and the reply comes back through the health endpoint.
+#
+# Private ranges are deliberately NOT blocked. Plex, Radarr and Sonarr live on a
+# home LAN; refusing 192.168.x.x would block the product's normal configuration to
+# defend against nothing, since the same machine is the intended target.
+_METADATA_HOSTS = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata.goog",
+        "metadata",
+        "instance-data",
+    }
+)
+_ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+
+def _reject_unsafe_base_url(service: str, base_url: str) -> None:
+    """Refuse a base URL that points at cloud instance metadata.
+
+    Checked here rather than at the settings form because this is the only place
+    every client and every call site — health probe, connection test, scan — must
+    pass through.
+
+    **Known limit:** this inspects the URL as written. A hostname that *resolves*
+    to a link-local address is not caught, because that would need a resolving
+    transport hook and a DNS lookup on every client construction, and would still
+    lose to a rebinding attack. This closes the direct route, not every route.
+    """
+    parsed = urlsplit(base_url)
+    if parsed.scheme and parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+        raise ClientError(f"{service}: only http and https URLs are supported")
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return
+    if host in _METADATA_HOSTS:
+        raise ClientError(f"{service}: refusing to send credentials to {host}")
+    try:
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
+    except ValueError:
+        return
+    # IPv4-mapped IPv6 (::ffff:169.254.169.254) is the same address wearing a hat.
+    mapped = getattr(address, "ipv4_mapped", None)
+    if mapped is not None:
+        address = mapped
+    if address.is_link_local:
+        raise ClientError(f"{service}: refusing to send credentials to {host}")
+
+
 class BaseClient:
     def __init__(
         self,
@@ -120,6 +173,7 @@ class BaseClient:
     ) -> None:
         if not base_url:
             raise ClientError(f"{service}: base_url is not configured")
+        _reject_unsafe_base_url(service, base_url)
         self.service = service
         self.retry = retry or RetryPolicy()
         self.rate_limiter = rate_limiter or RateLimiter(0.0)

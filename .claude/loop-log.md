@@ -245,3 +245,26 @@ Next: `services/` and `api/` have had no correctness pass. `routes_storage.py`
 past. Also the long-standing `base_url` SSRF hole (any authenticated caller can
 repoint a service at a host they control and have Sift send it credentials) is
 still open and is the most serious known issue in the repo.
+
+### Iter 9 · 2026-08-13 · security
+Closed the direct half of the long-standing `base_url` SSRF. Sift stores an API key
+per service and sends it to whatever base URL is configured; every major cloud
+serves instance credentials from a link-local address with no auth, and Sift runs on
+Render. So "test my connection" could read the deploy's own keys, with the answer
+returned through the health endpoint.
+Guard added in `BaseClient.__init__` — the one place every client, health probe,
+connection test and scan must pass through. Blocks link-local literals (including
+IPv4-mapped IPv6, `::ffff:169.254.169.254`), the known metadata hostnames, and any
+scheme that is not http/https. **Private ranges are deliberately still allowed** —
+Plex and Radarr live on a home LAN, so blocking 192.168.x.x would break normal use
+to defend against nothing. That is the negative control, and it is the half that
+matters: an over-broad guard passes every attack test and makes the product
+unusable.
+**Known residual, stated in the docstring:** a *hostname* that resolves to a
+link-local address is not caught. Catching it needs a resolving transport hook plus
+a DNS lookup per client construction, and still loses to rebinding.
+Next (needs an owner decision, not an autonomous one): changing a service's
+`base_url` currently keeps the stored secret, so a repointed service still gets the
+credential. Clearing the secret on URL change is the standard protection but costs
+real UX — fixing a typo in a URL would force re-entering the API key. Worth asking
+before doing.
