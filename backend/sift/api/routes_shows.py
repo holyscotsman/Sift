@@ -12,13 +12,19 @@ disk actually in use rather than what Sonarr believes it imported.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..analysis import tv_recommend
 from ..db.models import Episode, MediaFile, Season, Show
-from .deps import AuthDep, get_session_factory
-from .schemas import ShowListResponse, ShowOut
+from .deps import AuthDep, get_session_factory, get_settings
+from .schemas import (
+    ShowListResponse,
+    ShowOut,
+    ShowSuggestionOut,
+    ShowSuggestionsResponse,
+)
 
 router = APIRouter(prefix="/api", tags=["shows"], dependencies=[AuthDep])
 
@@ -139,3 +145,53 @@ def list_show_sections(
             .order_by(Show.library_section)
         )
         return [r for r in rows if r]
+
+
+@router.get("/shows/suggestions", response_model=ShowSuggestionsResponse)
+async def show_suggestions(
+    request: Request,
+    limit: int = Query(default=tv_recommend.DEFAULT_LIMIT, ge=1, le=24),
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> ShowSuggestionsResponse:
+    """A handful of shows you might want next.
+
+    Short on purpose. Twenty-four film suggestions is a browse; twenty-four show
+    suggestions is a second job, and a list nobody finishes reading is worse than
+    one half its length. The ceiling is 24 rather than unbounded for the same
+    reason.
+
+    Seeded by shows you actually finished rather than shows you rate highly: a TV
+    library is full of series acquired and never started, and seeding from those
+    sends the whole list somewhere you have already declined to go.
+    """
+    settings = get_settings(request)
+    items = await tv_recommend.suggest(factory, settings, limit=limit)
+    detail = ""
+    if not items:
+        with factory() as session:
+            seeds, _owned = tv_recommend.anchors(session)
+        if not settings.tmdb.enabled or not settings.tmdb.api_key:
+            detail = "Connect TMDB in Settings to get suggestions."
+        elif not seeds:
+            detail = (
+                "Nothing to go on yet — suggestions come from shows you have actually "
+                "watched through, so this fills in once Tautulli has some history."
+            )
+        else:
+            detail = "Nothing new worth suggesting right now."
+    return ShowSuggestionsResponse(
+        items=[
+            ShowSuggestionOut(
+                tmdb_id=s.tmdb_id,
+                title=s.title,
+                year=s.year,
+                overview=s.overview,
+                poster_path=s.poster_path,
+                vote_average=s.vote_average,
+                vote_count=s.vote_count,
+                because_of=list(s.because_of),
+            )
+            for s in items
+        ],
+        detail=detail,
+    )
