@@ -92,3 +92,24 @@ per-film `WatchHistory` query at :74 — plus `movie.score` lazy-loading in
 `IN` (500) the way `_persist_plex` does and statements/film should fall toward
 ~0.01. Prove it with `bench/bench_score.py` before and after; the scored output
 must be byte-identical, so pin that too.
+
+### Iter 1 · 2026-08-13 · perf
+Batched the scoring reads (`analysis/junk.py`). `_iter_scores` walked films one at
+a time, costing four SELECTs each — the film, its ratings, its watch history, and
+`movie.score` lazy-loading in `compute_and_store`. Now chunked 500 at a time, and
+`Score` rows are preloaded once.
+**statements_per_film 4.002 → 0.009** (8004 → 17 total); p50 2964.6 → 196.1ms on
+2000 films. Output proved byte-identical: dumped all 2000 scores + preview counts
+before and after, `cmp` clean at 1,215,269 bytes.
+Two test-quality notes worth remembering: routing the rating-selection pin through
+the junk score did **not** work — Bayesian shrinkage pulls a 9-vote rating so far
+toward the prior that picking the wrong rating barely moves the score, so the test
+passed under mutation. Pinned on `_best_ratings` directly instead. And one
+direction of ordering is never enough: with the reliable rating written first,
+"keep the last" fails but "keep the first" passes. The test now carries both
+directions plus a tie.
+Next: `bench_ledger.py` shows `build_p50 734ms` for only 2000 films / 5760
+episodes, and `ledger.build` (analysis/ledger.py:109) is the read behind the
+Storage page — worth checking whether it has the same per-row shape. Also
+`_movie_copy_sizes` at :216 and `_downgrades` at :229 each open their own passes
+over `media_files`.
