@@ -137,7 +137,7 @@ def rank(
                 because_of=because[:3],
             )
         )
-    out.sort(key=lambda s: s.score, reverse=True)
+    out.sort(key=lambda s: (-s.score, s.tmdb_id))
     return out[: max(1, limit)]
 
 

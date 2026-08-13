@@ -321,3 +321,66 @@ def test_the_surplus_paths_never_include_the_copy_being_kept(client):
     show = body["duplicates"][0]
     assert show["surplus_paths"] == [paths[1]]  # the 480p one
     assert paths[0] not in show["surplus_paths"]  # the 1080p one is kept
+
+
+def test_removing_every_copy_of_an_episode_is_refused(client):
+    """The promise every finding here rests on, enforced where it can be relied on.
+
+    "Only the surplus copies go" was a property of how findings were *computed*,
+    not of what this endpoint would *accept*. A request that did not come from a
+    finding — a stale page, a repeated call, a client bug — was checked only for
+    whether the paths existed. Both of these paths exist, and together they are the
+    entire episode.
+    """
+    c, factory = client
+    paths = _seed_actionable(factory)
+    response = c.post(
+        "/api/storage/act",
+        json={"target_kind": "show", "target_id": "76156", "paths": paths, "label": "both"},
+    )
+    assert response.status_code == 400
+    assert "last copy" in response.json()["detail"]
+
+    from sift.db.models import Action
+
+    with factory() as session:
+        assert session.query(Action).count() == 0, "nothing may be recorded on a refusal"
+
+
+def test_removing_the_surplus_copy_is_still_allowed(client):
+    """NEGATIVE CONTROL. A guard that refused any episode deletion would pass the
+    test above and make the whole duplicate report unusable — its entire purpose is
+    removing one of these two files."""
+    c, factory = client
+    paths = _seed_actionable(factory)
+    response = c.post(
+        "/api/storage/act",
+        json={"target_kind": "show", "target_id": "76156", "paths": [paths[1]], "label": "one"},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["job_ids"]) == 1
+
+
+def test_removing_a_films_only_copy_is_refused(client):
+    """Films get the same floor as episodes. A single-copy film is the common case,
+    so an oversized-film finding must never arrive here as a delete."""
+    from sift.db.models import MediaFile, Movie
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=4242, title="Only Copy", year=2001, in_plex=True))
+        session.add(
+            MediaFile(
+                movie_tmdb_id=4242, path="/films/only.mkv", size=40 * GB,
+                duration_ms=120 * MIN_MS, resolution="1080p", video_codec="h264", source="plex",
+            )
+        )
+        session.commit()
+
+    response = c.post(
+        "/api/storage/act",
+        json={"target_kind": "movie", "target_id": "4242", "paths": ["/films/only.mkv"],
+              "label": "the only copy"},
+    )
+    assert response.status_code == 400
+    assert "last copy" in response.json()["detail"]

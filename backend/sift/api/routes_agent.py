@@ -182,8 +182,13 @@ def report(
         if job is None:
             raise HTTPException(status_code=404, detail=f"no transcode job {job_id}")
 
-        if body.ok and job.kind == "transcode":
-            if not body.output_size or not body.output_duration_ms:
+        if body.ok:
+            # Only a transcode produces a new file to describe. Requiring those
+            # numbers of every job filed every completed *delete* as a failure —
+            # and deletes are all the reclaim feature produces.
+            if job.kind == "transcode" and (
+                not body.output_size or not body.output_duration_ms
+            ):
                 raise HTTPException(
                     status_code=400,
                     detail="a successful transcode must report the output size and duration",

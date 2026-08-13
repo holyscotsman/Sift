@@ -11,6 +11,8 @@ inspect directly rather than taking on trust from whatever the outlier list says
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -253,6 +255,45 @@ def tv_storage(
     )
 
 
+
+def _would_strand(factory: sessionmaker[Session], paths: Sequence[str]) -> int:
+    """How many titles this request would leave with no file at all.
+
+    Validating that a path exists proves it is a real file; it does not prove the
+    file is *spare*. Every finding this endpoint serves is built on the promise
+    that the thing itself survives and only surplus copies go — "every episode
+    survives" is the reason the TV duplicate report needs no curation judgement at
+    all. That promise lived entirely in how the findings were computed, so a
+    request that did not come from one — a stale page, a repeated call, a mistake
+    in the client — was checked for nothing but path existence.
+
+    Counted per episode and per film, comparing what is being asked for against
+    everything on record, so removing three copies of an episode that has three is
+    refused while removing two of them is allowed.
+    """
+    requested = set(paths)
+    with factory() as session:
+        rows = session.execute(
+            select(MediaFile.path, MediaFile.episode_id, MediaFile.movie_tmdb_id)
+        )
+        held: dict[tuple[str, int], int] = {}
+        losing: dict[tuple[str, int], int] = {}
+        for path, episode_id, movie_id in rows:
+            owner = (
+                ("episode", episode_id)
+                if episode_id is not None
+                else ("movie", movie_id)
+                if movie_id is not None
+                else None
+            )
+            if owner is None:
+                continue
+            held[owner] = held.get(owner, 0) + 1
+            if path in requested:
+                losing[owner] = losing.get(owner, 0) + 1
+    return sum(1 for owner, count in losing.items() if count >= held.get(owner, 0))
+
+
 @router.post("/act", response_model=ReclaimActOut)
 def act_on_finding(
     body: ReclaimActIn,
@@ -269,8 +310,10 @@ def act_on_finding(
     The paths come from the finding you were looking at rather than being
     recomputed, so what gets approved is exactly what was on screen. They are
     checked against ``media_files`` before anything is recorded — a path Sift has
-    never seen is refused outright, which stops this being a way to have the agent
-    delete arbitrary things.
+    never seen is refused outright — and refused again if removing them would leave
+    an episode or a film with no file at all. The first check stops arbitrary
+    paths; the second stops arbitrary *deletions*, which is the promise every
+    finding here is built on.
     """
     engine = get_action_engine(request)
     settings = get_settings(request)
@@ -286,6 +329,16 @@ def act_on_finding(
         raise HTTPException(
             status_code=400,
             detail=f"{len(unknown)} of those files aren't in the library snapshot — rescan first",
+        )
+
+    stranded = _would_strand(factory, body.paths)
+    if stranded:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"that would remove the last copy of {stranded} "
+                "episode(s) or film(s) — refusing"
+            ),
         )
 
     # dry_run is the server's floor, exactly as it is for film deletes: a client

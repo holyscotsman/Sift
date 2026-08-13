@@ -8,6 +8,8 @@ them cheap to unit-test and to property-test the cross-source id resolver later.
 from __future__ import annotations
 
 import re
+from collections import Counter
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -365,9 +367,15 @@ def normalize_tautulli_row(row: dict[str, Any], *, kids_accounts: set[str]) -> d
     }
 
 
-def aggregate_watch_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
-    """Collapse per-session history into per-(movie, user) aggregates."""
-    agg: dict[tuple[str, str], dict[str, Any]] = {}
+def fold_watch_rows(
+    agg: dict[tuple[str, str], dict[str, Any]], rows: Iterable[dict[str, Any]]
+) -> None:
+    """Fold another page of history into per-(movie, user) aggregates.
+
+    A running sum and count rather than a list of completions: a mean is the only
+    thing computed from them, and keeping every value makes the accumulator grow
+    with how much a household watches rather than with how much it owns.
+    """
     for row in rows:
         key_val = row.get("plex_rating_key")
         if not key_val:
@@ -382,7 +390,8 @@ def aggregate_watch_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str], di
                 "last_played_at": None,
                 "completion_pct": None,
                 "is_kids_account": row["is_kids_account"],
-                "_completions": [],
+                "_completion_sum": 0.0,
+                "_completion_n": 0,
             }
             agg[key] = entry
         entry["plays"] += 1
@@ -390,11 +399,26 @@ def aggregate_watch_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str], di
         if played and (entry["last_played_at"] is None or played > entry["last_played_at"]):
             entry["last_played_at"] = played
         if row.get("completion_pct") is not None:
-            entry["_completions"].append(row["completion_pct"])
+            entry["_completion_sum"] += row["completion_pct"]
+            entry["_completion_n"] += 1
+
+
+def finalize_watch_rows(
+    agg: dict[tuple[str, str], dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Resolve the running totals. Called once, after the last fold."""
     for entry in agg.values():
-        comps = entry.pop("_completions")
-        entry["completion_pct"] = round(sum(comps) / len(comps), 4) if comps else None
+        total = entry.pop("_completion_sum")
+        count = entry.pop("_completion_n")
+        entry["completion_pct"] = round(total / count, 4) if count else None
     return agg
+
+
+def aggregate_watch_rows(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Collapse per-session history into per-(movie, user) aggregates, in one go."""
+    agg: dict[tuple[str, str], dict[str, Any]] = {}
+    fold_watch_rows(agg, rows)
+    return finalize_watch_rows(agg)
 
 
 # -------------------------------------------------------------------------- TMDB
@@ -667,9 +691,13 @@ def _stream_height(value: Any) -> int | None:
     return None
 
 
-def aggregate_show_watch(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Collapse episode plays into one record per show."""
-    agg: dict[str, dict[str, Any]] = {}
+def fold_show_watch(agg: dict[str, dict[str, Any]], rows: Iterable[dict[str, Any]]) -> None:
+    """Fold another page of episode plays into per-show records.
+
+    Heights are counted rather than listed. The median still needs the
+    distribution, but a household streams at a handful of distinct heights and
+    watches episodes by the thousand, so counting bounds this by the former.
+    """
     for row in rows:
         key = row["show_rating_key"]
         entry = agg.setdefault(
@@ -678,8 +706,9 @@ def aggregate_show_watch(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
                 "show_rating_key": key,
                 "plays": 0,
                 "last_played_at": None,
-                "_completions": [],
-                "_heights": [],
+                "_completion_sum": 0.0,
+                "_completion_n": 0,
+                "_heights": Counter(),
             },
         )
         entry["plays"] += 1
@@ -687,18 +716,36 @@ def aggregate_show_watch(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
         if played and (entry["last_played_at"] is None or played > entry["last_played_at"]):
             entry["last_played_at"] = played
         if row["completion_pct"] is not None:
-            entry["_completions"].append(row["completion_pct"])
+            entry["_completion_sum"] += row["completion_pct"]
+            entry["_completion_n"] += 1
         if row["stream_height"]:
-            entry["_heights"].append(row["stream_height"])
+            entry["_heights"][row["stream_height"]] += 1
+
+
+def finalize_show_watch(agg: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Resolve the running totals. Called once, after the last fold."""
     for entry in agg.values():
-        completions = entry.pop("_completions")
-        heights = entry.pop("_heights")
-        entry["mean_completion"] = (
-            sum(completions) / len(completions) if completions else None
-        )
+        total = entry.pop("_completion_sum")
+        count = entry.pop("_completion_n")
+        heights: Counter[int] = entry.pop("_heights")
+        entry["mean_completion"] = total / count if count else None
         # The typical delivered height, not the best ever seen: one 4K play on a
-        # borrowed television should not argue that the whole show needs 4K.
-        entry["typical_stream_height"] = (
-            sorted(heights)[len(heights) // 2] if heights else None
-        )
+        # borrowed television should not argue that the whole show needs 4K. This
+        # walks the counts to the same element ``sorted(heights)[n // 2]`` picks.
+        entry["typical_stream_height"] = None
+        if heights:
+            midpoint = sum(heights.values()) // 2
+            running = 0
+            for height in sorted(heights):
+                running += heights[height]
+                if running > midpoint:
+                    entry["typical_stream_height"] = height
+                    break
     return agg
+
+
+def aggregate_show_watch(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Collapse episode plays into one record per show, in one go."""
+    agg: dict[str, dict[str, Any]] = {}
+    fold_show_watch(agg, rows)
+    return finalize_show_watch(agg)

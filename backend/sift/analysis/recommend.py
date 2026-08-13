@@ -96,8 +96,10 @@ def _read_taste(session: Session) -> Taste:
         if year:
             era = f"{(year // 10) * 10}s"
             era_counts[era] = era_counts.get(era, 0) + 1
-    top_genres = sorted(genre_counts, key=lambda g: -genre_counts[g])[:5]
-    top_eras = sorted(era_counts, key=lambda e: -era_counts[e])[:3]
+    # Name breaks the tie, so an equally common pair of genres always yields
+    # the same five — the query behind these counts has no ORDER BY.
+    top_genres = sorted(genre_counts, key=lambda g: (-genre_counts[g], g))[:5]
+    top_eras = sorted(era_counts, key=lambda e: (-era_counts[e], e))[:3]
     return Taste(
         top_genres=frozenset(top_genres),
         top_eras=frozenset(top_eras),
@@ -146,7 +148,7 @@ def _year_of(item: dict[str, Any]) -> int | None:
 
 
 def _reason(sources: list[tuple[str, float]]) -> str:
-    top = [name for name, _ in sorted(sources, key=lambda s: s[1], reverse=True)[:2]]
+    top = [name for name, _ in sorted(sources, key=lambda s: (-s[1], s[0]))[:2]]
     if len(top) >= 2:
         return f"Because you own {top[0]} and {top[1]}"
     if top:

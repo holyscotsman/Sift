@@ -2,6 +2,90 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.24.0 — Six real bugs, and the measurements that found them
+
+A continuous-improvement pass over the analysis and action code. It began as
+performance work and turned up six correctness bugs, three of which could lose
+data or misreport what happened to it.
+
+**Every successful delete was being recorded as a failure.** The agent result
+handler required an output size and duration before it would file anything as
+done. Only a transcode produces those; a delete produces no new file. So every
+delete the agent completed fell through to the failure branch, with the action
+marked FAILED and an invented error attached. The reclaim feature emits nothing
+but delete jobs, so this was all of them.
+
+**The agent's trash could overwrite itself.** Approved deletes are moved to
+`.sift-trash` rather than unlinked, which is the only thing standing between a
+wrong approval and a re-download. It moved onto `trash/<basename>`, and
+`shutil.move` replaces an existing destination silently. A transcode writes its
+new encode out under the source's own name, so a later delete of that encode
+landed on exactly the same trash path and erased the original it was protecting.
+
+**Acting on a finding checked that paths existed, not that anything survived.** A
+request naming every copy of an episode passed, because every one of those copies
+exists. "Only the surplus goes" was a property of how findings were computed, not
+of what the endpoint accepted. It is now enforced where it can be relied on.
+
+**Two rankings were not deterministic.** `max(set(values), key=values.count)`
+resolved ties by set iteration order, which for strings comes from Python's
+per-process hash seed — so a season split evenly between two resolutions read as
+either one, differing between runs over an identical library, on the path that
+proposes irreversible downgrades. Separately, every ranking sort key was
+non-total while none of the queries behind them specify an order: SQLite returns
+rowid order, Postgres promises nothing, and the reclaim page shows only the first
+500 findings, so equal-scoring items swapping places changes what you are shown.
+Ties now break toward the lower resolution and the less efficient codec — both
+make a proposed downgrade look smaller, which is the right way to be wrong about
+a destructive suggestion.
+
+**A service URL could point at cloud instance metadata.** Every major cloud
+serves instance credentials from a link-local address with no authentication, and
+Sift sends each service its stored API key. "Test my connection" could read the
+deploy's own keys back through the health endpoint. Private ranges are
+deliberately still allowed — Plex and Radarr live on a home LAN, and blocking
+those would pass every attack test while making the product unusable.
+
+**Scoring a library cost four database round trips per film**, the same shape as
+2607.15.1, in the largest loop of the scan: 4.002 statements per film to 0.009,
+with all 2,000 scores proven byte-identical before and after. The reclaim ledger
+was rebuilt to select columns rather than ORM entities and to load shared data
+once: 242ms to 132ms.
+
+**Watch history is folded rather than collected.** History size tracks how much a
+household watches rather than how much it owns, so a heavy viewer's is larger than
+their library, and all of it was read into a list to be aggregated. Peak memory is
+now the number of distinct titles rather than the number of plays.
+
+Groundwork: `bench/` gains a seeded fixture and two benchmarks — one reporting
+statements per film (the number that predicts hosted behaviour, since the bench
+runs on SQLite where round trips are free), one reporting how much reclaimable
+disk sits in the top of the ledger.
+
+## 2607.23.0 — Fold watch history instead of collecting it
+
+The third and last phase with the shape that killed the other two. History is
+different in kind from the rest of a scan: its size tracks how much a household
+*watches*, not how much it owns, so a heavy viewer's episode history is larger
+than their library. All of it was being read into a list and aggregated once.
+
+Nothing downstream ever wanted the rows. Both consumers immediately collapse them
+into per-title aggregates, so the pages are now folded as they arrive and the
+rows are discarded. Peak memory is the number of distinct titles rather than the
+number of plays.
+
+**The accumulators no longer grow with plays either.** Completions were kept as a
+list to take a mean at the end — a running sum and count give the same number
+without the list. Stream heights were kept as a list to take a median, which does
+need the distribution, but a household streams at a handful of distinct heights
+and watches episodes by the thousand, so counting them bounds it by the former.
+The median walk is pinned against the definition it replaced, with mode and max
+as the mutations it must reject: on a set of four 480s, three 1080s and two
+2160s, the mode is 480, the max is 2160, and the answer is 1080.
+
+**Tautulli got the same two pagination floors as Plex.** Its docstring already
+claimed the read was memory-flat while accumulating every row; now it is.
+
 ## 2607.22.0 — Stream the Sonarr phase too, before it stalls the same way
 
 The Plex fix in 2607.21.0 removes the first wall a TV library hits. The Sonarr

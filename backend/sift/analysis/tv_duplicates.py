@@ -30,13 +30,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Episode, MediaFile, Season, Show
 
 # Order of preference when deciding which copy to keep.
 _RESOLUTION_RANK = {"480p": 0, "720p": 1, "1080p": 2, "1440p": 3, "2160p": 4}
+
+# Episodes per read, matching the chunk size the ingest writers use.
+_CHUNK = 500
 
 
 @dataclass(frozen=True)
@@ -113,18 +116,35 @@ def find(session: Session, *, limit: int = 200) -> tuple[list[ShowDuplicates], i
     Returns ``(shows, total_reclaimable)`` — the second across the whole library,
     not just the returned page.
     """
-    rows = session.execute(
-        select(MediaFile, Episode, Season, Show)
-        .join(Episode, Episode.id == MediaFile.episode_id)
-        .join(Season, Season.id == Episode.season_id)
-        .join(Show, Show.tvdb_id == Season.show_id)
-    )
+    # Ask the database which episodes have more than one file before reading any
+    # of them. An episode with a single file cannot be duplicated, and in a real
+    # library that is nearly all of them — hydrating the whole join first meant
+    # building four ORM objects per file for tens of thousands of files, then
+    # discarding all but a few percent.
+    duplicated = [
+        episode_id
+        for (episode_id,) in session.execute(
+            select(MediaFile.episode_id)
+            .where(MediaFile.episode_id.is_not(None))
+            .group_by(MediaFile.episode_id)
+            .having(func.count(MediaFile.id) > 1)
+        )
+    ]
 
     by_episode: dict[int, list[MediaFile]] = {}
     meta: dict[int, tuple[Episode, Season, Show]] = {}
-    for media_file, episode, season, show in rows:
-        by_episode.setdefault(episode.id, []).append(media_file)
-        meta[episode.id] = (episode, season, show)
+    for start in range(0, len(duplicated), _CHUNK):
+        batch = duplicated[start : start + _CHUNK]
+        rows = session.execute(
+            select(MediaFile, Episode, Season, Show)
+            .join(Episode, Episode.id == MediaFile.episode_id)
+            .join(Season, Season.id == Episode.season_id)
+            .join(Show, Show.tvdb_id == Season.show_id)
+            .where(MediaFile.episode_id.in_(batch))
+        )
+        for media_file, episode, season, show in rows:
+            by_episode.setdefault(episode.id, []).append(media_file)
+            meta[episode.id] = (episode, season, show)
 
     per_show: dict[int, list[DuplicateEpisode]] = {}
     titles: dict[int, tuple[str, str | None]] = {}
@@ -170,6 +190,6 @@ def find(session: Session, *, limit: int = 200) -> tuple[list[ShowDuplicates], i
         )
         for tvdb_id, eps in per_show.items()
     ]
-    shows.sort(key=lambda s: s.reclaimable, reverse=True)
+    shows.sort(key=lambda s: (-s.reclaimable, s.tvdb_id))
     total = sum(s.reclaimable for s in shows)
     return shows[: max(1, limit)], total

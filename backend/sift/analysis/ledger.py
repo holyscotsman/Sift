@@ -28,7 +28,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from ..db.models import MediaFile, Season, Show
+from ..db.models import MediaFile, Show
 from . import bitrate, duplicates, outliers, suitability, tv_duplicates, tv_size
 
 TIER_FREE = 0
@@ -109,7 +109,11 @@ def _fmt(value: int) -> str:
 def build(session: Session, *, limit: int = 500) -> Ledger:
     """Every finding, in one currency, ordered by tier then by size."""
     findings: list[Finding] = []
+    # Measured once. Both the film outlier pass and the season passes need these,
+    # and each was re-reading every file in the library to derive them again.
     baselines = outliers.load_baselines(session)
+    season_groups = tv_size.load_seasons(session)
+    shows = tv_size.load_shows(session)
 
     # --- tier 0: duplicates, both kinds -------------------------------------
     film_groups, _surplus = duplicates.find(session, limit=1000)
@@ -151,7 +155,7 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 0 and 1: film size outliers -----------------------------------
-    report = outliers.find(session, limit=1000)
+    report = outliers.find(session, limit=1000, baselines=baselines)
     for item in report.findings:
         if item.bytes_reclaimable <= 0:
             continue
@@ -173,7 +177,9 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 1: heavy seasons ----------------------------------------------
-    sized, _excess = tv_size.seasons(session, baselines=baselines, limit=1000)
+    sized, _excess = tv_size.seasons(
+        session, baselines=baselines, limit=1000, groups=season_groups, shows=shows
+    )
     for season in sized:
         if not season.bloated or season.excess <= 0:
             continue
@@ -197,9 +203,13 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 2: quality downgrades -----------------------------------------
-    findings.extend(_downgrades(session, baselines))
+    findings.extend(_downgrades(baselines, season_groups, shows))
 
-    findings.sort(key=lambda f: (f.risk_tier, -f.bytes_reclaimable))
+    # The identity fields are part of the key, not decoration. Without them two
+    # findings of equal size keep whatever order the database handed their rows
+    # back in — stable on SQLite, unpromised on Postgres, and the page shows only
+    # the first 500. A queue that reshuffles between loads is not a queue.
+    findings.sort(key=lambda f: (f.risk_tier, -f.bytes_reclaimable, f.kind, f.target_id))
     by_tier: dict[int, int] = {}
     counts: dict[int, int] = {}
     for finding in findings:
@@ -226,37 +236,28 @@ def _movie_copy_sizes(session: Session) -> dict[str, int]:
     return sizes
 
 
-def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]:
-    """Seasons held higher than they need to be, where every signal agrees."""
-    from sqlalchemy import select
+def _downgrades(
+    baselines: bitrate.Baselines,
+    grouped: dict[tuple[int, int], tv_size.SeasonGroup],
+    shows: dict[int, Show],
+) -> list[Finding]:
+    """Seasons held higher than they need to be, where every signal agrees.
 
-    from ..db.models import Episode
-
-    rows = session.execute(
-        select(MediaFile, Season, Show)
-        .join(Episode, Episode.id == MediaFile.episode_id)
-        .join(Season, Season.id == Episode.season_id)
-        .join(Show, Show.tvdb_id == Season.show_id)
-    )
-    grouped: dict[tuple[int, int], list[tuple[MediaFile, Season, Show]]] = {}
-    for media_file, season, show in rows:
-        grouped.setdefault((show.tvdb_id, season.season_number), []).append(
-            (media_file, season, show)
-        )
-
+    Reads through the shared season loader rather than repeating the four-table
+    join, which was previously executed once here and twice more in ``tv_size``.
+    """
     out: list[Finding] = []
-    for (tvdb_id, number), entries in grouped.items():
-        files = [f for f, _s, _sh in entries]
-        season = entries[0][1]
-        show = entries[0][2]
+    for (tvdb_id, number), group in grouped.items():
+        files = group.files
+        show = shows[tvdb_id]
         resolutions = [f.resolution for f in files if f.resolution]
         if not resolutions:
             continue
-        current = max(set(resolutions), key=resolutions.count)
+        current = tv_size.dominant(resolutions, rank=tv_size.resolution_rank)
         verdict = suitability.assess(
             _show_facts(show),
             season_number=number,
-            air_year=season.air_year,
+            air_year=group.air_year,
             current=current,
             has_uhd_file=any(f.resolution == "2160p" for f in files),
         )
@@ -286,9 +287,17 @@ def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]
     return out
 
 
-def _dominant_codec(files: list[MediaFile]) -> str | None:
-    codecs = [f.video_codec for f in files if f.video_codec]
-    return max(set(codecs), key=codecs.count) if codecs else None
+def _dominant_codec(files: list[tv_size.SeasonFile]) -> str | None:
+    """The season's codec, ties broken toward the *least* efficient one.
+
+    The codec picks the baseline bucket a downgrade's saving is measured against.
+    A more efficient codec has a lower expected rate, so choosing it on a tie would
+    inflate the apparent saving — exactly the wrong way to be wrong about an
+    irreversible suggestion.
+    """
+    return tv_size.dominant(
+        [f.video_codec for f in files], rank=lambda c: -bitrate.codec_factor(c)
+    )
 
 
 def plan(ledger: Ledger, target_bytes: int) -> Plan:

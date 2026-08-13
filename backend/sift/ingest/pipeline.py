@@ -754,26 +754,41 @@ class ScanPipeline:
         if self.tautulli is None:
             return {}
         kids_accounts = set(self.settings.tautulli.kids_accounts)
-        rows = await self.tautulli.get_history()
-        normalized = [
-            normalize.normalize_tautulli_row(r, kids_accounts=kids_accounts) for r in rows
-        ]
-        aggregates = normalize.aggregate_watch_rows(normalized)
+
+        # Folded page by page rather than collected. History is the one source
+        # whose size tracks how much gets *watched* rather than how much is owned,
+        # so a heavy household's is larger than its library — and the fold is what
+        # the rows were only ever gathered for.
+        films: dict[tuple[str, str], dict[str, Any]] = {}
+        plays = 0
+        async for batch in self.tautulli.iter_history():
+            normalize.fold_watch_rows(
+                films,
+                (normalize.normalize_tautulli_row(r, kids_accounts=kids_accounts) for r in batch),
+            )
+            plays += len(batch)
+            await self._note(f"{plays:,} film plays")
+        aggregates = normalize.finalize_watch_rows(films)
         counts = await asyncio.to_thread(self._persist_watch, list(aggregates.values()))
 
         # Episode history, aggregated per show. This is the evidence behind
         # "how attentively is it actually watched", which is one of the three
         # things that decide whether a show needs to be in HD.
-        episode_rows = [
-            r
-            for r in (
-                normalize.normalize_tautulli_episode_row(raw)
-                for raw in await self.tautulli.get_history(media_type="episode")
+        shows: dict[str, dict[str, Any]] = {}
+        episode_plays = 0
+        async for batch in self.tautulli.iter_history(media_type="episode"):
+            normalize.fold_show_watch(
+                shows,
+                (
+                    row
+                    for raw in batch
+                    if (row := normalize.normalize_tautulli_episode_row(raw)) is not None
+                ),
             )
-            if r is not None
-        ]
-        shows = normalize.aggregate_show_watch(episode_rows)
-        counts.update(await asyncio.to_thread(self._persist_show_watch, list(shows.values())))
+            episode_plays += len(batch)
+            await self._note(f"{episode_plays:,} episode plays")
+        finalized = normalize.finalize_show_watch(shows)
+        counts.update(await asyncio.to_thread(self._persist_show_watch, list(finalized.values())))
         return counts
 
     def _persist_show_watch(self, aggregates: list[dict[str, Any]]) -> dict[str, int]:

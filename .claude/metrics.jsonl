@@ -1,0 +1,28 @@
+{"iter":0,"item":"baseline: junk scoring hot path","metric":"statements_per_film","before":4.002,"after":4.002,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: junk scoring hot path","metric":"p50_ms","before":2964.6,"after":2964.6,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger ranking","metric":"head_value_share","before":0.0653,"after":0.0653,"direction":"higher_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger ranking","metric":"tier_order_violations","before":0,"after":0,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger build","metric":"build_p50_ms","before":804.2,"after":804.2,"direction":"lower_is_better"}
+{"iter":1,"item":"batch the scoring reads","metric":"statements_per_film","before":4.002,"after":0.009,"direction":"lower_is_better"}
+{"iter":1,"item":"batch the scoring reads","metric":"p50_ms","before":2964.6,"after":196.1,"direction":"lower_is_better"}
+{"iter":1,"item":"batch the scoring reads","metric":"head_value_share","before":0.0653,"after":0.0653,"direction":"higher_is_better"}
+{"iter":2,"item":"prefilter duplicate episodes before hydrating","metric":"tv_duplicates_ms","before":417.7,"after":46.5,"direction":"lower_is_better"}
+{"iter":2,"item":"prefilter duplicate episodes before hydrating","metric":"build_p50_ms","before":734.0,"after":597.9,"direction":"lower_is_better"}
+{"iter":3,"item":"share one column-select season loader","metric":"build_p50_ms","before":597.9,"after":208.5,"direction":"lower_is_better"}
+{"iter":3,"item":"share one column-select season loader","metric":"tv_size_seasons_ms","before":188.7,"after":26.5,"direction":"lower_is_better"}
+{"iter":3,"item":"share one column-select season loader","metric":"downgrades_ms","before":170.6,"after":46.5,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"build_p50_ms","before":242.1,"after":242.1,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"head_value_share","before":0.0646,"after":0.0646,"direction":"higher_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"statements_per_film","before":0.009,"after":0.009,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"inconsistent_seasons_found","before":0,"after":96,"direction":"higher_is_better"}
+{"iter":5,"item":"column-select the film outlier read","metric":"outliers_find_ms","before":106.2,"after":56.6,"direction":"lower_is_better"}
+{"iter":5,"item":"column-select the film outlier read","metric":"build_p50_ms","before":242.1,"after":167.6,"direction":"lower_is_better"}
+{"iter":6,"item":"hoist baselines and season load out of build","metric":"build_p50_ms","before":167.6,"after":131.9,"direction":"lower_is_better"}
+{"iter":6,"item":"hoist baselines and season load out of build","metric":"build_statements","before":12,"after":9,"direction":"lower_is_better"}
+{"iter":7,"item":"deterministic conservative tie-break for dominant resolution/codec","metric":"distinct_ledgers_across_8_hash_seeds","before":2,"after":1,"direction":"lower_is_better"}
+{"iter":7,"item":"deterministic conservative tie-break (fixture re-baseline)","metric":"build_p50_ms","before":129.9,"after":129.9,"direction":"lower_is_better"}
+{"iter":8,"item":"total sort keys for every ranking","metric":"ledger_digests_across_row_orders","before":2,"after":1,"direction":"lower_is_better"}
+{"iter":9,"item":"refuse service URLs pointing at cloud instance metadata","metric":"metadata_urls_accepted","before":9,"after":0,"direction":"lower_is_better"}
+{"iter":10,"item":"refuse deletes that would strand a title","metric":"last_copy_deletes_accepted","before":2,"after":0,"direction":"lower_is_better"}
+{"iter":11,"item":"never overwrite a file already in the agent trash","metric":"files_surviving_two_same_name_deletes","before":1,"after":2,"direction":"higher_is_better"}
+{"iter":12,"item":"record a successful delete as a success","metric":"successful_deletes_filed_as_failed","before":1,"after":0,"direction":"lower_is_better"}

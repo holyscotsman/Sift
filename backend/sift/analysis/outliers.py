@@ -22,6 +22,7 @@ two-hour feature is not, whatever its size.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -108,14 +109,49 @@ def load_baselines(session: Session) -> bitrate.Baselines:
     )
 
 
+class FilmFile(NamedTuple):
+    """One film's file, as the eight fields this module actually reads.
+
+    Selected as columns rather than as ``MediaFile`` and ``Movie`` entities: the
+    ORM builds a fully instrumented, identity-mapped object per row, and a library
+    is tens of thousands of rows from which six attributes are read.
+    """
+
+    tmdb_id: int
+    title: str
+    year: int | None
+    runtime: int | None
+    path: str | None
+    size: int | None
+    duration_ms: int | None
+    resolution: str | None
+    video_codec: str | None
+
+
+def _load_film_files(session: Session) -> list[FilmFile]:
+    rows = session.execute(
+        select(
+            Movie.tmdb_id,
+            Movie.title,
+            Movie.year,
+            Movie.runtime,
+            MediaFile.path,
+            MediaFile.size,
+            MediaFile.duration_ms,
+            MediaFile.resolution,
+            MediaFile.video_codec,
+        ).join(Movie, Movie.tmdb_id == MediaFile.movie_tmdb_id)
+    )
+    return [FilmFile(*row) for row in rows]
+
+
 def _small_file_finding(
     *,
-    movie: Movie,
-    file: MediaFile,
+    file: FilmFile,
     baselines: bitrate.Baselines,
 ) -> SizeFinding | None:
     """Classify a small file, or return ``None`` when it is simply a small film."""
-    runtime = movie.runtime
+    runtime = file.runtime
     played = _minutes(file.duration_ms)
     size = file.size or 0
 
@@ -126,9 +162,9 @@ def _small_file_finding(
 
     if played < runtime * TRUNCATED_FRACTION:
         return SizeFinding(
-            tmdb_id=movie.tmdb_id,
-            title=movie.title,
-            year=movie.year,
+            tmdb_id=file.tmdb_id,
+            title=file.title,
+            year=file.year,
             kind="truncated",
             path=file.path,
             size=size,
@@ -157,9 +193,9 @@ def _small_file_finding(
     )
     if verdict is not None and verdict.rate < verdict.bucket.median_rate * BAD_RIP_FRACTION:
         return SizeFinding(
-            tmdb_id=movie.tmdb_id,
-            title=movie.title,
-            year=movie.year,
+            tmdb_id=file.tmdb_id,
+            title=file.title,
+            year=file.year,
             kind="bad_rip",
             path=file.path,
             size=size,
@@ -179,19 +215,23 @@ def _small_file_finding(
     return None
 
 
-def find(session: Session, *, limit: int = 200) -> OutlierReport:
-    """Films that are too large or too small, biggest reclaim first."""
-    baselines = load_baselines(session)
-    rows = session.execute(
-        select(MediaFile, Movie).join(Movie, Movie.tmdb_id == MediaFile.movie_tmdb_id)
-    )
+def find(
+    session: Session, *, limit: int = 200, baselines: bitrate.Baselines | None = None
+) -> OutlierReport:
+    """Films that are too large or too small, biggest reclaim first.
 
+    ``baselines`` is accepted so a caller that already measured them does not pay
+    for a second full pass over every file. Left out, they are measured here, which
+    is what a standalone caller wants.
+    """
+    if baselines is None:
+        baselines = load_baselines(session)
     findings: list[SizeFinding] = []
     cleared = 0
-    for file, movie in rows:
+    for file in _load_film_files(session):
         size = file.size or 0
         if 0 < size < SMALL_FILE_BYTES:
-            small = _small_file_finding(movie=movie, file=file, baselines=baselines)
+            small = _small_file_finding(file=file, baselines=baselines)
             if small is None:
                 cleared += 1
             else:
@@ -216,14 +256,14 @@ def find(session: Session, *, limit: int = 200) -> OutlierReport:
         )
         findings.append(
             SizeFinding(
-                tmdb_id=movie.tmdb_id,
-                title=movie.title,
-                year=movie.year,
+                tmdb_id=file.tmdb_id,
+                title=file.title,
+                year=file.year,
                 kind="oversized",
                 path=file.path,
                 size=size,
                 duration_ms=file.duration_ms,
-                runtime_minutes=movie.runtime,
+                runtime_minutes=file.runtime,
                 resolution=file.resolution,
                 video_codec=file.video_codec,
                 bytes_reclaimable=max(verdict.excess, saving),
@@ -235,7 +275,7 @@ def find(session: Session, *, limit: int = 200) -> OutlierReport:
             )
         )
 
-    findings.sort(key=lambda f: f.bytes_reclaimable, reverse=True)
+    findings.sort(key=lambda f: (-f.bytes_reclaimable, f.tmdb_id, f.path or ""))
     return OutlierReport(
         findings=findings[: max(1, limit)],
         total_reclaimable=sum(f.bytes_reclaimable for f in findings),
