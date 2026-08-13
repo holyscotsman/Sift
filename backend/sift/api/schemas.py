@@ -790,3 +790,37 @@ class SectionsResponse(BaseModel):
 class SectionKindsIn(BaseModel):
     # {"Cartoons": "show", "Home Videos": "ignore"}
     section_kinds: dict[str, str]
+
+
+class ShowOut(BaseModel):
+    tvdb_id: int
+    tmdb_id: int | None = None
+    title: str
+    year: int | None = None
+    status: str | None = None
+    network: str | None = None
+    genres: list[str] = []
+    library_section: str | None = None
+    is_kids: bool = False
+    monitored: bool = False
+    in_plex: bool = False
+    # Typical episode length in minutes.
+    runtime: int | None = None
+    season_count: int = 0
+    episode_count: int = 0
+    # Summed from the episode files, so this is disk actually in use rather than
+    # what Sonarr believes it imported.
+    total_size: int = 0
+    # The resolution most of the show is in.
+    resolution: str | None = None
+    plays: int = 0
+    last_played_at: datetime | None = None
+    mean_completion: float | None = None
+
+
+class ShowListResponse(BaseModel):
+    items: list[ShowOut]
+    total: int
+    page: int
+    page_size: int
+    total_size: int

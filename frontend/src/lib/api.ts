@@ -9,6 +9,7 @@ import type {
   PlanResponse,
   ReclaimActResult,
   SectionsResponse,
+  ShowListResponse,
   TvStorageResponse,
   VersionStatus,
   RestartResponse,
@@ -200,6 +201,9 @@ export const api = {
     }),
   movies: (query: MovieQuery = {}) =>
     request<MovieListResponse>(`/api/movies${queryString(query as Record<string, unknown>)}`),
+  shows: (query: Record<string, unknown> = {}) =>
+    request<ShowListResponse>(`/api/shows${queryString(query)}`),
+  showSections: () => request<string[]>("/api/shows/sections"),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),
   setKeepOverride: (tmdbId: number, keep: boolean) =>
     request<{ tmdb_id: number; keep_override: boolean }>(`/api/movies/${tmdbId}/keep`, {

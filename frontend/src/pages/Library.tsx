@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 
 import { GridIcon, TableIcon } from "@/components/icons";
+import { ShowsList } from "@/components/ShowsList";
 import { api, getToken } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
@@ -35,6 +36,9 @@ function fmtBytes(bytes: number): string {
 
 export function Library() {
   const [params, setParams] = useSearchParams();
+  // Films and television are different shelves, not one list with a filter: the
+  // columns worth showing differ, and shows are never scored for removal.
+  const tab = params.get("tab") === "tv" ? "tv" : "movies";
   const { start: startScan } = useScan();
   const q = params.get("q") ?? "";
   // View and sort survive navigation — read once, written on change.
@@ -195,8 +199,54 @@ export function Library() {
 
   const firstLoad = loading && items.length === 0;
 
+  const tabs = (
+    <div className="mb-4 flex gap-1" role="tablist" aria-label="Library kind">
+      {(
+        [
+          ["movies", "Movies"],
+          ["tv", "TV Shows"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          role="tab"
+          aria-selected={tab === value}
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            if (value === "movies") next.delete("tab");
+            else next.set("tab", value);
+            setParams(next, { replace: true });
+          }}
+          className={`rounded-pill border px-4 py-1.5 text-sm font-semibold ${
+            tab === value
+              ? "border-accent bg-accent-soft text-accent"
+              : "border-line text-fg2 hover:bg-bg2"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === "tv") {
+    return (
+      <div className="page-enter">
+        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
+          Library
+        </h1>
+        <p className="mb-4 mt-1 text-sm text-fg2">
+          Every show library counts — Cartoons, Anime, Game Shows and the rest.
+        </p>
+        {tabs}
+        <ShowsList query={q} />
+      </div>
+    );
+  }
+
   return (
     <div className="page-enter">
+      {tabs}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
