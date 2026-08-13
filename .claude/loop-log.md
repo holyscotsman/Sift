@@ -149,3 +149,19 @@ truncated/bad-rip films with wrong *duration* — so `inconsistencies` and part 
 metric, so do it as its own iteration. (b) `outliers.find` is now the largest
 single cost at 103ms. (c) `load_seasons` is still executed once per caller —
 hoisting it to a single per-request load would remove another join from `build`.
+
+### Iter 4 · 2026-08-13 · measurement
+Fixed the fixture gap iter 3 exposed. Added inconsistent seasons (odd-resolution +
+off-rate episodes in every 5th season), truncated films (duration stops short of
+runtime), and **legitimate short films that must not be flagged** — the case a
+fixture of only-broken-things can never catch.
+Outlier kinds {oversized, bad_rip} → {oversized, bad_rip, truncated}; inconsistent
+seasons 0 → 96; all three risk tiers now populated (132/50/63). `bench_ledger.py`
+now prints the kind breakdown so a future fixture that stops exercising a kind
+shows as a missing key.
+**Every metric before iter 4 was measured on the poorer fixture and is NOT
+comparable.** New baseline: build_p50 242.1ms, head_value_share 0.0646,
+statements_per_film 0.009.
+Next: `outliers.find` (103ms pre-fixture-change) is now the largest single cost in
+`build`. Also `load_seasons` still runs once per caller inside `build` — hoisting
+it to a single load would drop one join.
