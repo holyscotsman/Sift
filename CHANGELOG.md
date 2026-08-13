@@ -2,6 +2,46 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.21.0 — Fix the scan dying partway through the Plex phase
+
+A scan of a library with television in it stopped at the same point every time.
+Not slowed — stopped, and always at the same place, which is the tell: a scan
+that is genuinely slow moves eventually, and one that stops at an identical
+point is being killed at an identical point.
+
+**Root cause: the whole TV sweep was held in memory before anything was
+written.** The episode read added to a list and the list was persisted at the
+end. That is fine for films — a large film library is a few thousand records —
+and quite different for television, where the same library is tens of thousands
+of episodes each carrying full media detail. On a small hosted instance the
+process is killed for memory before the first write. Nothing catches that: there
+is no exception, the task simply ceases, and the run stays marked running for
+ever. To the browser it is a bar that never moves again.
+
+Episodes are now read as a stream and written every 2,000, so peak memory is one
+batch instead of the library.
+
+**The stale sweep had to change with it.** Reconciling `media_files` is a
+delete-what-is-no-longer-there pass, and once the writes are batched, *any*
+delete rule evaluated against a single batch gets duplicates wrong: the second
+copy of an episode routinely arrives in a later batch than the first, so scoping
+the delete to the batch's own episodes reads the first copy as vanished and
+removes it. That destroys the exact evidence the duplicate report is built on,
+in the act of recording it. Marking rows as they are written and sweeping once,
+at the end, is the version that survives both — batching and duplicates.
+
+**A long phase now says what it is doing.** It reported "running" and then
+nothing until "done", so a twenty-minute sweep and a dead process looked
+identical. It now names the library it is reading and the episode count as it
+goes, which is also what makes a future stall diagnosable rather than a guess.
+
+**Pagination is bounded three ways.** The container headers are a request, not a
+guarantee; a server that ignores them answers every page with the first one, so
+the offset advances and the data never does. The sweep now stops when it has
+seen as many records as the section claims, and hard-stops at 2,000 pages
+regardless. Neither floor may end the read early: a well-behaved server is still
+paged all the way through, pinned by its own test.
+
 ## 2607.20.0 — A few shows you might want next
 
 Missing gets a TV tab. **Eight suggestions, not twenty-four.**

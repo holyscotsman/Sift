@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import junk
@@ -70,6 +70,13 @@ PHASES = (
 # optional service (Tautulli is the usual one) costs seconds, not the whole scan.
 PREFLIGHT_TIMEOUT_SECONDS = 15.0
 
+# Episodes are written every this many records rather than all at once. A large
+# TV library is tens of thousands of episodes carrying full media metadata, and
+# holding the lot before the first write is what gets a scan killed for memory on
+# a small host — which leaves the run marked running forever and reads as a scan
+# frozen at the same percentage.
+EPISODE_BATCH = 2000
+
 # Ceiling on the advisory AI pass. It's the last phase and reviews candidates one at
 # a time, so without a bound a slow provider parks a finished scan on "AI analysis"
 # for minutes. Whatever is done by then is kept.
@@ -115,6 +122,7 @@ class ScanPipeline:
         self.tmdb_enrich_limit = tmdb_enrich_limit
         # Filled by the preflight phase; named in its progress message.
         self.skipped_services: list[str] = []
+        self._progress_at: tuple[int, str, int] | None = None
 
     # ---------------------------------------------------------------- orchestration
 
@@ -131,6 +139,9 @@ class ScanPipeline:
                     stats.update(checkpoints[phase].get("counts", {}))
                     continue
                 await self._emit(scan_run_id, phase, index, "running")
+                # Remembered so a long phase can report its own progress; without
+                # it a twenty-minute sweep and a dead process look identical.
+                self._progress_at = (scan_run_id, phase, index)
                 counts = await getattr(self, f"_phase_{phase}")()
                 stats.update(counts)
                 await asyncio.to_thread(self._save_phase, scan_run_id, phase, counts)
@@ -168,6 +179,13 @@ class ScanPipeline:
         await self.progress_cb(
             ScanProgress(scan_run_id, phase, index, len(PHASES), status, message, counts or {})
         )
+
+    async def _note(self, message: str, counts: dict[str, int] | None = None) -> None:
+        """Say what a long phase is doing while it does it."""
+        if self._progress_at is None:
+            return
+        scan_run_id, phase, index = self._progress_at
+        await self._emit(scan_run_id, phase, index, "running", message, counts=counts)
 
     # ---------------------------------------------------------------------- phases
 
@@ -228,47 +246,102 @@ class ScanPipeline:
         sections = await self.plex.get_sections()
         items: list[dict[str, Any]] = []
         shows: list[dict[str, Any]] = []
-        episodes: list[dict[str, Any]] = []
+        episode_count = 0
+        file_count = 0
+        # Taken before the first episode write; everything written after it is
+        # stamped later, so what stays behind the line is what disappeared.
+        sweep_from = utcnow()
+        swept_tv = False
         plans = section_plan.plan(sections, self.settings.plex.section_kinds)
         for plan in plans:
             if not plan.scanned:
                 log.info("skipping Plex library %r — %s", plan.title, plan.reason)
                 continue
-            section = {"key": plan.key}
             kind = plan.kind
             title = plan.title
             is_kids = title.lower() in kids
+            await self._note(f"reading {title}")
             if kind == "movie":
-                raw_items = await self.plex.get_section_items(section["key"])
-                for raw in raw_items:
-                    items.append(
-                        normalize.normalize_plex_item(raw, section_title=title, is_kids=is_kids)
-                    )
+                async for batch in self.plex.iter_section_items(plan.key):
+                    for raw in batch:
+                        items.append(
+                            normalize.normalize_plex_item(raw, section_title=title, is_kids=is_kids)
+                        )
             elif kind == "show":
                 # Two passes over the section. Shows carry the TVDB guid that keys
-                # them to Sonarr; episodes carry the files. Episodes are read flat
-                # across the section rather than walked per series, which is a
-                # request per page instead of one per show.
-                for raw in await self.plex.get_section_items(section["key"], item_type=PLEX_SHOW):
-                    show = normalize.normalize_plex_show(
-                        raw, section_title=title, is_kids=is_kids
+                # them to Sonarr; episodes carry the files. Shows are persisted
+                # first so the episode sweep has something to attach to.
+                section_shows = [
+                    show
+                    for show in (
+                        normalize.normalize_plex_show(raw, section_title=title, is_kids=is_kids)
+                        for raw in await self.plex.get_section_items(
+                            plan.key, item_type=PLEX_SHOW
+                        )
                     )
-                    if show is not None:
-                        shows.append(show)
-                for raw in await self.plex.get_section_items(
-                    section["key"], item_type=PLEX_EPISODE
+                    if show is not None
+                ]
+                shows.extend(section_shows)
+                await asyncio.to_thread(self._persist_plex_shows, section_shows)
+                swept_tv = True
+
+                # Streamed and written as it arrives. See EPISODE_BATCH.
+                pending: list[dict[str, Any]] = []
+                async for batch in self.plex.iter_section_items(
+                    plan.key, item_type=PLEX_EPISODE
                 ):
-                    episode = normalize.normalize_plex_episode(raw)
-                    if episode is not None:
-                        episodes.append(episode)
+                    for raw in batch:
+                        episode = normalize.normalize_plex_episode(raw)
+                        if episode is not None:
+                            pending.append(episode)
+                    if len(pending) >= EPISODE_BATCH:
+                        written = await asyncio.to_thread(self._persist_plex_episodes, pending)
+                        episode_count += written["plex_episodes"]
+                        file_count += written["plex_episode_files"]
+                        pending = []
+                        await self._note(
+                            f"{title}: {episode_count:,} episodes",
+                            {"plex_episodes": episode_count},
+                        )
+                if pending:
+                    written = await asyncio.to_thread(self._persist_plex_episodes, pending)
+                    episode_count += written["plex_episodes"]
+                    file_count += written["plex_episode_files"]
+
+        # Only once every TV section has been read. Run any earlier and a copy
+        # that simply hadn't been reached yet would be mistaken for a deleted one.
+        if swept_tv:
+            await asyncio.to_thread(self._sweep_plex_episode_media, sweep_from)
+
+        await self._note("saving the film catalog")
         counts = await asyncio.to_thread(self._persist_plex, items)
-        if shows or episodes:
-            counts.update(await asyncio.to_thread(self._persist_plex_tv, shows, episodes))
+        if shows or episode_count:
+            counts.update(
+                {
+                    "plex_shows": len(shows),
+                    "plex_episodes": episode_count,
+                    "plex_episode_files": file_count,
+                }
+            )
         return counts
+
+    def _sweep_plex_episode_media(self, cutoff: datetime) -> int:
+        """The Plex-side sweep, on its own connection because the streamed writes
+        that preceded it each closed theirs."""
+        with self.factory() as session:
+            dropped = self._sweep_episode_media(session, cutoff, source="plex")
+            session.commit()
+        return dropped
 
     def _persist_plex_tv(
         self, shows: list[dict[str, Any]], episodes: list[dict[str, Any]]
     ) -> dict[str, int]:
+        """Shows and episodes together. Kept for callers that have both to hand."""
+        counts = self._persist_plex_shows(shows)
+        counts.update(self._persist_plex_episodes(episodes))
+        return counts
+
+    def _persist_plex_shows(self, shows: list[dict[str, Any]]) -> dict[str, int]:
         """Record what Plex holds for TV, and every file behind it.
 
         Sonarr describes one file per episode, which is the right answer to "what
@@ -297,7 +370,25 @@ class ScanPipeline:
                 show.tmdb_id = show.tmdb_id or data["tmdb_id"]
                 if data["plex_rating_key"]:
                     by_rating_key[data["plex_rating_key"]] = show
-            session.flush()
+            session.commit()
+        return {"plex_shows": len(shows)}
+
+    def _persist_plex_episodes(self, episodes: list[dict[str, Any]]) -> dict[str, int]:
+        """One batch of episodes and the files behind them.
+
+        Called repeatedly as pages arrive rather than once with everything, so a
+        large TV library is written as it is read instead of being held whole in
+        memory first. Shows must already be persisted — they are, because the
+        show pass runs before the episode sweep for each section.
+        """
+        if not episodes:
+            return {"plex_episodes": 0, "plex_episode_files": 0}
+        with self.factory() as session:
+            by_rating_key: dict[str, Show] = {
+                s.plex_rating_key: s
+                for s in session.scalars(select(Show).where(Show.plex_rating_key.is_not(None)))
+                if s.plex_rating_key
+            }
 
             seasons: dict[tuple[int, int], Season] = {
                 (s.show_id, s.season_number): s for s in session.scalars(select(Season))
@@ -348,11 +439,7 @@ class ScanPipeline:
                     )
                 )
             session.commit()
-        return {
-            "plex_shows": len(shows),
-            "plex_episodes": written,
-            "plex_episode_files": files,
-        }
+        return {"plex_episodes": written, "plex_episode_files": files}
 
     async def _phase_sonarr(self) -> dict[str, int]:
         """Read the TV catalog: the shows, their seasons, and what backs each episode.
@@ -402,6 +489,9 @@ class ScanPipeline:
         more episodes than a film library has films, so the per-row lookups that
         merely slowed the Plex phase would be far worse here.
         """
+        # Taken before any write, so every row this pass touches stamps later than
+        # it and only rows nothing reported are left behind the line.
+        sweep_from = utcnow()
         with self.factory() as session:
             tvdb_ids = [s["tvdb_id"] for s in series]
             shows: dict[int, Show] = {}
@@ -489,7 +579,11 @@ class ScanPipeline:
                             file_records.append((episode, record))
                 _ = by_number
             session.flush()
-            files = self._sync_episode_media(session, file_records, source="sonarr")
+            # Sonarr arrives whole rather than in batches, so its sweep is safe to
+            # run inline.
+            files = self._sync_episode_media(
+                session, file_records, source="sonarr", sweep_from=sweep_from
+            )
             session.commit()
         return {
             "sonarr_shows": len(series),
@@ -503,6 +597,7 @@ class ScanPipeline:
         records: list[tuple[Episode, dict[str, Any]]],
         *,
         source: str,
+        sweep_from: datetime | None = None,
     ) -> int:
         """Reconcile ``media_files`` for episodes, from one source.
 
@@ -510,6 +605,15 @@ class ScanPipeline:
         one file on disk that two episodes both point at, so keying on the episode
         would store it twice and report double the space it occupies. It is
         recorded once, against the first episode it covers.
+
+        Writing marks rows with ``seen_at``; removing what is no longer on disk is
+        a separate sweep (see :meth:`_sweep_episode_media`). ``sweep_from`` runs it
+        inline for callers that pass the whole library in one go. It must stay
+        opt-in: episodes arrive in batches, and *any* delete rule evaluated against
+        a single batch gets a duplicated episode wrong. Scoping to the batch's own
+        episodes looks safe and isn't — the second copy of an episode routinely
+        lands in a later batch than the first, and would take the first with it,
+        quietly deleting exactly the evidence the duplicate report is built on.
         """
 
         def identity(path: str | None, episode_id: int | None) -> str:
@@ -542,10 +646,31 @@ class ScanPipeline:
             row.seen_at = utcnow()
             written += 1
 
-        stale = [row.id for key, row in existing.items() if key not in seen and row.id is not None]
+        if sweep_from is not None:
+            self._sweep_episode_media(session, sweep_from, source=source)
+        return written
+
+    def _sweep_episode_media(self, session: Session, cutoff: datetime, *, source: str) -> int:
+        """Drop episode files this scan never saw — the copy deleted on disk.
+
+        Mark and sweep rather than a set difference, because the marking happens
+        across many batches and only the sweep has the whole picture. A row still
+        carrying a stamp from before this scan started is one nothing reported
+        this time, which is the definition of gone. Rows with no stamp at all
+        predate the column and are swept too, or they would be immortal.
+        """
+        stale = list(
+            session.scalars(
+                select(MediaFile.id).where(
+                    MediaFile.episode_id.is_not(None),
+                    MediaFile.source == source,
+                    or_(MediaFile.seen_at.is_(None), MediaFile.seen_at < cutoff),
+                )
+            )
+        )
         for start in range(0, len(stale), 500):
             session.execute(delete(MediaFile).where(MediaFile.id.in_(stale[start : start + 500])))
-        return written
+        return len(stale)
 
     async def _phase_tautulli(self) -> dict[str, int]:
         if self.tautulli is None:
@@ -793,8 +918,9 @@ class ScanPipeline:
                     row.rating_key = rating_keys.get(tmdb_id)
                 row.seen_at = utcnow()
                 written += 1
-
-        stale = [row.id for key, row in existing.items() if key not in seen and row.id is not None]
+        stale = [
+            row.id for key, row in existing.items() if key not in seen and row.id is not None
+        ]
         for start in range(0, len(stale), 500):
             session.execute(delete(MediaFile).where(MediaFile.id.in_(stale[start : start + 500])))
         return written
