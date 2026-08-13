@@ -1,0 +1,5 @@
+{"iter":0,"item":"baseline: junk scoring hot path","metric":"statements_per_film","before":4.002,"after":4.002,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: junk scoring hot path","metric":"p50_ms","before":2964.6,"after":2964.6,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger ranking","metric":"head_value_share","before":0.0653,"after":0.0653,"direction":"higher_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger ranking","metric":"tier_order_violations","before":0,"after":0,"direction":"lower_is_better"}
+{"iter":0,"item":"baseline: reclaim ledger build","metric":"build_p50_ms","before":804.2,"after":804.2,"direction":"lower_is_better"}
