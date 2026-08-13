@@ -145,11 +145,22 @@ def test_change_password_full_lifecycle(client):
     )
     assert ok.status_code == 200
 
-    # Old password dead, new password lives, existing session token still valid
-    # (the signing secret is kept on purpose).
+    # Old password dead, new password lives.
     assert _login(client).status_code == 401
     assert _login(client, password="brand-new-pass-9").status_code == 200
-    assert client.get("/api/status", headers=headers).status_code == 200
+
+    # And every session issued before the change is dead, because the signing
+    # secret is rotated. This is the whole point: tokens last thirty days, and the
+    # reason anyone changes a password on a reachable instance is that they think
+    # someone else is holding one.
+    assert client.get("/api/status", headers=headers).status_code == 401
+
+    # NEGATIVE CONTROL: rotating must not sign out the device doing the changing.
+    # The response carries a replacement token, and that one has to work — a fix
+    # that logged the owner out of their own browser would pass the line above and
+    # be unusable.
+    fresh = {"X-Sift-Token": ok.json()["token"]}
+    assert client.get("/api/status", headers=fresh).status_code == 200
 
 
 def test_change_password_requires_auth(client):

@@ -376,3 +376,26 @@ Next: **server-side reconciliation of stale `claimed` jobs still does not exist*
 and is the real fix — a job claimed longer than some window should return to
 `queued` or be surfaced. Needs a timeout policy, so it is a larger slice. Also
 `frontend/` remains completely unexamined.
+
+### Iter 16 · 2026-08-13 · security
+`services/auth.py` is otherwise solid — pbkdf2 240k rounds, `compare_digest`,
+signed tokens with `exp`, per-account sliding-window rate limiting keyed by
+username rather than IP (correct behind a proxy). One gap: `change_password`
+**deliberately kept the signing secret**, documented as "existing sessions stay
+signed in". Tokens live 30 days, and the reason anyone changes a password on a
+publicly reachable instance is that they believe someone else holds one — so the
+action did nothing about the thing it is for.
+Now rotates the secret **and returns a replacement token**, so only *other*
+sessions die. That preserves the original intent (don't log the owner out of their
+own browser) without leaving a suspected intruder signed in, which is why this is
+a fix rather than an override of a deliberate decision.
+Touches three files: `auth.change_password` returns `str | None` instead of
+`bool`; `/api/auth/password` returns `TokenResponse` instead of `OkResponse`
+(**breaking API shape change**, acceptable because the only client is in this
+repo); `api.ts` stores the returned token immediately.
+Negative control is the load-bearing half: a fix that logged the owner out of
+their own browser would pass the revocation assertion and be unusable.
+Next: the logged stale-`claimed`-job reconciliation is still not done (needs a
+timeout policy — the agent's own transcode ceiling is 12h, so ~24h is the obvious
+window). `frontend/` still completely unexamined. `services/` remaining:
+autoscan, posters, reset, updates.

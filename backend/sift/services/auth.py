@@ -120,16 +120,36 @@ def clear_account(session: Session) -> None:
         session.commit()
 
 
-def change_password(session: Session, current: str, new: str) -> bool:
-    """Verify the current password and store a new hash. The signing secret is
-    kept, so existing sessions (this device included) stay signed in. Returns
-    False when the current password doesn't match."""
+def change_password(session: Session, current: str, new: str) -> str | None:
+    """Verify the current password, store a new hash, and **rotate the signing
+    secret**. Returns a fresh token for the caller, or ``None`` if the current
+    password doesn't match.
+
+    Rotating is the point. Tokens live for thirty days, and the reason anyone
+    changes a password on a publicly reachable instance is that they think someone
+    else has access — which, without rotation, this did nothing whatsoever about.
+
+    The caller gets a new token back, so only *other* sessions are signed out. The
+    old behaviour kept every session alive to avoid logging the owner out of their
+    own device; handing that device a replacement gets the same result without
+    leaving a suspected intruder signed in.
+    """
     auth = get_auth(session)
     if not auth or not verify_password(current, auth.get("password_hash", "")):
-        return False
-    session.merge(Setting(key=_AUTH_KEY, value={**auth, "password_hash": hash_password(new)}))
+        return None
+    secret = secrets.token_hex(32)
+    session.merge(
+        Setting(
+            key=_AUTH_KEY,
+            value={
+                **auth,
+                "password_hash": hash_password(new),
+                "secret": secretbox.encrypt(secret),
+            },
+        )
+    )
     session.commit()
-    return True
+    return issue_token(secret, str(auth.get("username", "")))
 
 
 # ------------------------------------------------------------------ session token
