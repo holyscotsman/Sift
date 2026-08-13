@@ -2,6 +2,40 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.22.0 — Stream the Sonarr phase too, before it stalls the same way
+
+The Plex fix in 2607.21.0 removes the first wall a TV library hits. The Sonarr
+phase, one phase later, had the identical defect and would have been the next
+one — a scan clearing 16% only to stop at around 38%.
+
+**Same cause, larger payload.** Sonarr is read with one catalog call and then two
+calls per show, each returning every episode and every file it knows about. All
+of it was collected into a dictionary and written once at the end. That is a
+bigger peak than the Plex sweep that already proved fatal, so there was no
+reason to expect it to survive. Shows are now written every `SERIES_BATCH`, and
+the phase reports how far through the library it is as it goes — two calls per
+show against a remote Sonarr is minutes of silence otherwise.
+
+**The sweep moved out of the batch, for the reason 2607.21.0 established.** It
+was running inline on the assumption that Sonarr arrives whole. Once it does not,
+a sweep decided from one batch deletes every batch either side of it: the
+regression test for this leaves 4 files out of 40 when the sweep is put back
+inside the loop.
+
+**Three preloads were reading whole tables per batch.** Loading every season,
+every episode, and every episode-backed `media_files` row was affordable when
+each ran once per scan. Batched, they re-hydrate the same tables for every batch
+— on a 30,000-episode library, hundreds of thousands of ORM objects built and
+discarded. All three now name what they want: seasons and episodes by the shows
+in hand, files by the paths in hand. Round-trip and hydration cost are both free
+on the file-backed SQLite the tests use, so this is pinned structurally instead —
+no read of `seasons` or `episodes` may go out without a filter.
+
+**One quadratic loop.** Episodes were matched to seasons by walking the show's
+whole episode list once per season. Grouping them first turns 10,000 comparisons
+into 500 for a 20-season show — which is exactly the kind of show this feature
+exists to look at.
+
 ## 2607.21.0 — Fix the scan dying partway through the Plex phase
 
 A scan of a library with television in it stopped at the same point every time.
