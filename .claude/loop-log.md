@@ -113,3 +113,20 @@ episodes, and `ledger.build` (analysis/ledger.py:109) is the read behind the
 Storage page — worth checking whether it has the same per-row shape. Also
 `_movie_copy_sizes` at :216 and `_downgrades` at :229 each open their own passes
 over `media_files`.
+
+### Iter 2 · 2026-08-13 · perf
+`tv_duplicates.find` hydrated `MediaFile+Episode+Season+Show` for **every** episode
+file, then kept the few percent with more than one file. Now asks the database
+which episode ids have >1 file (`GROUP BY … HAVING COUNT > 1`) and reads only
+those, chunked 500.
+**417.7 → 46.5ms** (9x); `ledger.build` 758.6 → 597.9ms. Ledger output identical
+(58,269-byte canonical dump, `cmp` clean).
+Important framing correction for future iterations: the ledger is **CPU-bound, not
+round-trip bound** — the whole build is only 9 statements. Statement counting is
+the right metric for the *scan*; for the Storage page read it is ORM hydration
+volume that matters. Profile with /tmp/profile_ledger.py style timing, not
+statement counts.
+Next: same shape in `tv_size.seasons` (188ms) and `ledger._downgrades` (170ms) —
+both re-run the identical 4-table join over every episode file, and `_downgrades`
+only ever needs seasons whose show could plausibly be downgraded. `outliers.find`
+is 108ms. Those three are now 78% of the build.

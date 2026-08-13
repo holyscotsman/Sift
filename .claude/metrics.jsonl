@@ -6,3 +6,5 @@
 {"iter":1,"item":"batch the scoring reads","metric":"statements_per_film","before":4.002,"after":0.009,"direction":"lower_is_better"}
 {"iter":1,"item":"batch the scoring reads","metric":"p50_ms","before":2964.6,"after":196.1,"direction":"lower_is_better"}
 {"iter":1,"item":"batch the scoring reads","metric":"head_value_share","before":0.0653,"after":0.0653,"direction":"higher_is_better"}
+{"iter":2,"item":"prefilter duplicate episodes before hydrating","metric":"tv_duplicates_ms","before":417.7,"after":46.5,"direction":"lower_is_better"}
+{"iter":2,"item":"prefilter duplicate episodes before hydrating","metric":"build_p50_ms","before":734.0,"after":597.9,"direction":"lower_is_better"}

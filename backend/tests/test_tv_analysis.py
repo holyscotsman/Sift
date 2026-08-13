@@ -254,3 +254,87 @@ def test_a_bad_rip_hiding_in_a_good_season_is_caught(tv, factory):
     with factory() as session:
         found = tv_size.inconsistencies(session)
     assert found[0].rate_outliers == 1
+
+
+def test_only_episodes_with_several_files_are_read(factory):
+    """NEGATIVE CONTROL for the has-more-than-one-file prefilter.
+
+    The scan asks the database which episodes have several files before reading
+    any of them, because in a real library almost none do and hydrating the whole
+    join built four ORM objects per file only to discard them. The risk in a
+    prefilter is that it filters out something real, so this seeds a library where
+    the duplicate is the *last* episode of the last show — the one a truncated or
+    off-by-one read loses first — and requires it to still be found.
+    """
+    from sift.analysis import tv_duplicates
+
+    with factory() as session:
+        for s in range(3):
+            tvdb_id = 900 + s
+            session.add(Show(tvdb_id=tvdb_id, title=f"Show {s}", in_plex=True))
+            season = Season(show_id=tvdb_id, season_number=1)
+            session.add(season)
+            session.flush()
+            for n in range(1, 6):
+                episode = Episode(season_id=season.id, episode_number=n, has_file=True)
+                session.add(episode)
+                session.flush()
+                session.add(
+                    MediaFile(
+                        episode_id=episode.id, path=f"/tv/{tvdb_id}/e{n}.mkv",
+                        size=1_000_000_000, duration_ms=1_320_000, resolution="1080p",
+                        source="plex",
+                    )
+                )
+                # The single duplicate in the whole library, placed last.
+                if s == 2 and n == 5:
+                    session.add(
+                        MediaFile(
+                            episode_id=episode.id, path=f"/tv/{tvdb_id}/e{n}.dup.mkv",
+                            size=400_000_000, duration_ms=1_320_000, resolution="480p",
+                            source="plex",
+                        )
+                    )
+        session.commit()
+
+    with factory() as session:
+        shows, total = tv_duplicates.find(session)
+
+    assert [s.tvdb_id for s in shows] == [902]
+    assert shows[0].surplus == 1
+    # The 480p copy is the surplus one; the 1080p original is kept.
+    assert total == 400_000_000
+
+
+def test_the_duplicate_read_survives_its_chunk_boundary(factory, monkeypatch):
+    """The prefiltered ids are read back in chunks, and a chunk boundary is where
+    an off-by-one hides. With the chunk forced to one episode, every duplicate
+    sits on a boundary — so a slice that drops an element loses real findings
+    rather than merely reading fewer rows."""
+    from sift.analysis import tv_duplicates
+
+    monkeypatch.setattr(tv_duplicates, "_CHUNK", 1)
+    with factory() as session:
+        session.add(Show(tvdb_id=950, title="Chunky", in_plex=True))
+        season = Season(show_id=950, season_number=1)
+        session.add(season)
+        session.flush()
+        for n in range(1, 4):
+            episode = Episode(season_id=season.id, episode_number=n, has_file=True)
+            session.add(episode)
+            session.flush()
+            for tag, size, res in (("a", 1_000_000_000, "1080p"), ("b", 300_000_000, "480p")):
+                session.add(
+                    MediaFile(
+                        episode_id=episode.id, path=f"/tv/950/e{n}{tag}.mkv", size=size,
+                        duration_ms=1_320_000, resolution=res, source="plex",
+                    )
+                )
+        session.commit()
+
+    with factory() as session:
+        shows, total = tv_duplicates.find(session)
+
+    assert len(shows) == 1
+    assert shows[0].surplus == 3  # all three episodes, none lost to a boundary
+    assert total == 900_000_000
