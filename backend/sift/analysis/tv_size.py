@@ -230,7 +230,7 @@ def seasons(
                 bloated=verdict.bloated,
             )
         )
-    out.sort(key=lambda s: s.excess, reverse=True)
+    out.sort(key=lambda s: (-s.excess, s.tvdb_id, s.season_number))
     total = sum(s.excess for s in out if s.bloated)
     return out[: max(1, limit)], total
 
@@ -300,5 +300,5 @@ def inconsistencies(session: Session, *, limit: int = 200) -> list[Inconsistency
                 reasons=reasons,
             )
         )
-    out.sort(key=lambda i: i.episodes_affected, reverse=True)
+    out.sort(key=lambda i: (-i.episodes_affected, i.tvdb_id, i.season_number))
     return out[: max(1, limit)]

@@ -219,3 +219,29 @@ Fixture changed again → build_p50 re-baselined to 129.9ms.
 Next: same `max(set(...), key=list.count)` idiom may exist elsewhere — grep found
 only these three, but `sorted()`/`max()` over dict iteration is worth a sweep.
 `analysis/recommend.py` and `tv_recommend.py` have had no correctness pass at all.
+
+### Iter 8 · 2026-08-13 · correctness
+**Second real bug, same family.** Every ranking sort in `analysis/` had a
+*non-total* key, and none of the queries feeding them specify `ORDER BY`. SQLite
+returns rowid order — which is why no existing test could see this — and Postgres
+promises nothing for an unordered SELECT. Two equal-scoring findings therefore kept
+whatever order the rows arrived in, and the reclaim page shows only the first 500,
+so it changes *which* findings a person sees.
+Reproduced by handing the loaders their rows reversed: the ledger produced two
+different digests (`4cae14b9` vs `ebffe5ad`). Added identity tails to eight sorts
+across 7 files (ledger, outliers, tv_duplicates, tv_size ×2, tv_recommend,
+collections, recommend ×2). Now one digest.
+**Three of my first four mutation checks were false negatives — worth reading:**
+- ledger tie-break: test passed under mutation because the fixture produced no
+  `quality_downgrade` findings, and tier 2 is the *only* tier whose producer
+  (`_downgrades`) does not sort its own output. Added three tied cartoons.
+- tv_duplicates: test compared two runs *in the same process*, and `hash(str)` is
+  stable within a process — so an arbitrary key passed. Now asserts the expected
+  order explicitly, not merely self-consistency.
+- outliers: adding the cartoons moved the library's own 1080p median so the 40 GB
+  films stopped being outliers at all. Gave that test its own films-only fixture.
+Next: `services/` and `api/` have had no correctness pass. `routes_storage.py`
+`/act` validates paths against `media_files` — worth checking it cannot be walked
+past. Also the long-standing `base_url` SSRF hole (any authenticated caller can
+repoint a service at a host they control and have Sift send it credentials) is
+still open and is the most serious known issue in the repo.

@@ -205,7 +205,11 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
     # --- tier 2: quality downgrades -----------------------------------------
     findings.extend(_downgrades(baselines, season_groups, shows))
 
-    findings.sort(key=lambda f: (f.risk_tier, -f.bytes_reclaimable))
+    # The identity fields are part of the key, not decoration. Without them two
+    # findings of equal size keep whatever order the database handed their rows
+    # back in — stable on SQLite, unpromised on Postgres, and the page shows only
+    # the first 500. A queue that reshuffles between loads is not a queue.
+    findings.sort(key=lambda f: (f.risk_tier, -f.bytes_reclaimable, f.kind, f.target_id))
     by_tier: dict[int, int] = {}
     counts: dict[int, int] = {}
     for finding in findings:

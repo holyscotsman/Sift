@@ -275,7 +275,7 @@ def find(
             )
         )
 
-    findings.sort(key=lambda f: f.bytes_reclaimable, reverse=True)
+    findings.sort(key=lambda f: (-f.bytes_reclaimable, f.tmdb_id, f.path or ""))
     return OutlierReport(
         findings=findings[: max(1, limit)],
         total_reclaimable=sum(f.bytes_reclaimable for f in findings),

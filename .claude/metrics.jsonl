@@ -21,3 +21,4 @@
 {"iter":6,"item":"hoist baselines and season load out of build","metric":"build_statements","before":12,"after":9,"direction":"lower_is_better"}
 {"iter":7,"item":"deterministic conservative tie-break for dominant resolution/codec","metric":"distinct_ledgers_across_8_hash_seeds","before":2,"after":1,"direction":"lower_is_better"}
 {"iter":7,"item":"deterministic conservative tie-break (fixture re-baseline)","metric":"build_p50_ms","before":129.9,"after":129.9,"direction":"lower_is_better"}
+{"iter":8,"item":"total sort keys for every ranking","metric":"ledger_digests_across_row_orders","before":2,"after":1,"direction":"lower_is_better"}

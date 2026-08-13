@@ -190,6 +190,6 @@ def find(session: Session, *, limit: int = 200) -> tuple[list[ShowDuplicates], i
         )
         for tvdb_id, eps in per_show.items()
     ]
-    shows.sort(key=lambda s: s.reclaimable, reverse=True)
+    shows.sort(key=lambda s: (-s.reclaimable, s.tvdb_id))
     total = sum(s.reclaimable for s in shows)
     return shows[: max(1, limit)], total

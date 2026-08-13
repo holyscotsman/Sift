@@ -37,5 +37,5 @@ def collection_gaps(session: Session) -> list[dict[str, Any]]:
                 ],
             }
         )
-    gaps.sort(key=lambda g: g["total_count"] - g["owned_count"], reverse=True)
+    gaps.sort(key=lambda g: (g["owned_count"] - g["total_count"], g["collection_id"]))
     return gaps
