@@ -23,3 +23,4 @@
 {"iter":7,"item":"deterministic conservative tie-break (fixture re-baseline)","metric":"build_p50_ms","before":129.9,"after":129.9,"direction":"lower_is_better"}
 {"iter":8,"item":"total sort keys for every ranking","metric":"ledger_digests_across_row_orders","before":2,"after":1,"direction":"lower_is_better"}
 {"iter":9,"item":"refuse service URLs pointing at cloud instance metadata","metric":"metadata_urls_accepted","before":9,"after":0,"direction":"lower_is_better"}
+{"iter":10,"item":"refuse deletes that would strand a title","metric":"last_copy_deletes_accepted","before":2,"after":0,"direction":"lower_is_better"}

@@ -268,3 +268,22 @@ Next (needs an owner decision, not an autonomous one): changing a service's
 credential. Clearing the secret on URL change is the standard protection but costs
 real UX — fixing a typo in a URL would force re-entering the API key. Worth asking
 before doing.
+
+### Iter 10 · 2026-08-13 · safety
+`/api/storage/act` validated that every path exists in `media_files`, and its
+docstring claimed this "stops this being a way to have the agent delete arbitrary
+things". It stopped arbitrary *paths*, not arbitrary *deletions*: a request naming
+every copy of an episode passed, because both copies exist. "Only the surplus goes"
+was a property of how findings were computed, not of what the endpoint accepted —
+so a stale page, a repeated call or a client bug had nothing standing in its way.
+Added `_would_strand`: counts, per episode and per film, what is being asked for
+against everything on record, and refuses if any title would be left with zero
+files. Removing 2 of 3 copies is fine; removing 3 of 3 is not. Docstring corrected
+to say what it actually does.
+Negative control matters as much as the guard: refusing *any* episode delete would
+pass the attack test and make the entire duplicate report useless, since removing
+one of two files is its whole purpose.
+Next: `tools/sift-agent.py` is the thing with filesystem access — it has had no
+review in this loop. Also `actions/engine.py` approval guard is pinned by
+`test_actions_safety.py` but the FileJob claim path (`routes_agent.py`) is newer
+and may not be covered as thoroughly.
