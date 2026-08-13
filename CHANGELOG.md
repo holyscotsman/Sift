@@ -2,6 +2,66 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.24.0 — Six real bugs, and the measurements that found them
+
+A continuous-improvement pass over the analysis and action code. It began as
+performance work and turned up six correctness bugs, three of which could lose
+data or misreport what happened to it.
+
+**Every successful delete was being recorded as a failure.** The agent result
+handler required an output size and duration before it would file anything as
+done. Only a transcode produces those; a delete produces no new file. So every
+delete the agent completed fell through to the failure branch, with the action
+marked FAILED and an invented error attached. The reclaim feature emits nothing
+but delete jobs, so this was all of them.
+
+**The agent's trash could overwrite itself.** Approved deletes are moved to
+`.sift-trash` rather than unlinked, which is the only thing standing between a
+wrong approval and a re-download. It moved onto `trash/<basename>`, and
+`shutil.move` replaces an existing destination silently. A transcode writes its
+new encode out under the source's own name, so a later delete of that encode
+landed on exactly the same trash path and erased the original it was protecting.
+
+**Acting on a finding checked that paths existed, not that anything survived.** A
+request naming every copy of an episode passed, because every one of those copies
+exists. "Only the surplus goes" was a property of how findings were computed, not
+of what the endpoint accepted. It is now enforced where it can be relied on.
+
+**Two rankings were not deterministic.** `max(set(values), key=values.count)`
+resolved ties by set iteration order, which for strings comes from Python's
+per-process hash seed — so a season split evenly between two resolutions read as
+either one, differing between runs over an identical library, on the path that
+proposes irreversible downgrades. Separately, every ranking sort key was
+non-total while none of the queries behind them specify an order: SQLite returns
+rowid order, Postgres promises nothing, and the reclaim page shows only the first
+500 findings, so equal-scoring items swapping places changes what you are shown.
+Ties now break toward the lower resolution and the less efficient codec — both
+make a proposed downgrade look smaller, which is the right way to be wrong about
+a destructive suggestion.
+
+**A service URL could point at cloud instance metadata.** Every major cloud
+serves instance credentials from a link-local address with no authentication, and
+Sift sends each service its stored API key. "Test my connection" could read the
+deploy's own keys back through the health endpoint. Private ranges are
+deliberately still allowed — Plex and Radarr live on a home LAN, and blocking
+those would pass every attack test while making the product unusable.
+
+**Scoring a library cost four database round trips per film**, the same shape as
+2607.15.1, in the largest loop of the scan: 4.002 statements per film to 0.009,
+with all 2,000 scores proven byte-identical before and after. The reclaim ledger
+was rebuilt to select columns rather than ORM entities and to load shared data
+once: 242ms to 132ms.
+
+**Watch history is folded rather than collected.** History size tracks how much a
+household watches rather than how much it owns, so a heavy viewer's is larger than
+their library, and all of it was read into a list to be aggregated. Peak memory is
+now the number of distinct titles rather than the number of plays.
+
+Groundwork: `bench/` gains a seeded fixture and two benchmarks — one reporting
+statements per film (the number that predicts hosted behaviour, since the bench
+runs on SQLite where round trips are free), one reporting how much reclaimable
+disk sits in the top of the ledger.
+
 ## 2607.23.0 — Fold watch history instead of collecting it
 
 The third and last phase with the shape that killed the other two. History is
