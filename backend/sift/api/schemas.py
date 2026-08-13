@@ -824,3 +824,22 @@ class ShowListResponse(BaseModel):
     page: int
     page_size: int
     total_size: int
+
+
+class ShowSuggestionOut(BaseModel):
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    overview: str = ""
+    poster_path: str | None = None
+    vote_average: float | None = None
+    vote_count: int | None = None
+    # Which of your shows led here, so a suggestion can be argued with.
+    because_of: list[str] = []
+
+
+class ShowSuggestionsResponse(BaseModel):
+    items: list[ShowSuggestionOut]
+    # Said plainly when the list is short or empty, rather than leaving a blank
+    # panel to be read as a failure.
+    detail: str = ""

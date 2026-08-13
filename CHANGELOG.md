@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.20.0 — A few shows you might want next
+
+Missing gets a TV tab. **Eight suggestions, not twenty-four.**
+
+Twenty-four film suggestions is a browse; twenty-four show suggestions is a
+second job. A series is dozens of hours, so the useful answer is a handful you
+might genuinely start — and a list nobody finishes reading is worse than one half
+its length. The ceiling is 24 rather than unbounded for the same reason.
+
+**Seeded by shows you finished, not shows you rate highly.** For films a rating
+is a fair proxy for taste: watching one is a small commitment and most owned
+films have been seen. Television is not like that. A library is full of series
+acquired and never started, and letting those seed the search sends the whole
+list somewhere you have already declined to go. Finishing episodes is the signal
+that survives.
+
+Agreement beats acclaim: three shows you finished pointing at the same title
+outranks one pointing at something better reviewed. Each card says which of your
+shows led there, so a suggestion can be argued with rather than only accepted or
+ignored.
+
+Nothing is requested or added from this screen — these are things to look at.
+
+376 tests. New controls: a show you never started never seeds the list, one
+nobody has rated is not suggested, and an absent TMDB says so rather than
+leaving a blank panel to be read as a failure.
+
 ## 2607.19.0 — Television gets its own shelf
 
 Library now has two tabs. Films and television are different shelves rather than

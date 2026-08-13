@@ -9,12 +9,14 @@ import { useEffect, useState } from "react";
 import { RequestAllButton, RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
+import { ShowSuggestions } from "@/components/ShowSuggestions";
 import { api } from "@/lib/api";
 import type { CanonMovieItem } from "@/lib/types";
 
 const FOLD = 30;
 
 export function Missing() {
+  const [tab, setTab] = useState<"movies" | "tv">("movies");
   const [items, setItems] = useState<CanonMovieItem[]>([]);
   const [total, setTotal] = useState(0);
   const [requestedTotal, setRequestedTotal] = useState(0);
@@ -59,8 +61,50 @@ export function Missing() {
 
   const visible = showAll ? items : items.slice(0, FOLD);
 
+  const tabs = (
+    <div className="mb-4 flex gap-1" role="tablist" aria-label="Missing kind">
+      {(
+        [
+          ["movies", "Movies"],
+          ["tv", "TV Shows"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          role="tab"
+          aria-selected={tab === value}
+          onClick={() => setTab(value)}
+          className={`rounded-pill border px-4 py-1.5 text-sm font-semibold ${
+            tab === value
+              ? "border-accent bg-accent-soft text-accent"
+              : "border-line text-fg2 hover:bg-bg2"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === "tv") {
+    return (
+      <div className="page-enter">
+        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
+          Missing
+        </h1>
+        <p className="mb-4 mt-1 max-w-2xl text-sm text-fg2">
+          A few shows you might want next. Deliberately a short list — a series is dozens of hours,
+          so a handful you would genuinely start beats a page you never finish reading.
+        </p>
+        {tabs}
+        <ShowSuggestions />
+      </div>
+    );
+  }
+
   return (
     <div className="page-enter">
+      {tabs}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">

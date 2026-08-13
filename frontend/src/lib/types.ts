@@ -655,3 +655,20 @@ export interface ShowListResponse {
   page_size: number;
   total_size: number;
 }
+
+export interface ShowSuggestion {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  overview: string;
+  poster_path: string | null;
+  vote_average: number | null;
+  vote_count: number | null;
+  // Which of your shows led here.
+  because_of: string[];
+}
+
+export interface ShowSuggestionsResponse {
+  items: ShowSuggestion[];
+  detail: string;
+}

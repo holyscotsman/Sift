@@ -10,6 +10,7 @@ import type {
   ReclaimActResult,
   SectionsResponse,
   ShowListResponse,
+  ShowSuggestionsResponse,
   TvStorageResponse,
   VersionStatus,
   RestartResponse,
@@ -204,6 +205,7 @@ export const api = {
   shows: (query: Record<string, unknown> = {}) =>
     request<ShowListResponse>(`/api/shows${queryString(query)}`),
   showSections: () => request<string[]>("/api/shows/sections"),
+  showSuggestions: () => request<ShowSuggestionsResponse>("/api/shows/suggestions"),
   movie: (tmdbId: number) => request<MovieDetail>(`/api/movies/${tmdbId}`),
   setKeepOverride: (tmdbId: number, keep: boolean) =>
     request<{ tmdb_id: number; keep_override: boolean }>(`/api/movies/${tmdbId}/keep`, {

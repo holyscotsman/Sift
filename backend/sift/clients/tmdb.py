@@ -90,6 +90,14 @@ class TmdbClient(BaseClient):
         data = await self.get_json(f"/movie/{tmdb_id}/recommendations", params={"page": page})
         return list(data.get("results", [])) if isinstance(data, dict) else []
 
+    async def get_tv_recommendations(self, tv_id: int, *, page: int = 1) -> list[dict[str, Any]]:
+        data = await self.get_json(f"/tv/{tv_id}/recommendations", params={"page": page})
+        return list(data.get("results", [])) if isinstance(data, dict) else []
+
+    async def get_similar_tv(self, tv_id: int, *, page: int = 1) -> list[dict[str, Any]]:
+        data = await self.get_json(f"/tv/{tv_id}/similar", params={"page": page})
+        return list(data.get("results", [])) if isinstance(data, dict) else []
+
     async def top_rated(self, *, page: int = 1) -> list[dict[str, Any]]:
         data = await self.get_json("/movie/top_rated", params={"page": page})
         return list(data.get("results", [])) if isinstance(data, dict) else []
