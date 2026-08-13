@@ -24,3 +24,4 @@
 {"iter":8,"item":"total sort keys for every ranking","metric":"ledger_digests_across_row_orders","before":2,"after":1,"direction":"lower_is_better"}
 {"iter":9,"item":"refuse service URLs pointing at cloud instance metadata","metric":"metadata_urls_accepted","before":9,"after":0,"direction":"lower_is_better"}
 {"iter":10,"item":"refuse deletes that would strand a title","metric":"last_copy_deletes_accepted","before":2,"after":0,"direction":"lower_is_better"}
+{"iter":11,"item":"never overwrite a file already in the agent trash","metric":"files_surviving_two_same_name_deletes","before":1,"after":2,"direction":"higher_is_better"}

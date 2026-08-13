@@ -52,6 +52,28 @@ DURATION_TOLERANCE_SECONDS = 5.0
 MIN_OUTPUT_FRACTION = 0.05
 
 
+
+def _free_name(target: Path) -> Path:
+    """A path in the trash that is not already taken.
+
+    ``shutil.move`` onto an existing file replaces it without a word, and the trash
+    is the only thing standing between a wrong approval and a re-download. Two
+    files with one basename arriving here is not exotic: a transcode moves the
+    original in and writes the new encode out under the source's name, so any later
+    delete of that encode lands on exactly the same trash path and would erase the
+    original it was meant to protect.
+    """
+    if not target.exists():
+        return target
+    stem, suffix = target.stem, target.suffix
+    for n in range(1, 1000):
+        candidate = target.with_name(f"{stem}.{n}{suffix}")
+        if not candidate.exists():
+            return candidate
+    # A thousand collisions means something is wrong; refuse rather than overwrite.
+    raise RuntimeError(f"cannot find a free name in the trash for {target.name}")
+
+
 class Agent:
     def __init__(self, base_url: str, token: str, *, dry_run: bool = False) -> None:
         self.base_url = base_url.rstrip("/")
@@ -148,7 +170,9 @@ class Agent:
         trash.mkdir(exist_ok=True)
         # Moved, not unlinked. Empty the trash yourself once you are happy — that
         # delay is the only thing standing between a wrong approval and a
-        # re-download.
+        # re-download. Never onto an existing file: shutil.move replaces silently,
+        # and replacing something already in the trash defeats the entire point.
+        target = _free_name(target)
         shutil.move(str(path), str(target))
         return {"ok": True, "output_path": str(target)}
 
@@ -187,7 +211,7 @@ class Agent:
         # Only now is the original expendable, and even then it is only moved.
         trash = path.parent / TRASH_DIRNAME
         trash.mkdir(exist_ok=True)
-        shutil.move(str(path), str(trash / path.name))
+        shutil.move(str(path), str(_free_name(trash / path.name)))
         final = path.with_suffix(output.suffix)
         shutil.move(str(output), str(final))
         size = final.stat().st_size

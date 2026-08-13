@@ -287,3 +287,22 @@ Next: `tools/sift-agent.py` is the thing with filesystem access — it has had n
 review in this loop. Also `actions/engine.py` approval guard is pinned by
 `test_actions_safety.py` but the FileJob claim path (`routes_agent.py`) is newer
 and may not be covered as thoroughly.
+
+### Iter 11 · 2026-08-13 · correctness (data loss)
+`tools/sift-agent.py` had **no tests at all** and is the only component that
+touches files. Its safety story is that approved deletes are *moved* to
+`.sift-trash` rather than unlinked — but it used `shutil.move` onto
+`trash/<basename>`, and `shutil.move` replaces an existing destination silently.
+Two files with one basename is not exotic here: `_transcode` moves the original
+into the trash and writes the new encode out **under the source's own name**, so
+any later delete of that encode targets the identical trash path and would erase
+the original it was there to protect.
+`_free_name()` now picks `<stem>.1<suffix>` and so on, and refuses rather than
+overwrites after a thousand collisions. Negative control pins that an
+uncollided name is left exactly as it was — uniquifying unconditionally would make
+every restore a guessing game.
+Added the first tests for the agent (3), including that a dry run moves nothing.
+Next: `_transcode`'s `final = path.with_suffix(output.suffix)` is wrong for a
+source with no extension (`/a/movie` → writes `/a/movie.mkv`, leaving the original
+name unused). Minor. More interesting: the agent retries nothing and a job that
+fails mid-encode leaves `.sift-h265.mkv` behind on some paths.
