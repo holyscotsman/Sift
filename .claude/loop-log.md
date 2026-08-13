@@ -306,3 +306,19 @@ Next: `_transcode`'s `final = path.with_suffix(output.suffix)` is wrong for a
 source with no extension (`/a/movie` → writes `/a/movie.mkv`, leaving the original
 name unused). Minor. More interesting: the agent retries nothing and a job that
 fails mid-encode leaves `.sift-h265.mkv` behind on some paths.
+
+### Iter 12 · 2026-08-13 · correctness (user-visible)
+`routes_agent.report` branched on `if body.ok and job.kind == "transcode"`, and the
+success branch demanded an output size and duration. Only a transcode has those —
+a delete produces no new file — so **every completed delete fell through to the
+failure branch**: job marked failed, action marked FAILED, and an invented error
+("the agent reported a failure") attached. The reclaim feature emits nothing but
+delete jobs, so this was all of them, and the Activity log would have shown a
+library of successful deletions as a wall of failures.
+Fixed by branching on `body.ok` first and applying the numbers requirement only to
+transcodes. Two negative controls: a failed delete must still record as failed, and
+a transcode must still be refused without its numbers — a truncated encode looks
+exactly like a success and swapping it in destroys the film.
+Next: nothing in `frontend/` has been examined. Also `_transcode`'s `final =
+path.with_suffix(output.suffix)` misnames the output when the source has no
+extension.

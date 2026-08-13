@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from sift.actions.engine import ActionEngine, ApprovalRequiredError
 from sift.api import routes_agent
-from sift.db.models import ActionStatus, ActionType, FileJob
+from sift.db.models import Action, ActionStatus, ActionType, FileJob
 from sift.main import create_app
 from sift.services import config_store
 
@@ -256,3 +256,86 @@ def test_a_job_row_alone_grants_nothing(client, engine, factory):
         assert session.query(FileJob).count() == 1
     claimed = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN})
     assert claimed.json()["job"] is None
+
+
+def _queue_delete_job(factory, engine) -> tuple[int, int]:
+    """An approved *delete* job — what the reclaim page actually produces."""
+    action = engine.propose(
+        ActionType.DELETE,
+        movie_tmdb_id=603,
+        payload={"via": "agent", "title": "The Matrix"},
+        dry_run=False,
+    )
+    engine.approve(action.id)
+    with factory() as session:
+        job = routes_agent.create_job(
+            session,
+            action_id=action.id,
+            kind="delete",
+            source_path="/movies/matrix.dup.mkv",
+            source_size=30 * GB,
+            label="surplus copy",
+        )
+        return action.id, job.id
+
+
+def test_a_successful_delete_is_recorded_as_a_success(client, engine, factory):
+    """A delete that worked must not be filed as a failure.
+
+    The success branch required an output size and duration before it would record
+    anything as done. Only a transcode has those — a delete produces no new file —
+    so every delete the agent completed fell through to the failure branch and was
+    recorded as failed, with the action marked FAILED and an invented error
+    attached. The reclaim feature's entire output is delete jobs, so this was every
+    one of them.
+    """
+    c, _ = client
+    _configure_agent(factory)
+    action_id, job_id = _queue_delete_job(factory, engine)
+
+    body = c.post(
+        f"/api/agent/{job_id}/result",
+        headers={"X-Sift-Agent-Token": TOKEN},
+        json={"ok": True, "output_path": "/movies/.sift-trash/matrix.dup.mkv"},
+    ).json()
+
+    assert body["status"] == "done", body
+    with factory() as session:
+        action = session.get(Action, action_id)
+        assert action.status == ActionStatus.EXECUTED
+        assert action.error is None
+
+
+def test_a_failed_delete_is_still_recorded_as_a_failure(client, engine, factory):
+    """NEGATIVE CONTROL. Accepting every report as success would pass the test
+    above and make the audit log worthless."""
+    c, _ = client
+    _configure_agent(factory)
+    action_id, job_id = _queue_delete_job(factory, engine)
+
+    body = c.post(
+        f"/api/agent/{job_id}/result",
+        headers={"X-Sift-Agent-Token": TOKEN},
+        json={"ok": False, "error": "permission denied"},
+    ).json()
+
+    assert body["status"] == "failed"
+    with factory() as session:
+        action = session.get(Action, action_id)
+        assert action.status == ActionStatus.FAILED
+        assert "permission denied" in (action.error or "")
+
+
+def test_a_transcode_still_has_to_bring_its_numbers(client, engine, factory):
+    """NEGATIVE CONTROL for the other direction: relaxing the delete case must not
+    relax the transcode case, where a silent truncation looks exactly like a
+    success and swapping it in destroys the film."""
+    c, _ = client
+    _configure_agent(factory)
+    _action_id, job_id = _queue_job(factory, engine, approved=True)
+    response = c.post(
+        f"/api/agent/{job_id}/result",
+        headers={"X-Sift-Agent-Token": TOKEN},
+        json={"ok": True},
+    )
+    assert response.status_code == 400
