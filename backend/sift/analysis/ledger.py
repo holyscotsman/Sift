@@ -109,7 +109,11 @@ def _fmt(value: int) -> str:
 def build(session: Session, *, limit: int = 500) -> Ledger:
     """Every finding, in one currency, ordered by tier then by size."""
     findings: list[Finding] = []
+    # Measured once. Both the film outlier pass and the season passes need these,
+    # and each was re-reading every file in the library to derive them again.
     baselines = outliers.load_baselines(session)
+    season_groups = tv_size.load_seasons(session)
+    shows = tv_size.load_shows(session)
 
     # --- tier 0: duplicates, both kinds -------------------------------------
     film_groups, _surplus = duplicates.find(session, limit=1000)
@@ -151,7 +155,7 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 0 and 1: film size outliers -----------------------------------
-    report = outliers.find(session, limit=1000)
+    report = outliers.find(session, limit=1000, baselines=baselines)
     for item in report.findings:
         if item.bytes_reclaimable <= 0:
             continue
@@ -173,7 +177,9 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 1: heavy seasons ----------------------------------------------
-    sized, _excess = tv_size.seasons(session, baselines=baselines, limit=1000)
+    sized, _excess = tv_size.seasons(
+        session, baselines=baselines, limit=1000, groups=season_groups, shows=shows
+    )
     for season in sized:
         if not season.bloated or season.excess <= 0:
             continue
@@ -197,7 +203,7 @@ def build(session: Session, *, limit: int = 500) -> Ledger:
         )
 
     # --- tier 2: quality downgrades -----------------------------------------
-    findings.extend(_downgrades(session, baselines))
+    findings.extend(_downgrades(baselines, season_groups, shows))
 
     findings.sort(key=lambda f: (f.risk_tier, -f.bytes_reclaimable))
     by_tier: dict[int, int] = {}
@@ -226,15 +232,16 @@ def _movie_copy_sizes(session: Session) -> dict[str, int]:
     return sizes
 
 
-def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]:
+def _downgrades(
+    baselines: bitrate.Baselines,
+    grouped: dict[tuple[int, int], tv_size.SeasonGroup],
+    shows: dict[int, Show],
+) -> list[Finding]:
     """Seasons held higher than they need to be, where every signal agrees.
 
     Reads through the shared season loader rather than repeating the four-table
     join, which was previously executed once here and twice more in ``tv_size``.
     """
-    grouped = tv_size.load_seasons(session)
-    shows = tv_size.load_shows(session)
-
     out: list[Finding] = []
     for (tvdb_id, number), group in grouped.items():
         files = group.files

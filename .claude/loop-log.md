@@ -178,3 +178,18 @@ fully independent. Treat `build (whole)` as the trustworthy number.
 Next: `load_baselines` (26.5ms) reads every media file to compute medians and is
 called twice per `build` — once directly, once inside `outliers.find`. Hoisting it
 is a small, safe win. `tv_duplicates.find` at 40.2ms is now second-largest.
+
+### Iter 6 · 2026-08-13 · perf
+`ledger.build` measured the bitrate baselines twice (once directly, once inside
+`outliers.find`) and ran the season join twice (`tv_size.seasons` and
+`_downgrades`). Now loaded once in `build` and passed down; both callees keep an
+optional parameter so standalone use is unchanged.
+**build_p50 167.6 → 131.9ms, statements 12 → 9.** Ledger dump identical.
+Cumulative across iters 2/3/5/6 on the same fixture: 758.6 → 131.9ms is not a fair
+claim (fixture changed at iter 4); on the *current* fixture the honest span is
+242.1 → 131.9ms, 1.8x.
+Next: `load_baselines` reads every media file (26ms) — it is a pure aggregation
+(median + MAD per resolution/codec bucket) and could be pushed into SQL, but the
+median is the hard part and MAD needs a second pass, so this may not be worth it.
+`tv_duplicates.find` at ~40ms is the largest remaining. Beyond the ledger, nothing
+in `analysis/` has been examined for correctness yet — only for speed.

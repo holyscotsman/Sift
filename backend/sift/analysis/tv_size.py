@@ -144,12 +144,25 @@ def load_shows(session: Session) -> dict[int, Show]:
 
 
 def seasons(
-    session: Session, *, baselines: bitrate.Baselines, limit: int = 200
+    session: Session,
+    *,
+    baselines: bitrate.Baselines,
+    limit: int = 200,
+    groups: dict[tuple[int, int], SeasonGroup] | None = None,
+    shows: dict[int, Show] | None = None,
 ) -> tuple[list[SeasonSize], int]:
-    """Seasons ranked by how much more disk they use than their peers."""
+    """Seasons ranked by how much more disk they use than their peers.
+
+    ``groups`` and ``shows`` let a caller that has already loaded them — the
+    reclaim ledger asks two separate questions of the same rows — skip a second
+    read. Omitted, they are loaded here.
+    """
     out: list[SeasonSize] = []
-    shows = load_shows(session)
-    for (tvdb_id, number), group in load_seasons(session).items():
+    if shows is None:
+        shows = load_shows(session)
+    if groups is None:
+        groups = load_seasons(session)
+    for (tvdb_id, number), group in groups.items():
         files = group.files
         total_bytes = sum(f.size or 0 for f in files)
         total_ms = sum(f.duration_ms or 0 for f in files)

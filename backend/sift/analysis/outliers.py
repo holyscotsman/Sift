@@ -215,9 +215,17 @@ def _small_file_finding(
     return None
 
 
-def find(session: Session, *, limit: int = 200) -> OutlierReport:
-    """Films that are too large or too small, biggest reclaim first."""
-    baselines = load_baselines(session)
+def find(
+    session: Session, *, limit: int = 200, baselines: bitrate.Baselines | None = None
+) -> OutlierReport:
+    """Films that are too large or too small, biggest reclaim first.
+
+    ``baselines`` is accepted so a caller that already measured them does not pay
+    for a second full pass over every file. Left out, they are measured here, which
+    is what a standalone caller wants.
+    """
+    if baselines is None:
+        baselines = load_baselines(session)
     findings: list[SizeFinding] = []
     cleared = 0
     for file in _load_film_files(session):
