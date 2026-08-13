@@ -165,3 +165,16 @@ statements_per_film 0.009.
 Next: `outliers.find` (103ms pre-fixture-change) is now the largest single cost in
 `build`. Also `load_seasons` still runs once per caller inside `build` — hoisting
 it to a single load would drop one join.
+
+### Iter 5 · 2026-08-13 · perf
+`outliers.find` selected `MediaFile` and `Movie` entities to read six attributes
+off each. Replaced with a `FilmFile` NamedTuple column select; `_small_file_finding`
+now takes one row instead of a movie and a file.
+**outliers.find 106.2 → 56.6ms; build_p50 242.1 → 167.6ms.** Ledger dump identical
+(61,358 bytes). Interesting side effect: `_downgrades` also fell 51.4 → 24.8ms
+without being touched — the ORM identity map was being populated by outliers and
+paying off elsewhere, which means per-component timings in this profile are not
+fully independent. Treat `build (whole)` as the trustworthy number.
+Next: `load_baselines` (26.5ms) reads every media file to compute medians and is
+called twice per `build` — once directly, once inside `outliers.find`. Hoisting it
+is a small, safe win. `tv_duplicates.find` at 40.2ms is now second-largest.

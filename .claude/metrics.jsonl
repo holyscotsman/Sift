@@ -15,3 +15,5 @@
 {"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"head_value_share","before":0.0646,"after":0.0646,"direction":"higher_is_better"}
 {"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"statements_per_film","before":0.009,"after":0.009,"direction":"lower_is_better"}
 {"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"inconsistent_seasons_found","before":0,"after":96,"direction":"higher_is_better"}
+{"iter":5,"item":"column-select the film outlier read","metric":"outliers_find_ms","before":106.2,"after":56.6,"direction":"lower_is_better"}
+{"iter":5,"item":"column-select the film outlier read","metric":"build_p50_ms","before":242.1,"after":167.6,"direction":"lower_is_better"}
