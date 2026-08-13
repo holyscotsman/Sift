@@ -249,7 +249,7 @@ def _downgrades(
         resolutions = [f.resolution for f in files if f.resolution]
         if not resolutions:
             continue
-        current = max(set(resolutions), key=resolutions.count)
+        current = tv_size.dominant(resolutions, rank=tv_size.resolution_rank)
         verdict = suitability.assess(
             _show_facts(show),
             season_number=number,
@@ -284,8 +284,16 @@ def _downgrades(
 
 
 def _dominant_codec(files: list[tv_size.SeasonFile]) -> str | None:
-    codecs = [f.video_codec for f in files if f.video_codec]
-    return max(set(codecs), key=codecs.count) if codecs else None
+    """The season's codec, ties broken toward the *least* efficient one.
+
+    The codec picks the baseline bucket a downgrade's saving is measured against.
+    A more efficient codec has a lower expected rate, so choosing it on a tie would
+    inflate the apparent saving — exactly the wrong way to be wrong about an
+    irreversible suggestion.
+    """
+    return tv_size.dominant(
+        [f.video_codec for f in files], rank=lambda c: -bitrate.codec_factor(c)
+    )
 
 
 def plan(ledger: Ledger, target_bytes: int) -> Plan:

@@ -209,6 +209,17 @@ def _television(
                     size = int(_RUNGS[0][4] * hours)
                 elif s % 5 == 0 and number == 7:
                     size = int(rate * hours * 4.0)
+                # Every seventh show is split exactly evenly between two
+                # resolutions, by episode parity. A tie is the only case where
+                # "the dominant value" is ambiguous, so a fixture without one
+                # cannot tell a stable tie-break from an unstable one — and an
+                # unstable one changes which seasons get proposed for downgrade
+                # between runs.
+                elif s % 7 == 0:
+                    if number % 2 == 0:
+                        file_rung, file_height = "480p", 480
+                    else:
+                        file_rung, file_height = "1080p", 1080
                 session.add(
                     MediaFile(
                         episode_id=episode.id,
@@ -226,7 +237,7 @@ def _television(
                 # Every twelfth episode is duplicated. Duplicates are tier-0 — the
                 # safest bytes in the ledger — so their share of the total is a
                 # headline the benchmark should be able to move.
-                if number % 12 == 0:
+                if number % 12 == 0 and s % 7 != 0:
                     session.add(
                         MediaFile(
                             episode_id=episode.id,

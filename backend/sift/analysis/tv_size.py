@@ -15,7 +15,7 @@ assembled, and fixing it costs almost nothing.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from statistics import median
 from typing import NamedTuple
@@ -75,11 +75,45 @@ class Inconsistency:
         return sum(self.odd_resolutions.values()) + self.rate_outliers
 
 
-def _dominant(values: Sequence[str | None]) -> str | None:
-    present = [v for v in values if v]
-    if not present:
+def dominant(
+    values: Sequence[str | None], *, rank: Callable[[str], float] | None = None
+) -> str | None:
+    """The most common value, with ties broken deterministically.
+
+    ``max(set(values), key=values.count)`` looks equivalent and is not: on a tie it
+    returns whichever tied value ``set`` iteration happens to reach first, and that
+    order depends on Python's per-process hash seed. A season split evenly between
+    1080p and 480p therefore read as either one, **changing between runs of the
+    same code over the same library** — and this value decides whether an
+    irreversible quality downgrade gets proposed and how large its saving looks.
+
+    Ties are broken toward the *lowest* ``rank``, which for both callers is the
+    conservative direction: the lower resolution, and the less efficient codec.
+    Both make a proposed downgrade look smaller rather than larger, which is the
+    right way to be wrong about a destructive suggestion. With no rank, the order
+    is alphabetical — arbitrary, but stable.
+    """
+    counts: dict[str, int] = {}
+    for value in values:
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    if not counts:
         return None
-    return max(set(present), key=present.count)
+    most = max(counts.values())
+    # Insertion-ordered, so this list is itself deterministic.
+    tied = [value for value, n in counts.items() if n == most]
+    if len(tied) == 1:
+        return tied[0]
+    return min(tied, key=rank) if rank is not None else min(tied)
+
+
+def resolution_rank(value: str) -> float:
+    """Ladder position, for tie-breaking toward the lower rung."""
+    return _RESOLUTION_RANK.get(value, -1)
+
+
+def _dominant(values: Sequence[str | None]) -> str | None:
+    return dominant(values, rank=resolution_rank)
 
 
 class SeasonFile(NamedTuple):

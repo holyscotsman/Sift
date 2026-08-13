@@ -193,3 +193,29 @@ Next: `load_baselines` reads every media file (26ms) — it is a pure aggregatio
 median is the hard part and MAD needs a second pass, so this may not be worth it.
 `tv_duplicates.find` at ~40ms is the largest remaining. Beyond the ledger, nothing
 in `analysis/` has been examined for correctness yet — only for speed.
+
+### Iter 7 · 2026-08-13 · correctness
+**Real bug.** `max(set(values), key=values.count)` in three places
+(`ledger.py:252`, `ledger._dominant_codec`, `tv_size._dominant`) reads as "the most
+common value" and is — except on a tie, where it returns whichever tied value
+`set` iteration reaches first. For strings that order comes from Python's
+per-process hash seed, so an evenly split season resolved to either resolution,
+**differing between runs of identical code over an identical library**. It decides
+whether an irreversible quality downgrade is proposed and how big its saving looks.
+Replaced with `tv_size.dominant(values, rank=…)`: counts in insertion order, ties
+broken toward the *lowest* rank — the lower resolution, the less efficient codec.
+Both make a proposed downgrade look smaller, which is the right way to be wrong
+about a destructive suggestion.
+**Proof required two goes.** The first end-to-end determinism check passed on both
+the old and new code, because the fixture contained **zero** tied seasons — the
+check was vacuous. Added parity-split seasons to the fixture (56 ties of 480
+seasons; the duplicate copy had to be suppressed on those shows or it tipped the
+split by one file). With ties present the old code emits **two distinct ledgers
+across 8 hash seeds**; the new code emits one.
+Test carries its own negative control: a subprocess check that the *original*
+expression really does vary across seeds, so a passing determinism test can't be
+passing for the wrong reason.
+Fixture changed again → build_p50 re-baselined to 129.9ms.
+Next: same `max(set(...), key=list.count)` idiom may exist elsewhere — grep found
+only these three, but `sorted()`/`max()` over dict iteration is worth a sweep.
+`analysis/recommend.py` and `tv_recommend.py` have had no correctness pass at all.
