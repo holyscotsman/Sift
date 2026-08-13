@@ -2,6 +2,30 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.23.0 — Fold watch history instead of collecting it
+
+The third and last phase with the shape that killed the other two. History is
+different in kind from the rest of a scan: its size tracks how much a household
+*watches*, not how much it owns, so a heavy viewer's episode history is larger
+than their library. All of it was being read into a list and aggregated once.
+
+Nothing downstream ever wanted the rows. Both consumers immediately collapse them
+into per-title aggregates, so the pages are now folded as they arrive and the
+rows are discarded. Peak memory is the number of distinct titles rather than the
+number of plays.
+
+**The accumulators no longer grow with plays either.** Completions were kept as a
+list to take a mean at the end — a running sum and count give the same number
+without the list. Stream heights were kept as a list to take a median, which does
+need the distribution, but a household streams at a handful of distinct heights
+and watches episodes by the thousand, so counting them bounds it by the former.
+The median walk is pinned against the definition it replaced, with mode and max
+as the mutations it must reject: on a set of four 480s, three 1080s and two
+2160s, the mode is 480, the max is 2160, and the answer is 1080.
+
+**Tautulli got the same two pagination floors as Plex.** Its docstring already
+claimed the read was memory-flat while accumulating every row; now it is.
+
 ## 2607.22.0 — Stream the Sonarr phase too, before it stalls the same way
 
 The Plex fix in 2607.21.0 removes the first wall a TV library hits. The Sonarr

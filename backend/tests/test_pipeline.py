@@ -136,10 +136,19 @@ class FakeTautulli(FakeService):
         super().__init__(reachable=reachable)
         self.fail = fail
 
+    # Small enough that any history worth reading spans several pages, so the
+    # streaming fold is exercised in more than one batch.
+    page_size = 2
+
     async def get_history(self, *, media_type: str = "movie"):
         if self.fail:
             raise RuntimeError("tautulli dropped mid-scan")
-        return TAUTULLI_HISTORY
+        return TAUTULLI_HISTORY if media_type == "movie" else []
+
+    async def iter_history(self, *, media_type: str = "movie"):
+        rows = await self.get_history(media_type=media_type)
+        for start in range(0, len(rows), self.page_size):
+            yield rows[start : start + self.page_size]
 
 
 class HangingTautulli(FakeTautulli):

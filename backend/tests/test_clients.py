@@ -6,6 +6,7 @@ import httpx
 from pydantic import SecretStr
 
 from sift.clients import plex as plex_client
+from sift.clients import tautulli as tautulli_client
 from sift.clients.plex import PlexClient
 from sift.clients.radarr import RadarrClient
 from sift.clients.sonarr import SonarrClient
@@ -276,3 +277,94 @@ async def test_sonarr_without_a_url_is_not_configured_rather_than_broken():
 
     with pytest.raises(ClientError):
         SonarrClient(SonarrConfig())
+
+
+def _history_handler(total: int, rows_per_call: int):
+    """A Tautulli that answers every request with the same page, whatever was
+    asked for — the shape that turns a paged read into an endless one."""
+    calls = {"n": 0}
+    page = [{"rating_key": n, "user": "Dad"} for n in range(rows_per_call)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        cmd = request.url.params["cmd"]
+        if cmd == "get_server_info":
+            return httpx.Response(200, json={"response": {"result": "success", "data": {}}})
+        calls["n"] += 1
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "result": "success",
+                    "data": {"recordsFiltered": total, "data": page},
+                }
+            },
+        )
+
+    return handler, calls
+
+
+async def test_tautulli_history_stops_when_the_server_ignores_paging():
+    """History is the largest read in a scan on a heavy household, so an endless
+    one is the most expensive kind. A server answering every page with the whole
+    history must be read once, not for ever."""
+    handler, calls = _history_handler(total=2000, rows_per_call=2000)
+    client = TautulliClient(
+        TautulliConfig(base_url="http://t", api_key=SecretStr("tk")),
+        transport=httpx.MockTransport(handler),
+        sleep=_noop_sleep,
+    )
+    rows = await client.get_history()
+    assert calls["n"] == 1
+    assert len(rows) == 2000
+    await client.aclose()
+
+
+async def test_tautulli_history_is_capped_when_it_never_ends(monkeypatch):
+    """The last floor: a full page every time and always more to come defeats both
+    the offset and the count check."""
+    monkeypatch.setattr(tautulli_client, "_MAX_PAGES", 3)
+    handler, calls = _history_handler(total=10_000_000, rows_per_call=500)
+    client = TautulliClient(
+        TautulliConfig(base_url="http://t", api_key=SecretStr("tk")),
+        transport=httpx.MockTransport(handler),
+        sleep=_noop_sleep,
+    )
+    rows = await client.get_history()
+    assert calls["n"] == 3
+    assert len(rows) == 1500
+    await client.aclose()
+
+
+async def test_tautulli_history_still_reads_every_page_when_it_behaves():
+    """NEGATIVE CONTROL: a well-behaved server must be paged all the way through.
+    A floor that ends the read early would silently report a fraction of a
+    household's viewing as all of it — which reads as 'nobody watches this'."""
+    total = 1200
+    everything = [{"rating_key": n, "user": "Dad"} for n in range(total)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params["cmd"] == "get_server_info":
+            return httpx.Response(200, json={"response": {"result": "success", "data": {}}})
+        start = int(request.url.params["start"])
+        length = int(request.url.params["length"])
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "result": "success",
+                    "data": {
+                        "recordsFiltered": total,
+                        "data": everything[start : start + length],
+                    },
+                }
+            },
+        )
+
+    client = TautulliClient(
+        TautulliConfig(base_url="http://t", api_key=SecretStr("tk")),
+        transport=httpx.MockTransport(handler),
+        sleep=_noop_sleep,
+    )
+    rows = await client.get_history()
+    assert [r["rating_key"] for r in rows] == list(range(total))
+    await client.aclose()

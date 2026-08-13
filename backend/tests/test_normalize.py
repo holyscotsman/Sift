@@ -189,3 +189,78 @@ def test_radarr_relative_poster_paths_are_dropped():
                      "remoteUrl": "https://image.tmdb.org/t/p/original/y.jpg"}]}
     )
     assert absolute["poster_url"] == "https://image.tmdb.org/t/p/original/y.jpg"
+
+
+def _play(key: str, user: str, pct: float | None, height: int | None = None) -> dict:
+    return {
+        "plex_rating_key": key,
+        "show_rating_key": key,
+        "plex_user": user,
+        "played_at": None,
+        "completion_pct": pct,
+        "stream_height": height,
+        "is_kids_account": False,
+    }
+
+
+def test_folding_history_in_pages_matches_reading_it_whole():
+    """History is now folded page by page instead of collected and aggregated once.
+
+    That is only safe if the fold is associative over the page boundary, so this
+    compares the two directly on the same rows: split at an awkward point, and the
+    per-title means and counts must come out identical. A fold that reset or
+    double-counted anything at a boundary shows up here as a different mean.
+    """
+    # The completions are chosen so the mean differs from every single value in
+    # the set. An accumulator that keeps only the newest, or only the first, lands
+    # on one of them and is caught; equal-to-a-member test data would hide it.
+    rows = [
+        _play("1", "Dad", 1.0),
+        _play("1", "Dad", 0.5),
+        _play("1", "Kid", 0.25),
+        _play("2", "Dad", None),
+        _play("1", "Dad", 0.6),
+    ]
+    whole = normalize.aggregate_watch_rows(rows)
+
+    paged: dict = {}
+    for start in range(0, len(rows), 2):
+        normalize.fold_watch_rows(paged, rows[start : start + 2])
+    streamed = normalize.finalize_watch_rows(paged)
+
+    assert streamed == whole
+    assert whole[("1", "Dad")]["plays"] == 3
+    assert whole[("1", "Dad")]["completion_pct"] == 0.7
+
+
+def test_the_typical_stream_height_is_still_the_median():
+    """NEGATIVE CONTROL for counting heights instead of listing them.
+
+    The counter has to pick the same element the sorted list did — the *median*,
+    not the mode and not the maximum. These differ deliberately: 480 is the most
+    frequent height and 2160 the largest, and neither is the answer. Swap the walk
+    for `heights.most_common(1)` or `max(heights)` and this fails.
+    """
+    rows = (
+        [_play("s1", "Dad", 1.0, 480) for _ in range(4)]
+        + [_play("s1", "Dad", 1.0, 1080) for _ in range(3)]
+        + [_play("s1", "Dad", 1.0, 2160) for _ in range(2)]
+    )
+    assert normalize.aggregate_show_watch(rows)["s1"]["typical_stream_height"] == 1080
+
+    listed = sorted(
+        h for row in rows for h in ([row["stream_height"]] if row["stream_height"] else [])
+    )
+    assert listed[len(listed) // 2] == 1080  # the definition it must agree with
+
+
+def test_show_watch_folds_across_pages_too():
+    """Same associativity check for the episode side, whose accumulator carries a
+    counter as well as running totals."""
+    rows = [_play("s1", "Dad", 1.0, 480), _play("s1", "Dad", 0.0, 1080), _play("s2", "Dad", 0.5)]
+    whole = normalize.aggregate_show_watch(rows)
+
+    paged: dict = {}
+    for row in rows:
+        normalize.fold_show_watch(paged, [row])
+    assert normalize.finalize_show_watch(paged) == whole
