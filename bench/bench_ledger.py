@@ -67,6 +67,9 @@ def main() -> int:
             worst = max(worst, finding.risk_tier)
 
         outcome = ledger.plan(book, TARGET_BYTES)
+        kinds: dict[str, int] = {}
+        for finding in findings:
+            kinds[finding.kind] = kinds.get(finding.kind, 0) + 1
         report = {
             "bench": "ledger",
             "library": shape,
@@ -77,6 +80,9 @@ def main() -> int:
             ),
             "free_share": round(book.by_tier.get(ledger.TIER_FREE, 0) / total, 4),
             "tier_order_violations": violations,
+            # Reported so a fixture that stops exercising a finding kind shows up
+            # as a missing key rather than as a silently narrower benchmark.
+            "kinds": dict(sorted(kinds.items())),
             "plan_reached": outcome.reached,
             "plan_steps": len(outcome.steps),
             "plan_highest_tier": outcome.highest_tier,

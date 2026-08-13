@@ -78,10 +78,26 @@ def _films(session: Session, rng: random.Random, count: int) -> None:
         # are what the reclaim ledger is for, so a fixture without them measures
         # nothing interesting.
         multiplier = 1.0
+        played_hours = hours
         if n % 40 == 0:
             multiplier = rng.uniform(3.0, 6.0)
         elif n % 97 == 0:
+            # A bad rip: the whole film is there, at a fraction of the bitrate.
             multiplier = 0.08
+        elif n % 151 == 0:
+            # Truncated: a small file that also stops well short of the runtime.
+            # Distinct from a bad rip, and the two are told apart only by duration,
+            # so a fixture carrying one but not the other cannot exercise the test
+            # that separates them.
+            multiplier = 0.05
+            played_hours = hours * 0.2
+        elif n % 173 == 0:
+            # A legitimate short film: small, but its duration agrees with a short
+            # runtime. This one must NOT be flagged, which is the case a fixture of
+            # only-broken-things can never catch.
+            hours = 0.5
+            played_hours = 0.5
+            multiplier = 0.35
 
         session.add(
             Movie(
@@ -112,7 +128,7 @@ def _films(session: Session, rng: random.Random, count: int) -> None:
                 movie_tmdb_id=tmdb_id,
                 path=f"/films/{tmdb_id}/film.mkv",
                 size=int(rate * hours * multiplier),
-                duration_ms=int(hours * HOUR_MS),
+                duration_ms=int(played_hours * HOUR_MS),
                 width=width,
                 height=height,
                 resolution=rung,
@@ -182,6 +198,17 @@ def _television(
                 session.flush()
                 hours = rng.choice([0.37, 0.75])
                 size = int(rate * hours)
+                file_rung, file_height = rung, height
+                # Every fifth season carries one episode that disagrees with the
+                # rest of it — one at the wrong resolution, one at a wildly wrong
+                # bitrate. Both are accidents of assembly rather than decisions,
+                # and they are what `inconsistencies` exists to find; without them
+                # that whole path is unexercised by the benchmark.
+                if s % 5 == 0 and number == 3:
+                    file_rung, file_height = ("480p", 480) if rung != "480p" else ("1080p", 1080)
+                    size = int(_RUNGS[0][4] * hours)
+                elif s % 5 == 0 and number == 7:
+                    size = int(rate * hours * 4.0)
                 session.add(
                     MediaFile(
                         episode_id=episode.id,
@@ -189,8 +216,8 @@ def _television(
                         size=size,
                         duration_ms=int(hours * HOUR_MS),
                         width=width,
-                        height=height,
-                        resolution=rung,
+                        height=file_height,
+                        resolution=file_rung,
                         video_codec=codec,
                         source="plex",
                         seen_at=_EPOCH,

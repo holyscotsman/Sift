@@ -11,3 +11,7 @@
 {"iter":3,"item":"share one column-select season loader","metric":"build_p50_ms","before":597.9,"after":208.5,"direction":"lower_is_better"}
 {"iter":3,"item":"share one column-select season loader","metric":"tv_size_seasons_ms","before":188.7,"after":26.5,"direction":"lower_is_better"}
 {"iter":3,"item":"share one column-select season loader","metric":"downgrades_ms","before":170.6,"after":46.5,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"build_p50_ms","before":242.1,"after":242.1,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"head_value_share","before":0.0646,"after":0.0646,"direction":"higher_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"statements_per_film","before":0.009,"after":0.009,"direction":"lower_is_better"}
+{"iter":4,"item":"re-baseline: fixture now exercises every finding kind","metric":"inconsistent_seasons_found","before":0,"after":96,"direction":"higher_is_better"}
