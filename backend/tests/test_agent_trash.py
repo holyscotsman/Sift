@@ -71,3 +71,57 @@ def test_a_dry_run_moves_nothing(agent_mod, tmp_path):
     assert agent._delete(path)["ok"]
     assert path.exists(), "dry run moved the file"
     assert not (tmp_path / agent_mod.TRASH_DIRNAME).exists()
+
+
+def _encoder(agent_mod, monkeypatch, *, output_bytes: bytes = b"encoded"):
+    """Stand in for HandBrake: write a plausible output and report success."""
+    def fake_run(command, **kwargs):
+        out = Path(command[command.index("-o") + 1])
+        out.write_bytes(output_bytes)
+        return None
+    monkeypatch.setattr(agent_mod.subprocess, "run", fake_run)
+    # The verifier compares durations; give both files the same one.
+    monkeypatch.setattr(agent_mod.Agent, "duration_seconds", lambda self, p: 100.0)
+
+
+def test_a_transcode_will_not_overwrite_a_different_file(agent_mod, tmp_path, monkeypatch):
+    """The swap has a destination, and the destination may already be taken.
+
+    Re-encoding `film.avi` produces `film.mkv`. A second copy of one film in one
+    folder is exactly what the duplicate report surfaces, so `film.mkv` existing
+    already is the normal case rather than a corner one — and moving onto it
+    destroys a file nobody approved for deletion.
+    """
+    _encoder(agent_mod, monkeypatch)
+    agent = agent_mod.Agent("http://sift", "token")
+
+    source = tmp_path / "film.avi"
+    source.write_bytes(b"the source, being re-encoded")
+    bystander = tmp_path / "film.mkv"
+    bystander.write_bytes(b"a different copy, never approved for anything")
+
+    result = agent._transcode({"source_size": 100, "source_duration_ms": 100_000}, source)
+
+    assert result["ok"] is False
+    assert "already exists" in result["error"]
+    assert bystander.read_bytes() == b"a different copy, never approved for anything"
+    assert source.exists(), "the source must be left alone when the swap is refused"
+    assert not (tmp_path / agent_mod.TRASH_DIRNAME).exists()
+
+
+def test_an_ordinary_transcode_still_replaces_its_own_source(agent_mod, tmp_path, monkeypatch):
+    """NEGATIVE CONTROL. Refusing whenever the destination exists would block every
+    same-extension re-encode — `film.mkv` to `film.mkv` is the common case, and
+    there the destination is the source itself."""
+    _encoder(agent_mod, monkeypatch)
+    agent = agent_mod.Agent("http://sift", "token")
+
+    source = tmp_path / "film.mkv"
+    source.write_bytes(b"the original")
+
+    result = agent._transcode({"source_size": 100, "source_duration_ms": 100_000}, source)
+
+    assert result["ok"] is True, result
+    assert source.read_bytes() == b"encoded"
+    trashed = list((tmp_path / agent_mod.TRASH_DIRNAME).iterdir())
+    assert [p.read_bytes() for p in trashed] == [b"the original"]

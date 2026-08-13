@@ -208,11 +208,26 @@ class Agent:
             log.error("  rejected: %s", verdict)
             return {"ok": False, "error": verdict}
 
+        # Where the encode will end up. Re-encoding /tv/film.avi produces
+        # /tv/film.mkv, so if a *different* file already sits there the swap would
+        # destroy it — and a second copy of one film in one folder is not a corner
+        # case, it is precisely what the duplicate report exists to find. Checked
+        # before anything moves, so refusing leaves the library exactly as it was.
+        final = path.with_suffix(output.suffix)
+        if final.exists() and not final.samefile(path):
+            output.unlink(missing_ok=True)
+            return {
+                "ok": False,
+                "error": (
+                    f"{final.name} already exists and is a different file — "
+                    "resolve that copy first, this would overwrite it"
+                ),
+            }
+
         # Only now is the original expendable, and even then it is only moved.
         trash = path.parent / TRASH_DIRNAME
         trash.mkdir(exist_ok=True)
         shutil.move(str(path), str(_free_name(trash / path.name)))
-        final = path.with_suffix(output.suffix)
         shutil.move(str(output), str(final))
         size = final.stat().st_size
         log.info("  done — %.1f GB (was %.1f GB)", size / 1e9, (job.get("source_size") or 0) / 1e9)

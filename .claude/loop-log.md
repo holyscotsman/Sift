@@ -322,3 +322,20 @@ exactly like a success and swapping it in destroys the film.
 Next: nothing in `frontend/` has been examined. Also `_transcode`'s `final =
 path.with_suffix(output.suffix)` misnames the output when the source has no
 extension.
+
+### Iter 13 · 2026-08-13 · correctness (data loss)
+Logged as a cosmetic naming issue; it is the iter-11 family again. `_transcode`
+computes `final = path.with_suffix(output.suffix)`, so re-encoding `film.avi`
+writes `film.mkv` — and `shutil.move` onto an existing `film.mkv` destroys it. A
+second copy of one film in one folder is not a corner case: it is exactly what the
+duplicate report surfaces, so the bystander is a file nobody approved for
+deletion.
+Destination is now checked **before** the original is moved to trash, so refusing
+leaves the library untouched. `samefile` rather than a path comparison, so the
+ordinary same-extension re-encode (`film.mkv` → `film.mkv`, destination *is* the
+source) still works — that is the negative control, and refusing on
+`final.exists()` alone would block every one of them.
+Added the agent's first transcode tests with a fake HandBrake.
+Next: the agent still has no test for `_verify` (duration tolerance, min output
+fraction) — the guard that stops a truncated encode being swapped in. Nothing in
+`frontend/` examined yet.
