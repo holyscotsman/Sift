@@ -7,7 +7,9 @@ through with ``X-Plex-Container-Start`` / ``X-Plex-Container-Size``.
 
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -15,7 +17,14 @@ import httpx
 from ..config import PlexConfig
 from .base import BaseClient, HealthStatus, RateLimiter, RetryPolicy
 
+log = logging.getLogger("sift.plex")
+
 _PAGE_SIZE = 200
+
+# Backstop on a section sweep. 2000 pages is 400,000 items — far beyond any real
+# library, and small enough that a server misbehaving costs minutes rather than
+# the whole scan.
+_MAX_PAGES = 2000
 
 # Plex's library item types. A show section holds all three; which one you ask for
 # decides what comes back.
@@ -67,6 +76,57 @@ class PlexClient(BaseClient):
         container = data.get("MediaContainer", {}) if isinstance(data, dict) else {}
         return list(container.get("Directory", []))
 
+    async def iter_section_items(
+        self, section_key: str | int, *, item_type: int = MOVIE
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """Yield a section's items a page at a time.
+
+        A generator rather than a list because an episode sweep over a large TV
+        library is tens of thousands of records carrying full media metadata.
+        Holding all of that before writing anything is how a scan gets killed for
+        memory on a small host — and a killed process leaves the run marked
+        running forever, which reads as a scan stuck at the same percentage.
+        """
+        start = 0
+        seen = 0
+        pages = 0
+        while True:
+            data = await self.request_json(
+                "GET",
+                f"/library/sections/{section_key}/all",
+                params={"type": item_type, "includeGuids": 1},
+                headers={
+                    "X-Plex-Container-Start": str(start),
+                    "X-Plex-Container-Size": str(_PAGE_SIZE),
+                },
+            )
+            container = data.get("MediaContainer", {}) if isinstance(data, dict) else {}
+            batch = list(container.get("Metadata", []))
+            if not batch:
+                return
+            yield batch
+
+            total = int(container.get("totalSize", container.get("size", len(batch))))
+            start += _PAGE_SIZE
+            seen += len(batch)
+            pages += 1
+            if start >= total:
+                return
+            # Two independent floors. A server that ignores the container headers
+            # returns the whole section every time, so the page count never
+            # advances and the loop would run until memory ran out; either of
+            # these turns that into a bounded read of whatever it did return.
+            if seen >= total:
+                log.warning(
+                    "plex section %s ignored pagination — stopping after %s items",
+                    section_key,
+                    seen,
+                )
+                return
+            if pages >= _MAX_PAGES:
+                log.warning("plex section %s exceeded %s pages — stopping", section_key, _MAX_PAGES)
+                return
+
     async def get_section_items(
         self, section_key: str | int, *, item_type: int = MOVIE
     ) -> list[dict[str, Any]]:
@@ -77,25 +137,6 @@ class PlexClient(BaseClient):
         across the whole section rather than requiring a walk down the tree.
         """
         items: list[dict[str, Any]] = []
-        start = 0
-        while True:
-            data = await self.request_json(
-                "GET",
-                f"/library/sections/{section_key}/all",
-                # includeGuids=1 makes Plex return the `Guid` array (tmdb://, imdb://)
-                # in the listing — without it, modern-agent items carry only a
-                # `plex://` guid and can't be resolved to a tmdb_id.
-                params={"type": item_type, "includeGuids": 1},
-                headers={
-                    "X-Plex-Container-Start": str(start),
-                    "X-Plex-Container-Size": str(_PAGE_SIZE),
-                },
-            )
-            container = data.get("MediaContainer", {}) if isinstance(data, dict) else {}
-            batch = list(container.get("Metadata", []))
+        async for batch in self.iter_section_items(section_key, item_type=item_type):
             items.extend(batch)
-            total = int(container.get("totalSize", container.get("size", len(batch))))
-            start += _PAGE_SIZE
-            if start >= total or not batch:
-                break
         return items

@@ -107,13 +107,26 @@ class FakeRadarr(FakeService):
 class FakePlex(FakeService):
     name = "plex"
 
+    # Deliberately tiny so any sweep that matters spans several pages — the
+    # streaming path is only worth having if it is exercised in more than one
+    # batch, and a fake that returns everything at once would never prove it.
+    page_size = 2
+
     async def get_sections(self):
         return PLEX_SECTIONS
 
-    async def get_section_items(self, key, *, item_type=1):
+    def _items(self, key, item_type):
         if item_type == 1:
             return PLEX_ITEMS.get(str(key), [])
         return PLEX_TV.get((str(key), item_type), [])
+
+    async def iter_section_items(self, key, *, item_type=1):
+        items = self._items(key, item_type)
+        for start in range(0, len(items), self.page_size):
+            yield items[start : start + self.page_size]
+
+    async def get_section_items(self, key, *, item_type=1):
+        return self._items(key, item_type)
 
 
 class FakeTautulli(FakeService):
@@ -298,3 +311,203 @@ async def test_midscan_failure_still_interrupts_and_resumes(factory, settings):
         from sift.db.models import ScanRun
 
         assert session.get(ScanRun, scan_id).status == ScanStatus.INTERRUPTED
+
+
+# ------------------------------------------------------------------ streaming TV
+
+def _many_episodes(count: int) -> list[dict]:
+    """One show's worth of episodes, sized to span several write batches."""
+    return [
+        {
+            "ratingKey": 4000 + n,
+            "grandparentRatingKey": 3001,
+            "parentIndex": 1 + n // 10,
+            "index": 1 + n % 10,
+            "title": f"Episode {n}",
+            "Media": [
+                {
+                    "height": 1080,
+                    "videoCodec": "h264",
+                    "Part": [
+                        {
+                            "file": f"/tv/scrubs/s{1 + n // 10:02d}e{1 + n % 10:02d}.mkv",
+                            "size": 1_400_000_000,
+                            "duration": 1_320_000,
+                        }
+                    ],
+                }
+            ],
+        }
+        for n in range(count)
+    ]
+
+
+class StreamingPlex(FakePlex):
+    """A TV section large enough to page, with a hook between pages.
+
+    ``probe`` runs after each page is handed over, which is the only moment that
+    can tell streaming apart from accumulation: mid-sweep, either the database
+    already holds episodes or it doesn't.
+    """
+
+    page_size = 5
+
+    def __init__(self, episodes, probe=None, **kwargs):
+        super().__init__(**kwargs)
+        self.episodes = episodes
+        self.probe = probe
+        self.pages = 0
+
+    def _items(self, key, item_type):
+        if (str(key), item_type) == ("3", 4):
+            return self.episodes
+        return super()._items(key, item_type)
+
+    async def iter_section_items(self, key, *, item_type=1):
+        async for batch in super().iter_section_items(key, item_type=item_type):
+            yield batch
+            if (str(key), item_type) == ("3", 4):
+                self.pages += 1
+                if self.probe is not None:
+                    self.probe()
+
+
+async def test_episodes_are_written_as_they_arrive_and_every_batch_survives(
+    factory, settings, monkeypatch
+):
+    """A big TV sweep must reach the database in pieces, and keep all of them.
+
+    Two failures hide here and only show up together. Holding every episode until
+    the sweep ends is what got a real scan killed for memory — the run then stays
+    marked running forever, which reads to the user as a bar frozen at the same
+    percentage. But writing in batches introduces the opposite hazard: the stale
+    -copy sweep that keeps a rescan honest will, if it is not scoped to the
+    episodes in hand, treat every previous batch as vanished and delete it. Then
+    a 30,000-episode library persists as the last few hundred.
+    """
+    from sift.db.models import Episode, MediaFile
+
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 4)
+    total = 23  # not a multiple of the batch, so the final partial write counts
+    counts_during: list[int] = []
+
+    def probe() -> None:
+        with factory() as session:
+            counts_during.append(session.scalar(select(func.count()).select_from(Episode)))
+
+    plex = StreamingPlex(_many_episodes(total), probe=probe)
+    scan_id = create_scan_run(factory)
+    pipeline = ScanPipeline(
+        factory, _configure_kids(settings), radarr=FakeRadarr(), plex=plex,
+        tautulli=FakeTautulli(), tmdb=None,
+    )
+    run = await pipeline.run(scan_id)
+    assert run.status == ScanStatus.COMPLETED
+
+    assert plex.pages == 5  # 23 episodes at 5 per page — it really did stream
+    # Rows existed before the last page was read: the proof of incremental writes.
+    assert counts_during[-2] > 0
+
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(Episode)) == total
+        files = session.scalar(
+            select(func.count()).select_from(MediaFile).where(MediaFile.episode_id.isnot(None))
+        )
+        assert files == total
+
+
+async def test_a_tv_sweep_that_fits_in_one_batch_is_unchanged(factory, settings, monkeypatch):
+    """NEGATIVE CONTROL. With the batch larger than the library there is exactly
+    one write, so batching cannot be what produced the rows above — and the same
+    counts must still come out. A stale sweep broken in the other direction
+    (scoped so tightly it never deletes) would pass this and fail the rescan pin
+    below, which is why both exist."""
+    from sift.db.models import Episode
+
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 10_000)
+    plex = StreamingPlex(_many_episodes(23))
+    plex.page_size = 1000
+    scan_id = create_scan_run(factory)
+    pipeline = ScanPipeline(
+        factory, _configure_kids(settings), radarr=FakeRadarr(), plex=plex,
+        tautulli=FakeTautulli(), tmdb=None,
+    )
+    await pipeline.run(scan_id)
+    assert plex.pages == 1
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(Episode)) == 23
+
+
+async def test_a_batched_rescan_still_drops_files_that_are_gone(factory, settings, monkeypatch):
+    """Both halves of the stale sweep, because each one breaks the other.
+
+    The duplicate copy here sits at the far end of the sweep, so the two copies of
+    episode one land in different write batches — the ordinary case in a real
+    library, where Plex reports copies wherever it finds them. Any delete rule
+    evaluated per batch reads the first copy as missing when the second arrives
+    and removes it, destroying the duplicate the feature exists to find in the act
+    of recording it. That is the first assertion.
+
+    Deleting nothing at all passes that and fails the second: a copy removed on
+    disk has to leave, or Sift keeps recommending the deletion of a file that is
+    already gone.
+    """
+    from sift.db.models import MediaFile
+
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 4)
+    episodes = _many_episodes(23)
+    # A second copy of episode one, arriving batches later than the first.
+    surplus = dict(episodes[0])
+    surplus["ratingKey"] = 9999
+    surplus["Media"] = [
+        {
+            "height": 480,
+            "videoCodec": "h264",
+            "Part": [{"file": "/tv/scrubs/s01e01.dup.mkv", "size": 400_000_000,
+                      "duration": 1_320_000}],
+        }
+    ]
+
+    async def _scan(items):
+        plex = StreamingPlex(items)
+        scan_id = create_scan_run(factory)
+        await ScanPipeline(
+            factory, _configure_kids(settings), radarr=FakeRadarr(), plex=plex,
+            tautulli=FakeTautulli(), tmdb=None,
+        ).run(scan_id)
+
+    await _scan([*episodes, surplus])
+    with factory() as session:
+        assert session.scalar(
+            select(func.count()).select_from(MediaFile).where(MediaFile.episode_id.isnot(None))
+        ) == 24
+
+    await _scan(episodes)  # the surplus copy has been deleted on disk
+    with factory() as session:
+        paths = set(
+            session.scalars(select(MediaFile.path).where(MediaFile.episode_id.isnot(None))).all()
+        )
+        assert "/tv/scrubs/s01e01.dup.mkv" not in paths
+        assert len(paths) == 23
+
+
+async def test_a_long_phase_reports_progress_while_it_runs(factory, settings, monkeypatch):
+    """A phase that emits only 'running' and then 'done' is indistinguishable from
+    a dead process for as long as it takes. The Plex phase is the long one, so it
+    has to say something in between."""
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 4)
+    seen: list[tuple[str, str, str]] = []
+
+    async def progress_cb(update):
+        seen.append((update.phase, update.status, update.message))
+
+    plex = StreamingPlex(_many_episodes(23))
+    scan_id = create_scan_run(factory)
+    await ScanPipeline(
+        factory, _configure_kids(settings), radarr=FakeRadarr(), plex=plex,
+        tautulli=FakeTautulli(), tmdb=None, progress_cb=progress_cb,
+    ).run(scan_id)
+
+    mid = [m for phase, status, m in seen if phase == "plex" and status == "running" and m]
+    assert len(mid) >= 2
+    assert any("episodes" in m for m in mid)

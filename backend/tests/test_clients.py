@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 from pydantic import SecretStr
 
+from sift.clients import plex as plex_client
 from sift.clients.plex import PlexClient
 from sift.clients.radarr import RadarrClient
 from sift.clients.sonarr import SonarrClient
@@ -78,6 +79,81 @@ async def test_plex_sections_items_and_health():
     items = await client.get_section_items("1")
     assert items[0]["ratingKey"] == 10
     assert (await client.health()).ok
+    await client.aclose()
+
+
+async def test_a_server_that_ignores_pagination_is_read_once_not_forever():
+    """A Plex that returns the whole section on every page must terminate.
+
+    The container headers are a request, not a guarantee. A server that ignores
+    them answers page 2 with page 1's contents, so the offset advances and the
+    data never does — an unbounded loop that on a real library eats memory until
+    the process is killed. The read has to stop on its own.
+    """
+    # Bigger than one page, so the offset alone cannot end the sweep: after page
+    # one the offset is 200 and the section claims 500, which reads as "more to
+    # come". Only noticing that 500 records have already been seen stops it.
+    page = [{"ratingKey": n, "title": f"E{n}"} for n in range(500)]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"MediaContainer": {"totalSize": 500, "Metadata": page}})
+
+    cfg = PlexConfig(base_url="http://plex", token=SecretStr("pt"))
+    client = PlexClient(cfg, transport=httpx.MockTransport(handler), sleep=_noop_sleep)
+    items = await client.get_section_items("1", item_type=4)
+    assert calls == 1
+    assert len(items) == 500
+    await client.aclose()
+
+
+async def test_a_section_that_never_ends_is_capped(monkeypatch):
+    """The last floor. A server that pages forever — always a full page, always
+    claiming more to come — defeats both offset and count checks, so the sweep
+    needs a hard page cap or it runs until the host kills it for memory."""
+    monkeypatch.setattr(plex_client, "_MAX_PAGES", 3)
+    page = [{"ratingKey": n, "title": f"E{n}"} for n in range(200)]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200, json={"MediaContainer": {"totalSize": 10_000_000, "Metadata": page}}
+        )
+
+    cfg = PlexConfig(base_url="http://plex", token=SecretStr("pt"))
+    client = PlexClient(cfg, transport=httpx.MockTransport(handler), sleep=_noop_sleep)
+    items = await client.get_section_items("1", item_type=4)
+    assert calls == 3
+    assert len(items) == 600
+    await client.aclose()
+
+
+async def test_pagination_walks_every_page_when_the_server_behaves():
+    """NEGATIVE CONTROL for the stop above: a well-behaved server must still be
+    paged all the way through. A guard that ends the sweep after one page would
+    silently read a fraction of a large library and report it as the whole
+    thing — indistinguishable from a small library, and far worse than a hang."""
+    total = 450
+    everything = [{"ratingKey": n, "title": f"E{n}"} for n in range(total)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        start = int(request.headers["X-Plex-Container-Start"])
+        size = int(request.headers["X-Plex-Container-Size"])
+        return httpx.Response(
+            200,
+            json={
+                "MediaContainer": {"totalSize": total, "Metadata": everything[start : start + size]}
+            },
+        )
+
+    cfg = PlexConfig(base_url="http://plex", token=SecretStr("pt"))
+    client = PlexClient(cfg, transport=httpx.MockTransport(handler), sleep=_noop_sleep)
+    items = await client.get_section_items("1", item_type=4)
+    assert [item["ratingKey"] for item in items] == list(range(total))
     await client.aclose()
 
 
