@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import anthropic as anthropic_ai
 from ..ai.registry import anthropic_key
+from ..ingest import sections as section_plan
 from ..services import config_store, reset, runtime
 from ..services.health import check_service
 from .deps import AuthDep, get_session_factory, get_state
@@ -25,6 +26,9 @@ from .schemas import (
     ConnectionTestIn,
     ResetRequest,
     ResetResponse,
+    SectionKindsIn,
+    SectionPlanOut,
+    SectionsResponse,
     ServiceHealth,
 )
 
@@ -142,3 +146,61 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
         )
 
     raise HTTPException(status_code=404, detail=f"unknown service {service!r}")
+
+
+@router.get("/sections", response_model=SectionsResponse)
+async def list_sections(request: Request) -> SectionsResponse:
+    """Every Plex library, and what Sift will do with each.
+
+    Worth looking at once. Plex calls a Home Videos library a *movie* library, so
+    without an override family footage is read as films — into the removal queue,
+    the film counts, and the size baselines every verdict is measured against.
+    Sift leaves those alone by default because they carry no metadata agent, but
+    the decision is shown rather than assumed.
+    """
+    from ..clients.plex import PlexClient
+
+    state = get_state(request)
+    settings = state.settings
+    if not settings.plex.enabled or not settings.plex.base_url:
+        return SectionsResponse(sections=[], detail="Plex isn't connected yet.")
+    try:
+        client = PlexClient(settings.plex)
+    except Exception as exc:  # noqa: BLE001 - a config problem, not a crash
+        return SectionsResponse(sections=[], detail=str(exc))
+    try:
+        raw = await client.get_sections()
+    except Exception:  # noqa: BLE001 - unreachable Plex is a status, not a 500
+        return SectionsResponse(sections=[], detail="Couldn't reach Plex to list libraries.")
+    finally:
+        await client.aclose()
+
+    plans = section_plan.plan(raw, settings.plex.section_kinds)
+    return SectionsResponse(
+        sections=[
+            SectionPlanOut(
+                key=p.key,
+                title=p.title,
+                plex_type=p.plex_type,
+                agent=p.agent,
+                kind=p.kind,
+                reason=p.reason,
+                overridden=p.overridden,
+            )
+            for p in plans
+        ]
+    )
+
+
+@router.put("/sections", response_model=SectionsResponse)
+async def set_sections(
+    body: SectionKindsIn,
+    request: Request,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> SectionsResponse:
+    """Correct the mapping. Takes effect on the next scan."""
+    with factory() as session:
+        config_store.set_config(session, {"plex": {"section_kinds": body.section_kinds}})
+    # Rebuild the live settings, or the next scan reads the old mapping.
+    await runtime.rebuild(request.app)
+    return await list_sections(request)

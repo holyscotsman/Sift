@@ -49,6 +49,7 @@ from ..db.models import (
     utcnow,
 )
 from . import normalize
+from . import sections as section_plan
 
 log = logging.getLogger("sift.ingest")
 
@@ -228,9 +229,14 @@ class ScanPipeline:
         items: list[dict[str, Any]] = []
         shows: list[dict[str, Any]] = []
         episodes: list[dict[str, Any]] = []
-        for section in sections:
-            kind = section.get("type")
-            title = section.get("title", "")
+        plans = section_plan.plan(sections, self.settings.plex.section_kinds)
+        for plan in plans:
+            if not plan.scanned:
+                log.info("skipping Plex library %r — %s", plan.title, plan.reason)
+                continue
+            section = {"key": plan.key}
+            kind = plan.kind
+            title = plan.title
             is_kids = title.lower() in kids
             if kind == "movie":
                 raw_items = await self.plex.get_section_items(section["key"])

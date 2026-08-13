@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ConnectionsForm } from "@/components/ConnectionsForm";
+import { SectionsForm } from "@/components/SectionsForm";
 import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
 import { api, getToken, setToken } from "@/lib/api";
@@ -185,6 +186,12 @@ function Connections() {
           }}
         />
       )}
+
+      <span className="eyebrow mt-6 block">Libraries</span>
+      <p className="mb-3 mt-1 text-xs text-fg3">
+        Which Plex libraries Sift reads, and whether each is films or television.
+      </p>
+      <SectionsForm />
     </>
   );
 }

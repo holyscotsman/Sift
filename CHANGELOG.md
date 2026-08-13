@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.18.0 — Which libraries Sift reads, and as what
+
+Groundwork for treating television as its own thing rather than a data source
+for the disk feature — and a correctness fix that was live before any of that.
+
+**Home Videos were being read as films.** Plex types a Home Videos or Other
+Videos library as `movie`, so Sift ingested family footage as a film collection:
+into the removal queue, into the film counts, and — worst of the three — into the
+bitrate baselines that every size verdict is measured against. A few hundred
+phone clips are enough to drag the median for "1080p h264" somewhere meaningless
+and quietly change what counts as an oversized film.
+
+What separates those libraries is not their type but their **agent**. A library
+with no metadata agent has no ratings, no cast, and nothing to match against
+TMDB, so nothing in Sift can say anything useful about it. That is a fact about
+the library rather than a guess about its name — "Home Videos" in another
+language, or called "Camcorder", is caught the same way, and a real film library
+called "Home Cinema" is not.
+
+**Every show library is television, with no setup.** Cartoons, Anime, Game Shows,
+Documentaries — nothing keys off the word "TV", so they were already ingested as
+shows and stay that way.
+
+Plex's type is a default rather than a verdict. Settings › Libraries lists every
+library, what Plex calls it, what Sift will do with it and why, and lets you say
+films / TV / ignore where Plex has it wrong.
+
+One guard is worth naming because getting it backwards is silent: a library that
+reports **no agent field at all** — an older Plex, a field that moved — is still
+scanned. Inferring "personal media" from silence would make a scan read nothing
+while looking exactly like a successful scan of an empty library.
+
+362 tests. The new controls: the agent decides rather than the title, a missing
+agent field does not drop a library, and a nonsense override falls back to Plex's
+own answer instead of inventing a third kind.
+
 ## 2607.17.0 — Findings you can act on
 
 2607.16.0 could tell you a show held the same episode twice and exactly how much
