@@ -77,6 +77,12 @@ PREFLIGHT_TIMEOUT_SECONDS = 15.0
 # frozen at the same percentage.
 EPISODE_BATCH = 2000
 
+# The same rule for the Sonarr phase, counted in shows because that is the unit it
+# reads. Smaller than EPISODE_BATCH because a show is not one record: it carries
+# every episode and every file Sonarr knows about, so 25 long-running series is
+# already the same order of magnitude.
+SERIES_BATCH = 25
+
 # Ceiling on the advisory AI pass. It's the last phase and reviews candidates one at
 # a time, so without a bound a slow provider parks a finished scan on "AI analysis"
 # for minutes. Whatever is done by then is kept.
@@ -325,6 +331,14 @@ class ScanPipeline:
             )
         return counts
 
+    def _sweep_sonarr_episode_media(self, cutoff: datetime) -> int:
+        """The Sonarr-side sweep, on its own connection because the batched writes
+        that preceded it each closed theirs."""
+        with self.factory() as session:
+            dropped = self._sweep_episode_media(session, cutoff, source="sonarr")
+            session.commit()
+        return dropped
+
     def _sweep_plex_episode_media(self, cutoff: datetime) -> int:
         """The Plex-side sweep, on its own connection because the streamed writes
         that preceded it each closed theirs."""
@@ -452,46 +466,79 @@ class ScanPipeline:
         """
         if self.sonarr is None:
             return {}
+        # Before the first write, so every row this phase touches stamps later and
+        # only what nothing reported is left behind the line.
+        sweep_from = utcnow()
         raw_series = await self.sonarr.get_series()
         series = [
             s for s in (normalize.normalize_sonarr_series(r) for r in raw_series) if s is not None
         ]
+        await self._note(f"reading {len(series):,} shows from Sonarr")
+
+        totals = {"sonarr_shows": 0, "sonarr_episodes": 0, "sonarr_media_files": 0}
+        pending: list[dict[str, Any]] = []
         detail: dict[int, dict[str, Any]] = {}
+
+        async def flush() -> None:
+            """Write what has been read, then let it go.
+
+            Two calls per show, each returning every episode and every file it has,
+            is the largest payload in the whole scan. Holding all of it to write
+            once is how the Plex phase died; there is no reason to expect this one
+            to survive what that didn't.
+            """
+            if not pending:
+                return
+            written = await asyncio.to_thread(self._persist_sonarr, list(pending), dict(detail))
+            for key, value in written.items():
+                totals[key] = totals.get(key, 0) + value
+            pending.clear()
+            detail.clear()
+            await self._note(
+                f"{totals['sonarr_shows']:,} of {len(series):,} shows",
+                {"sonarr_episodes": totals["sonarr_episodes"]},
+            )
+
         for show in series:
+            pending.append(show)
             sonarr_id = show["sonarr_id"]
-            if not sonarr_id:
-                continue
-            episodes = [
-                e
-                for e in (
-                    normalize.normalize_sonarr_episode(r)
-                    for r in await self.sonarr.get_episodes(sonarr_id)
-                )
-                if e is not None
-            ]
-            files = [
-                f
-                for f in (
-                    normalize.normalize_sonarr_episode_file(r)
-                    for r in await self.sonarr.get_episode_files(sonarr_id)
-                )
-                if f is not None
-            ]
-            detail[show["tvdb_id"]] = {"episodes": episodes, "files": files}
-        return await asyncio.to_thread(self._persist_sonarr, series, detail)
+            if sonarr_id:
+                episodes = [
+                    e
+                    for e in (
+                        normalize.normalize_sonarr_episode(r)
+                        for r in await self.sonarr.get_episodes(sonarr_id)
+                    )
+                    if e is not None
+                ]
+                files = [
+                    f
+                    for f in (
+                        normalize.normalize_sonarr_episode_file(r)
+                        for r in await self.sonarr.get_episode_files(sonarr_id)
+                    )
+                    if f is not None
+                ]
+                detail[show["tvdb_id"]] = {"episodes": episodes, "files": files}
+            if len(pending) >= SERIES_BATCH:
+                await flush()
+        await flush()
+
+        # Once, with every show accounted for.
+        await asyncio.to_thread(self._sweep_sonarr_episode_media, sweep_from)
+        return totals
 
     def _persist_sonarr(
         self, series: list[dict[str, Any]], detail: dict[int, dict[str, Any]]
     ) -> dict[str, int]:
-        """Persist shows, seasons, episodes and their files.
+        """Persist a slice of the TV catalog: shows, seasons, episodes and files.
 
-        Preloaded and batched throughout: a TV library has an order of magnitude
-        more episodes than a film library has films, so the per-row lookups that
-        merely slowed the Plex phase would be far worse here.
+        Takes a slice rather than the library because the caller streams (see
+        :data:`SERIES_BATCH`). Every preload here is therefore scoped to the shows
+        in hand: reading every season and every episode in the database was
+        affordable when this ran once, and is a full-table hydration per batch once
+        it runs many times.
         """
-        # Taken before any write, so every row this pass touches stamps later than
-        # it and only rows nothing reported are left behind the line.
-        sweep_from = utcnow()
         with self.factory() as session:
             tvdb_ids = [s["tvdb_id"] for s in series]
             shows: dict[int, Show] = {}
@@ -499,12 +546,20 @@ class ScanPipeline:
                 batch = tvdb_ids[start : start + 500]
                 for show_row in session.scalars(select(Show).where(Show.tvdb_id.in_(batch))):
                     shows[show_row.tvdb_id] = show_row
-            seasons: dict[tuple[int, int], Season] = {
-                (s.show_id, s.season_number): s for s in session.scalars(select(Season))
-            }
+            seasons: dict[tuple[int, int], Season] = {}
+            for start in range(0, len(tvdb_ids), 500):
+                batch = tvdb_ids[start : start + 500]
+                for season_row in session.scalars(
+                    select(Season).where(Season.show_id.in_(batch))
+                ):
+                    seasons[(season_row.show_id, season_row.season_number)] = season_row
+            season_ids = sorted({s.id for s in seasons.values() if s.id is not None})
             episodes: dict[tuple[int, int], Episode] = {}
-            for episode_row in session.scalars(select(Episode)):
-                episodes[(episode_row.season_id, episode_row.episode_number)] = episode_row
+            for start in range(0, len(season_ids), 500):
+                for episode_row in session.scalars(
+                    select(Episode).where(Episode.season_id.in_(season_ids[start : start + 500]))
+                ):
+                    episodes[(episode_row.season_id, episode_row.episode_number)] = episode_row
 
             episode_count = 0
             file_records: list[tuple[Episode, dict[str, Any]]] = []
@@ -527,19 +582,24 @@ class ScanPipeline:
                 show.quality_profile_id = data["quality_profile_id"]
 
                 found = detail.get(tvdb_id, {})
-                by_number = {e["episode_number"]: e for e in found.get("episodes", [])}
                 files_by_id = {
                     f["sonarr_episode_file_id"]: f for f in found.get("files", [])
                 }
+                # Grouped once. Walking the whole episode list per season is
+                # quadratic in a way that only shows up on the long-running shows
+                # this feature exists for: 20 seasons of 500 episodes is 10,000
+                # comparisons to place 500 rows.
+                by_season: dict[int, list[dict[str, Any]]] = {}
                 # Air year is taken per season from the episodes themselves. The
                 # series payload carries only one year, and a show's first year is
                 # the wrong ceiling for its later seasons — Scrubs began in 2001
                 # and ended in HD.
                 years: dict[int, list[int]] = {}
-                for episode in found.get("episodes", []):
-                    if episode["air_date"]:
-                        years.setdefault(episode["season_number"], []).append(
-                            episode["air_date"].year
+                for episode_data in found.get("episodes", []):
+                    by_season.setdefault(episode_data["season_number"], []).append(episode_data)
+                    if episode_data["air_date"]:
+                        years.setdefault(episode_data["season_number"], []).append(
+                            episode_data["air_date"].year
                         )
 
                 for season_data in data["seasons"]:
@@ -556,9 +616,7 @@ class ScanPipeline:
                     season_years = years.get(number)
                     season.air_year = min(season_years) if season_years else season.air_year
 
-                    for episode_data in found.get("episodes", []):
-                        if episode_data["season_number"] != number:
-                            continue
+                    for episode_data in by_season.get(number, ()):
                         key = (season.id, episode_data["episode_number"])
                         episode = episodes.get(key)
                         if episode is None:
@@ -577,13 +635,11 @@ class ScanPipeline:
                         record = files_by_id.get(episode_data["sonarr_episode_file_id"])
                         if record is not None:
                             file_records.append((episode, record))
-                _ = by_number
             session.flush()
-            # Sonarr arrives whole rather than in batches, so its sweep is safe to
-            # run inline.
-            files = self._sync_episode_media(
-                session, file_records, source="sonarr", sweep_from=sweep_from
-            )
+            # No sweep here. This is one slice of the catalog, and a delete decided
+            # from a slice removes everything the other slices hold — see
+            # _sync_episode_media. The phase sweeps once, at the end.
+            files = self._sync_episode_media(session, file_records, source="sonarr")
             session.commit()
         return {
             "sonarr_shows": len(series),
@@ -619,11 +675,33 @@ class ScanPipeline:
         def identity(path: str | None, episode_id: int | None) -> str:
             return path or f"episode:{episode_id}"
 
+        # Only the rows this batch could possibly match. Loading every file for the
+        # source was affordable exactly once; now that episodes arrive in batches it
+        # would re-read and re-hydrate the whole table for each one, which a
+        # file-backed SQLite test cannot feel and a hosted Postgres very much can.
+        paths = sorted({p for _episode, record in records if (p := record.get("path"))})
+        episode_ids = sorted({e.id for e, _record in records if e.id is not None})
         existing: dict[str, MediaFile] = {}
-        for row in session.scalars(
-            select(MediaFile).where(MediaFile.episode_id.is_not(None), MediaFile.source == source)
-        ):
-            existing[identity(row.path, row.episode_id)] = row
+        for start in range(0, len(paths), 500):
+            for row in session.scalars(
+                select(MediaFile).where(
+                    MediaFile.source == source,
+                    MediaFile.episode_id.is_not(None),
+                    MediaFile.path.in_(paths[start : start + 500]),
+                )
+            ):
+                existing[identity(row.path, row.episode_id)] = row
+        # Rows for a file with no path at all are keyed by episode instead, so they
+        # have to be fetched that way or every batch would insert them afresh.
+        for start in range(0, len(episode_ids), 500):
+            for row in session.scalars(
+                select(MediaFile).where(
+                    MediaFile.source == source,
+                    MediaFile.path.is_(None),
+                    MediaFile.episode_id.in_(episode_ids[start : start + 500]),
+                )
+            ):
+                existing[identity(row.path, row.episode_id)] = row
 
         written = 0
         seen: set[str] = set()

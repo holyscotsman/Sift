@@ -7,10 +7,11 @@ these pin that each season carries its own air year rather than inheriting one.
 
 from __future__ import annotations
 
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 
 from sift.db.models import Episode, MediaFile, Season, Show
 from sift.ingest import normalize
+from sift.ingest import pipeline as pipeline_mod
 from sift.ingest.pipeline import ScanPipeline
 
 GB = 1_000_000_000
@@ -302,3 +303,192 @@ def test_a_rescan_costs_a_handful_of_statements(factory, settings):
     _count_statements(factory, pipe, 100)
     _lookups, total = _count_statements(factory, pipe, 100)
     assert total < 20, f"rescan of 100 episodes emitted {total} statements"
+
+
+# --------------------------------------------------------------- streaming Sonarr
+
+
+class FakeSonarr:
+    """Sonarr as the phase actually uses it: one catalog call, then two calls per
+    show. ``probe`` runs after each show is served, which is the only vantage
+    point that can tell writing-as-you-go from writing-at-the-end."""
+
+    def __init__(self, series, episodes_by_id, files_by_id, probe=None):
+        self.series = series
+        self.episodes_by_id = episodes_by_id
+        self.files_by_id = files_by_id
+        self.probe = probe
+        self.served = 0
+
+    async def get_series(self):
+        return self.series
+
+    async def get_episodes(self, sonarr_id):
+        return self.episodes_by_id.get(sonarr_id, [])
+
+    async def get_episode_files(self, sonarr_id):
+        self.served += 1
+        if self.probe is not None:
+            self.probe()
+        return self.files_by_id.get(sonarr_id, [])
+
+
+def _library(show_count: int, *, episodes_each: int = 4):
+    """A library of distinct shows, each with one season of episodes and files."""
+    series, episodes_by_id, files_by_id = [], {}, {}
+    for i in range(show_count):
+        sonarr_id = i + 1
+        tvdb_id = 70000 + i
+        series.append(_series(tvdb_id, f"Show {i}", seasons=[1], sonarr_id=sonarr_id))
+        base = sonarr_id * 1000
+        episodes_by_id[sonarr_id] = [
+            _episode(1, n, file_id=base + n, air="2001-10-02T00:00:00Z")
+            for n in range(1, episodes_each + 1)
+        ]
+        files_by_id[sonarr_id] = [
+            _file(base + n, size=700_000_000, height=480, path=f"/tv/{tvdb_id}/s01e{n:02d}.mkv")
+            for n in range(1, episodes_each + 1)
+        ]
+    return series, episodes_by_id, files_by_id
+
+
+async def test_sonarr_is_written_as_it_is_read_and_every_batch_survives(
+    factory, settings, monkeypatch
+):
+    """The Plex phase's failure, one phase later.
+
+    Sonarr is the heaviest read in the scan — two calls per show, each returning
+    every episode and every file it knows about — and it was accumulating all of
+    it to write once at the end. That is the shape that got the Plex phase killed
+    for memory, so it has to stream too; and once it streams, the stale sweep can
+    no longer be decided from a single batch without deleting the batches either
+    side of it.
+    """
+    monkeypatch.setattr(pipeline_mod, "SERIES_BATCH", 3)
+    shows_during: list[int] = []
+
+    def probe() -> None:
+        with factory() as session:
+            shows_during.append(session.scalar(select(func.count()).select_from(Show)))
+
+    series, episodes_by_id, files_by_id = _library(10)
+    sonarr = FakeSonarr(series, episodes_by_id, files_by_id, probe=probe)
+    counts = await ScanPipeline(factory, settings, sonarr=sonarr)._phase_sonarr()
+
+    assert counts["sonarr_shows"] == 10
+    assert counts["sonarr_episodes"] == 40
+    # Shows were on disk well before the last one was read.
+    assert shows_during[-2] > 0
+
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(Show)) == 10
+        assert session.scalar(select(func.count()).select_from(Episode)) == 40
+        assert session.scalar(
+            select(func.count()).select_from(MediaFile).where(MediaFile.source == "sonarr")
+        ) == 40
+
+
+async def test_a_sonarr_library_inside_one_batch_is_unchanged(factory, settings, monkeypatch):
+    """NEGATIVE CONTROL. With the batch bigger than the library there is one
+    write, so batching cannot be what produced the rows above, and the totals
+    must match anyway."""
+    monkeypatch.setattr(pipeline_mod, "SERIES_BATCH", 1000)
+    series, episodes_by_id, files_by_id = _library(10)
+    sonarr = FakeSonarr(series, episodes_by_id, files_by_id)
+    counts = await ScanPipeline(factory, settings, sonarr=sonarr)._phase_sonarr()
+    assert counts["sonarr_shows"] == 10
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(Episode)) == 40
+
+
+async def test_a_batched_sonarr_rescan_drops_only_what_sonarr_dropped(
+    factory, settings, monkeypatch
+):
+    """The sweep still has to bite, and only where it should.
+
+    A file Sonarr stops reporting is gone and must leave. Every other file — most
+    of them written in a different batch from the one that triggers the sweep —
+    must stay. A sweep decided per batch passes the first half of that and fails
+    the second, keeping only the last batch of a library.
+    """
+    monkeypatch.setattr(pipeline_mod, "SERIES_BATCH", 3)
+    series, episodes_by_id, files_by_id = _library(10)
+
+    async def _scan() -> None:
+        await ScanPipeline(
+            factory, settings, sonarr=FakeSonarr(series, episodes_by_id, files_by_id)
+        )._phase_sonarr()
+
+    await _scan()
+    with factory() as session:
+        assert session.scalar(select(func.count()).select_from(MediaFile)) == 40
+
+    # The very first show loses an episode file — an early batch, so a sweep that
+    # only ever sees the final batch would miss it entirely.
+    gone = files_by_id[1].pop()["path"]
+    episodes_by_id[1].pop()
+    await _scan()
+
+    with factory() as session:
+        paths = set(session.scalars(select(MediaFile.path)).all())
+        assert gone not in paths
+        assert len(paths) == 39
+
+
+async def test_the_sonarr_phase_reports_progress_while_it_runs(factory, settings, monkeypatch):
+    """Two HTTP calls per show against a remote Sonarr is minutes of silence on a
+    real library. A phase that says nothing until it finishes is the thing that
+    made the last stall take a round trip to diagnose."""
+    monkeypatch.setattr(pipeline_mod, "SERIES_BATCH", 3)
+    seen: list[str] = []
+
+    async def progress_cb(update):
+        if update.phase == "sonarr" and update.status == "running" and update.message:
+            seen.append(update.message)
+
+    series, episodes_by_id, files_by_id = _library(10)
+    pipe = ScanPipeline(
+        factory,
+        settings,
+        sonarr=FakeSonarr(series, episodes_by_id, files_by_id),
+        progress_cb=progress_cb,
+    )
+    pipe._progress_at = (1, "sonarr", 3)
+    await pipe._phase_sonarr()
+
+    assert len(seen) >= 3
+    assert any("shows" in message for message in seen)
+
+
+def test_the_catalog_preloads_name_the_shows_they_want(factory, settings):
+    """Scoping, pinned structurally because the cost it prevents is invisible here.
+
+    Reading every season and every episode in the database was free when this ran
+    once per scan. Batched, it re-hydrates both whole tables for every batch — on
+    a library of 30,000 episodes that is hundreds of thousands of ORM objects
+    built and thrown away, and a file-backed SQLite test cannot feel any of it.
+    So the pin is on the shape of the query rather than the clock: every read of
+    seasons or episodes must carry a filter.
+    """
+    pipe = ScanPipeline(factory, settings)
+    engine = factory.kw["bind"]
+    unfiltered: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        text = " ".join(statement.split())
+        if text.upper().startswith("SELECT") and " WHERE " not in text.upper():
+            if " FROM seasons" in text or " FROM episodes" in text:
+                unfiltered.append(text)
+
+    try:
+        _persist(
+            pipe,
+            [_series(76156, "Scrubs", seasons=[1])],
+            [_episode(1, 1, file_id=501, air="2001-10-02T00:00:00Z")],
+            [_file(501, size=700_000_000, height=480, path="/tv/scrubs/s01e01.mkv")],
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert not unfiltered, f"unscoped catalog read: {unfiltered}"
