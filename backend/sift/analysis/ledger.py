@@ -28,7 +28,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from ..db.models import MediaFile, Season, Show
+from ..db.models import MediaFile, Show
 from . import bitrate, duplicates, outliers, suitability, tv_duplicates, tv_size
 
 TIER_FREE = 0
@@ -227,28 +227,18 @@ def _movie_copy_sizes(session: Session) -> dict[str, int]:
 
 
 def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]:
-    """Seasons held higher than they need to be, where every signal agrees."""
-    from sqlalchemy import select
+    """Seasons held higher than they need to be, where every signal agrees.
 
-    from ..db.models import Episode
-
-    rows = session.execute(
-        select(MediaFile, Season, Show)
-        .join(Episode, Episode.id == MediaFile.episode_id)
-        .join(Season, Season.id == Episode.season_id)
-        .join(Show, Show.tvdb_id == Season.show_id)
-    )
-    grouped: dict[tuple[int, int], list[tuple[MediaFile, Season, Show]]] = {}
-    for media_file, season, show in rows:
-        grouped.setdefault((show.tvdb_id, season.season_number), []).append(
-            (media_file, season, show)
-        )
+    Reads through the shared season loader rather than repeating the four-table
+    join, which was previously executed once here and twice more in ``tv_size``.
+    """
+    grouped = tv_size.load_seasons(session)
+    shows = tv_size.load_shows(session)
 
     out: list[Finding] = []
-    for (tvdb_id, number), entries in grouped.items():
-        files = [f for f, _s, _sh in entries]
-        season = entries[0][1]
-        show = entries[0][2]
+    for (tvdb_id, number), group in grouped.items():
+        files = group.files
+        show = shows[tvdb_id]
         resolutions = [f.resolution for f in files if f.resolution]
         if not resolutions:
             continue
@@ -256,7 +246,7 @@ def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]
         verdict = suitability.assess(
             _show_facts(show),
             season_number=number,
-            air_year=season.air_year,
+            air_year=group.air_year,
             current=current,
             has_uhd_file=any(f.resolution == "2160p" for f in files),
         )
@@ -286,7 +276,7 @@ def _downgrades(session: Session, baselines: bitrate.Baselines) -> list[Finding]
     return out
 
 
-def _dominant_codec(files: list[MediaFile]) -> str | None:
+def _dominant_codec(files: list[tv_size.SeasonFile]) -> str | None:
     codecs = [f.video_codec for f in files if f.video_codec]
     return max(set(codecs), key=codecs.count) if codecs else None
 

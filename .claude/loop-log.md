@@ -130,3 +130,22 @@ Next: same shape in `tv_size.seasons` (188ms) and `ledger._downgrades` (170ms) �
 both re-run the identical 4-table join over every episode file, and `_downgrades`
 only ever needs seasons whose show could plausibly be downgraded. `outliers.find`
 is 108ms. Those three are now 78% of the build.
+
+### Iter 3 · 2026-08-13 · perf
+`tv_size._load` and `ledger._downgrades` each ran the same four-table join and
+hydrated a full `MediaFile` ORM entity per row to read four attributes off it.
+Replaced with one shared column-select loader (`tv_size.load_seasons` →
+`SeasonGroup`/`SeasonFile` NamedTuples) plus `load_shows` (a few hundred rows, read
+whole instead of joined onto every file).
+**tv_size.seasons 188.7 → 26.5ms, _downgrades 170.6 → 46.5ms, ledger.build 597.9 →
+208.5ms** (cumulative from iter 0: 758.6 → 208.5, 3.6x). Ledger dump identical.
+**Caution recorded:** my equivalence dump for `tv_size.inconsistencies` returned
+`[]` — 3 bytes — so it proved nothing. The fixture generates no inconsistent
+seasons at all. Fell back to the three existing behavioural tests, which do cover
+it. This is a real gap in the benchmark fixture.
+Next: (a) `bench/fixture.py` generates no inconsistent seasons and no
+truncated/bad-rip films with wrong *duration* — so `inconsistencies` and part of
+`outliers` are unexercised by the bench; fixing it means re-baselining every
+metric, so do it as its own iteration. (b) `outliers.find` is now the largest
+single cost at 103ms. (c) `load_seasons` is still executed once per caller —
+hoisting it to a single per-request load would remove another join from `build`.
