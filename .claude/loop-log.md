@@ -399,3 +399,23 @@ Next: the logged stale-`claimed`-job reconciliation is still not done (needs a
 timeout policy — the agent's own transcode ceiling is 12h, so ~24h is the obvious
 window). `frontend/` still completely unexamined. `services/` remaining:
 autoscan, posters, reset, updates.
+
+### Iter 17 · 2026-08-13 · correctness (audit integrity)
+The server half of iter 15. A claim was a **one-way door** — nothing anywhere moved
+a job out of `claimed` — so an agent that did the work and then failed to report
+left the job claimed for ever and its action recorded as approved-but-never-
+executed for work that had happened.
+`_requeue_abandoned` now runs on every claim (the agent polls every 60s, so no
+scheduler is needed) and returns jobs claimed longer than `STALE_CLAIM_HOURS = 24`
+to the queue. The window is chosen from the agent's own encode ceiling of 12h.
+Re-queueing is safe for both kinds, which is why it can be automatic: a delete
+whose file is already gone reports success rather than erroring, so the second run
+is what finally records the truth; a transcode re-encodes and verifies before
+swapping, so the worst case is wasted CPU.
+**Another false negative caught, same shape as before.** The "a finished job is
+never requeued" control passed under mutation because the claim loop already
+refuses an *executed action* — so removing the `status == "claimed"` filter changed
+the job row to `queued` while the handout stayed `None`. Asserting on the handout
+proved nothing; it now asserts on the row. Also fixed an edit that landed the new
+assertion in the wrong test entirely.
+Next: `frontend/` still unexamined. `services/`: autoscan, posters, reset, updates.
