@@ -624,3 +624,34 @@ export interface SectionsResponse {
   sections: SectionPlan[];
   detail: string;
 }
+
+export interface ShowSummary {
+  tvdb_id: number;
+  tmdb_id: number | null;
+  title: string;
+  year: number | null;
+  status: string | null;
+  network: string | null;
+  genres: string[];
+  library_section: string | null;
+  is_kids: boolean;
+  monitored: boolean;
+  in_plex: boolean;
+  runtime: number | null;
+  season_count: number;
+  episode_count: number;
+  // Summed from the episode files — disk actually in use.
+  total_size: number;
+  resolution: string | null;
+  plays: number;
+  last_played_at: string | null;
+  mean_completion: number | null;
+}
+
+export interface ShowListResponse {
+  items: ShowSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_size: number;
+}

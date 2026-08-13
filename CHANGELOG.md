@@ -2,6 +2,32 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.19.0 — Television gets its own shelf
+
+Library now has two tabs. Films and television are different shelves rather than
+one list with a filter, because the columns worth showing differ and the
+questions differ.
+
+**Shows are never scored for removal, by decision.** A series is forty hours of
+your life rather than two, and whether it *deserves* the space is not something
+Sift has been asked to have an opinion about. So the TV tab shows what you hold —
+seasons, episodes, size on disk, resolution, and when you last watched it — and
+stops there. A test pins that nothing resembling a verdict appears in the
+payload, so this cannot drift into a removal queue by accident.
+
+Size is summed from the episode files rather than taken from Sonarr's own
+figure, so it is the disk actually in use. That sum is one grouped query rather
+than one per show: a TV library has an order of magnitude more episodes than a
+film library has films, which is exactly where the 2607.15.1 mistake would hurt
+most.
+
+Every show library appears — Cartoons, Anime, Game Shows — with no per-library
+setup, because nothing keys off the word "TV".
+
+368 tests. New controls: a monitored show with nothing downloaded still lists at
+an honest zero rather than vanishing, and the payload carries no score, band or
+verdict field.
+
 ## 2607.18.0 — Which libraries Sift reads, and as what
 
 Groundwork for treating television as its own thing rather than a data source
