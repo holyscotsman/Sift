@@ -28,3 +28,4 @@
 {"iter":12,"item":"record a successful delete as a success","metric":"successful_deletes_filed_as_failed","before":1,"after":0,"direction":"lower_is_better"}
 {"iter":13,"item":"refuse a transcode swap that would overwrite a different file","metric":"bystander_files_destroyed","before":1,"after":0,"direction":"lower_is_better"}
 {"iter":14,"item":"require both durations before trusting an encode","metric":"unverifiable_encodes_accepted","before":1,"after":0,"direction":"lower_is_better"}
+{"iter":15,"item":"retry a dropped agent report","metric":"transient_failures_survived","before":0,"after":3,"direction":"higher_is_better"}

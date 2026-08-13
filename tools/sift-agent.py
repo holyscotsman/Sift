@@ -31,6 +31,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 log = logging.getLogger("sift-agent")
@@ -50,6 +51,11 @@ DURATION_TOLERANCE_SECONDS = 5.0
 # And it must be at least this fraction of the original. An encode that comes
 # back at 2% of the source did not work, whatever its duration says.
 MIN_OUTPUT_FRACTION = 0.05
+
+# How hard to try to hand a result back. The report is the only record that the
+# work happened, and a job nothing reports stays claimed for ever.
+REPORT_ATTEMPTS = 4
+REPORT_BACKOFF_SECONDS = 2.0
 
 
 
@@ -75,10 +81,18 @@ def _free_name(target: Path) -> Path:
 
 
 class Agent:
-    def __init__(self, base_url: str, token: str, *, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        *,
+        dry_run: bool = False,
+        sleep: "Callable[[float], None]" = time.sleep,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.dry_run = dry_run
+        self._sleep = sleep
 
     # ------------------------------------------------------------------ transport
 
@@ -112,12 +126,42 @@ class Agent:
             return None
 
     def report(self, job_id: int, payload: dict) -> None:
-        try:
-            self._post(f"/api/agent/{job_id}/result", payload)
-        except urllib.error.URLError as exc:
-            # The work is done either way; losing the report only means Sift shows
-            # the job as still claimed until the next scan reconciles it.
-            log.error("Couldn't report job %s back to Sift: %s", job_id, exc)
+        """Tell Sift what happened, and try hard, because nothing else will.
+
+        By the time this runs the file has already been moved. The report is the
+        *only* record that it happened: a job that is never reported stays
+        ``claimed`` for ever — nothing on the server reconciles one — so the audit
+        log shows an approved action that never executed, for work that did. It is
+        also never handed out again, which at least means the work is not repeated.
+
+        Reporting the same result twice is harmless, so retrying is safe. A 4xx is
+        not retried: a bad token or an unknown job will not become true by asking
+        again.
+        """
+        for attempt in range(REPORT_ATTEMPTS):
+            try:
+                self._post(f"/api/agent/{job_id}/result", payload)
+                return
+            except urllib.error.HTTPError as exc:
+                if exc.code < 500:
+                    log.error(
+                        "Sift refused the report for job %s (HTTP %s) — not retrying",
+                        job_id,
+                        exc.code,
+                    )
+                    return
+                last = f"HTTP {exc.code}"
+            except urllib.error.URLError as exc:
+                last = str(exc.reason)
+            if attempt + 1 < REPORT_ATTEMPTS:
+                self._sleep(REPORT_BACKOFF_SECONDS * (2**attempt))
+        log.error(
+            "Could not report job %s to Sift after %s attempts (%s). "
+            "The work was done; Sift will keep showing that job as claimed.",
+            job_id,
+            REPORT_ATTEMPTS,
+            last,
+        )
 
     # --------------------------------------------------------------------- probing
 

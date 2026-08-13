@@ -171,3 +171,68 @@ def test_a_wildly_small_output_is_refused_on_size_alone(agent_mod, tmp_path):
         agent_mod, tmp_path, source_seconds=2700.0, output_seconds=2700.0, output_bytes=b"x" * 5
     )
     assert verdict is not None and "not an encode" in verdict
+
+
+class _Posts:
+    """Records every attempt and fails the first `fail_times` of them."""
+
+    def __init__(self, exc, fail_times: int):
+        self.exc = exc
+        self.fail_times = fail_times
+        self.attempts = 0
+
+    def __call__(self, path, payload=None):
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise self.exc
+        return {}
+
+
+def _agent_with(agent_mod, posts):
+    agent = agent_mod.Agent("http://sift", "token", sleep=lambda _s: None)
+    agent._post = posts  # type: ignore[method-assign]
+    return agent
+
+
+def test_a_dropped_report_is_retried(agent_mod):
+    """The report is the only record that the work happened.
+
+    By the time it runs the file has already moved. Nothing on the server
+    reconciles a job that is never reported — it stays `claimed` for ever, and the
+    audit log shows an approved action that never executed, for work that did. So
+    a single dropped connection must not be the end of it.
+    """
+    import urllib.error
+
+    posts = _Posts(urllib.error.URLError("connection reset"), fail_times=2)
+    _agent_with(agent_mod, posts).report(7, {"ok": True})
+    assert posts.attempts == 3, "gave up before the connection recovered"
+
+
+def test_a_refusal_is_not_retried(agent_mod):
+    """NEGATIVE CONTROL. A bad token or an unknown job does not become true by
+    asking again — retrying a 4xx just delays the log line that explains it."""
+    import urllib.error
+
+    refusal = urllib.error.HTTPError("http://sift", 401, "unauthorized", {}, None)
+    posts = _Posts(refusal, fail_times=99)
+    _agent_with(agent_mod, posts).report(7, {"ok": True})
+    assert posts.attempts == 1
+
+
+def test_a_server_error_is_retried_then_given_up_on(agent_mod):
+    """A 5xx is worth retrying — and worth stopping, so a wedged server does not
+    trap the agent in a loop while the rest of the queue waits."""
+    import urllib.error
+
+    boom = urllib.error.HTTPError("http://sift", 503, "unavailable", {}, None)
+    posts = _Posts(boom, fail_times=99)
+    _agent_with(agent_mod, posts).report(7, {"ok": True})
+    assert posts.attempts == agent_mod.REPORT_ATTEMPTS
+
+
+def test_a_first_time_success_does_not_retry(agent_mod):
+    """NEGATIVE CONTROL: the ordinary path must still be one request."""
+    posts = _Posts(RuntimeError("never raised"), fail_times=0)
+    _agent_with(agent_mod, posts).report(7, {"ok": True})
+    assert posts.attempts == 1

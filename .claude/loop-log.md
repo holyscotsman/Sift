@@ -358,3 +358,21 @@ ever swaps).
 Next: the agent's `claim`/`report` HTTP paths are still untested — `tick()` swallows
 every exception, so a persistently failing report would spin silently. Nothing in
 `frontend/` examined yet.
+
+### Iter 15 · 2026-08-13 · correctness (audit integrity)
+The agent's `report()` swallowed every network error with the comment "losing the
+report only means Sift shows the job as still claimed until the next scan
+reconciles it". **Nothing reconciles it** — grepped the whole backend; `claim`
+only ever selects `status == "queued"`, and no code path moves a stale `claimed`
+job anywhere. So a single dropped connection left the file moved, the job claimed
+for ever, and an approved action recorded as never executed for work that did
+happen. The one safe part is that the job is never handed out again, so the work
+is not repeated.
+Now retries 4× with exponential backoff, `sleep` injected for testability. A 4xx
+is deliberately **not** retried — a bad token or unknown job will not become true
+by asking again. Comment rewritten to describe what actually happens.
+Four tests, two mutations verified (no-retry; retry-4xx-too).
+Next: **server-side reconciliation of stale `claimed` jobs still does not exist**
+and is the real fix — a job claimed longer than some window should return to
+`queued` or be surfaced. Needs a timeout policy, so it is a larger slice. Also
+`frontend/` remains completely unexamined.
