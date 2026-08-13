@@ -339,3 +339,22 @@ Added the agent's first transcode tests with a fake HandBrake.
 Next: the agent still has no test for `_verify` (duration tolerance, min output
 fraction) — the guard that stops a truncated encode being swapped in. Nothing in
 `frontend/` examined yet.
+
+### Iter 14 · 2026-08-13 · correctness (data loss)
+`_verify` — described in its own docstring as "the load-bearing part of the whole
+agent" — had a hole and no tests. The duration comparison ran only `if
+source_seconds and output_seconds`, with an `elif output_seconds is None` refusal.
+So when the **source** would not probe and the output would, both branches fell
+through and the function returned `None`, meaning *passed*. The only remaining
+floor is the 5% size check, which an encode containing half the episode clears
+easily — and a truncated file that plays is indistinguishable from a good one to
+everything downstream.
+Now refuses unless both durations are known. Behaviour is unchanged where ffprobe
+is missing entirely (that already refused). Truthiness replaced with `is None`, so
+a 0.0-second probe is a fact rather than a skip.
+Four tests added, three mutations verified including the over-broad one (refusing
+whenever a duration is missing must not become refusing everything, or nothing
+ever swaps).
+Next: the agent's `claim`/`report` HTTP paths are still untested — `tick()` swallows
+every exception, so a persistently failing report would spin silently. Nothing in
+`frontend/` examined yet.

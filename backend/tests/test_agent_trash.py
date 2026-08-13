@@ -125,3 +125,49 @@ def test_an_ordinary_transcode_still_replaces_its_own_source(agent_mod, tmp_path
     assert source.read_bytes() == b"encoded"
     trashed = list((tmp_path / agent_mod.TRASH_DIRNAME).iterdir())
     assert [p.read_bytes() for p in trashed] == [b"the original"]
+
+
+def _verify(agent_mod, tmp_path, *, source_seconds, output_seconds, output_bytes=b"x" * 500):
+    agent = agent_mod.Agent("http://sift", "token")
+    source = tmp_path / "in.mkv"
+    source.write_bytes(b"y" * 1000)
+    output = tmp_path / "out.mkv"
+    output.write_bytes(output_bytes)
+    durations = {source: source_seconds, output: output_seconds}
+    agent.duration_seconds = lambda p: durations[Path(p)]  # type: ignore[method-assign]
+    return agent._verify({}, source, output)
+
+
+def test_an_unprobeable_source_is_not_a_pass(agent_mod, tmp_path):
+    """The hole in the load-bearing check.
+
+    The duration comparison ran only when *both* files probed. If the source did
+    not — an odd container, a missing probe, a transient failure — the comparison
+    was skipped and the function fell through to "passed". The size floor is 5%, so
+    an encode containing half the episode cleared it easily, and a truncated file
+    that plays is indistinguishable from a good one to everything downstream.
+    """
+    verdict = _verify(agent_mod, tmp_path, source_seconds=None, output_seconds=100.0)
+    assert verdict is not None, "an unverifiable encode was accepted"
+    assert "probe" in verdict
+
+
+def test_a_truncated_encode_is_still_caught(agent_mod, tmp_path):
+    """The case the check exists for, when both files do probe."""
+    verdict = _verify(agent_mod, tmp_path, source_seconds=2700.0, output_seconds=1200.0)
+    assert verdict is not None and "truncated" in verdict
+
+
+def test_a_good_encode_still_passes(agent_mod, tmp_path):
+    """NEGATIVE CONTROL. Refusing whenever a duration is missing must not become
+    refusing everything — a matching pair has to pass, or nothing ever swaps."""
+    assert _verify(agent_mod, tmp_path, source_seconds=2700.0, output_seconds=2701.5) is None
+
+
+def test_a_wildly_small_output_is_refused_on_size_alone(agent_mod, tmp_path):
+    """Belt and braces: the size floor must still bite even when the durations
+    agree, because a container can report a full duration it cannot deliver."""
+    verdict = _verify(
+        agent_mod, tmp_path, source_seconds=2700.0, output_seconds=2700.0, output_bytes=b"x" * 5
+    )
+    assert verdict is not None and "not an encode" in verdict

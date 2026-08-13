@@ -255,17 +255,22 @@ class Agent:
         if expected_max and size > expected_max:
             return f"output grew to {size / 1e9:.1f} GB, which is larger than asked for"
 
+        # Both durations, or no verdict. Requiring only the output's left a gap: a
+        # source that would not probe skipped the comparison entirely and fell
+        # through to "passed", and the size floor above is 5%, so an encode holding
+        # half the episode cleared it comfortably. A truncated file that plays is
+        # indistinguishable from a good one to everything downstream, which is the
+        # whole reason this function exists.
         source_seconds = self.duration_seconds(source)
         output_seconds = self.duration_seconds(output)
-        if source_seconds and output_seconds:
-            drift = abs(source_seconds - output_seconds)
-            if drift > DURATION_TOLERANCE_SECONDS:
-                return (
-                    f"output runs {output_seconds / 60:.1f} min against "
-                    f"{source_seconds / 60:.1f} min — it is truncated"
-                )
-        elif output_seconds is None:
-            return "output could not be probed, so it cannot be verified"
+        if source_seconds is None or output_seconds is None:
+            return "could not probe both files, so the encode cannot be verified"
+        drift = abs(source_seconds - output_seconds)
+        if drift > DURATION_TOLERANCE_SECONDS:
+            return (
+                f"output runs {output_seconds / 60:.1f} min against "
+                f"{source_seconds / 60:.1f} min — it is truncated"
+            )
         return None
 
     # ------------------------------------------------------------------------ loop
