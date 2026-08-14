@@ -546,3 +546,49 @@ def test_the_episode_batch_write_never_reads_a_whole_table(factory, settings):
         event.remove(engine, "before_cursor_execute", _record)
 
     assert not unscoped, f"whole-table read inside a per-batch write: {unscoped}"
+
+
+def test_the_show_write_reads_only_the_shows_it_was_given(factory, settings):
+    """The last unscoped preload in the ingest path.
+
+    `_persist_plex_shows` runs once per TV library section rather than per batch,
+    so reading the whole table was linear rather than quadratic — but a library
+    with several sections still re-read every show for each one. Pinned with the
+    same structural check as the batch write above, because the rule is easier to
+    keep than to remember which functions are allowed to break it.
+    """
+    from sift.ingest.pipeline import ScanPipeline
+
+    with factory() as session:
+        for n in range(5):
+            session.add(Show(tvdb_id=8000 + n, title=f"Existing {n}", in_plex=True))
+        session.commit()
+
+    pipe = ScanPipeline(factory, settings)
+    engine = factory.kw["bind"]
+    unscoped: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        text = " ".join(statement.split())
+        if text.upper().startswith("SELECT") and " FROM shows" in text and " WHERE " not in text:
+            unscoped.append(text)
+
+    try:
+        pipe._persist_plex_shows(
+            [
+                {
+                    "tvdb_id": 8000,
+                    "title": "Existing 0",
+                    "year": 2001,
+                    "plex_rating_key": "rk-8000",
+                    "library_section": "TV",
+                    "is_kids": False,
+                    "tmdb_id": None,
+                }
+            ]
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert not unscoped, f"whole-table read in the show write: {unscoped}"

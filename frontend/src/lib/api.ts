@@ -20,6 +20,7 @@ import type {
   AskResponse,
   AuthStatus,
   CanonMissingResponse,
+  ValidatedCanonResponse,
   CanonRefreshResponse,
   ConnectionsResponse,
   DecisionsImportResult,
@@ -339,6 +340,15 @@ export const api = {
     request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
   canonRefresh: () =>
     request<CanonRefreshResponse>("/api/missing/canon/refresh", { method: "POST" }),
+  // The validated ten-thousand-title canon, distinct from canonMissing above,
+  // which serves the smaller list Sift assembles for itself from TMDB charts.
+  validatedCanon: ({ tier, limit }: { tier?: number | null; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (tier) params.set("tier", String(tier));
+    if (limit) params.set("limit", String(limit));
+    const query = params.toString();
+    return request<ValidatedCanonResponse>(`/api/musthave/canon${query ? `?${query}` : ""}`);
+  },
 };
 
 // Server-resolved, cached poster for any title (works for Plex-only movies with no

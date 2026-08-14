@@ -672,3 +672,32 @@ export interface ShowSuggestionsResponse {
   items: ShowSuggestion[];
   detail: string;
 }
+
+// The *validated* canon — the ten-thousand-title list imported from Criterion,
+// the cult canon, award records and broad consensus. Distinct from CanonMovie
+// above, which is the smaller list Sift builds for itself from TMDB charts.
+export interface CanonCoverage {
+  total: number;
+  owned: number;
+  resolved: number;
+  unresolved: number;
+  unresolvable: number;
+}
+
+export interface ValidatedCanonItem {
+  tmdb_id: number;
+  imdb_id: string | null;
+  title: string;
+  year: number | null;
+  tier: number;
+  sources: string[];
+  spine: number | null;
+  rating: number | null;
+  votes: number | null;
+}
+
+export interface ValidatedCanonResponse {
+  items: ValidatedCanonItem[];
+  total: number;
+  coverage: CanonCoverage;
+}

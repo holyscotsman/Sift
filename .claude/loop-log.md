@@ -458,3 +458,17 @@ between requests — the same rule as iter 8.
 Remaining from the audit: `_persist_plex_shows:390` unscoped `select(Show)` (once
 per section, linear) and `_upsert_person` (bounded by `tmdb_enrich_limit`). Both
 low value. `frontend/` still unexamined beyond `scan.tsx`.
+
+### Iter 21 · 2026-08-14 · perf
+The last unscoped preload the parallel audit flagged: `_persist_plex_shows` read
+every row of `shows` to write one section's worth. It runs once per TV library
+section rather than per batch, so it was linear rather than quadratic — but a
+library with several sections still re-read every show for each of them, and the
+rule is easier to keep than to remember which functions are allowed to break it.
+Now scoped and chunked, with the same structural pin as the batch write beside it.
+That closes every finding from the audit that ran alongside the scan-slowdown fix.
+Remaining from it were two bounded N+1s (`_upsert_person`, capped by
+`tmdb_enrich_limit`) judged not worth the churn.
+Next: `frontend/` is still unexamined apart from `scan.tsx`. The canon bundle's
+remaining slices (Canon tab UI, tier-1 batch, scores_v2 shadow) are specified in
+`docs/design/INTEGRATION.md` and are the higher-value queue now.
