@@ -36,10 +36,37 @@ function fmt(n: number): string {
   return n.toLocaleString();
 }
 
+const BATCH = 10;
+
 export function CanonList() {
   const [data, setData] = useState<ValidatedCanonResponse | null>(null);
   const [tier, setTier] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Two clicks, deliberately. Requesting films spends disk and bandwidth on a
+  // machine that is not this one, so the first click only arms the button.
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function requestBatch() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.requestCanonBatch(1, BATCH);
+      setNote(
+        r.dry_run
+          ? `Staged ${r.requested} requests — nothing left Sift. Turn off staging in Settings to send them.`
+          : `Requested ${r.requested}${r.failed ? `, ${r.failed} refused` : ""}. ${r.remaining.toLocaleString()} tier-1 films still missing.`,
+      );
+      setArmed(false);
+      const refreshed = await api.validatedCanon({ tier, limit: 120 });
+      setData(refreshed);
+    } catch (e) {
+      setNote((e as { message?: string })?.message || "Couldn't file the requests.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -91,8 +118,26 @@ export function CanonList() {
               </option>
             ))}
           </select>
+          <button
+            onClick={() => (armed ? requestBatch() : setArmed(true))}
+            onBlur={() => setArmed(false)}
+            disabled={busy || !data || data.items.length === 0}
+            className={`rounded-pill border px-3 py-1.5 text-sm font-semibold ${
+              armed
+                ? "border-junk bg-junk-soft text-junk"
+                : "border-line text-fg2 hover:bg-bg2"
+            } disabled:opacity-40`}
+          >
+            {busy
+              ? "Requesting…"
+              : armed
+                ? `Request ${BATCH} essential — confirm`
+                : `Request ${BATCH} essential`}
+          </button>
         </div>
       </div>
+
+      {note ? <p className="text-xs text-fg2">{note}</p> : null}
 
       {!data ? (
         <div className="panel flex flex-col gap-2 p-4" aria-busy="true">

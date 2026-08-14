@@ -362,3 +362,75 @@ def test_the_canon_endpoint_needs_a_session(client):
         session.merge(Setting(key="auth", value={"username": "x", "password_hash": "y"}))
         session.commit()
     assert c.get("/api/musthave/canon").status_code == 401
+
+
+def _resolved_canon(factory, count: int) -> None:
+    """`count` unowned canon films, all resolved and ready to request."""
+    with factory() as session:
+        for n in range(count):
+            session.add(
+                CanonEntry(
+                    imdb_id=f"tt700{n:04d}", title=f"Canon {n}", year=1980 + n,
+                    tier=1, sources=["award"], votes=10_000 - n, tmdb_id=7000 + n,
+                    review_status="resolved",
+                )
+            )
+        session.commit()
+
+
+def test_the_batch_request_is_capped(client, factory):
+    """The whole safety story of this endpoint is the count.
+
+    Tier 1 alone is over four thousand entries and ten thousand films is fifty to
+    eighty terabytes, so a batch button without a ceiling is a disk incident one
+    click away. Asking for a thousand must not get a thousand.
+    """
+    from sift.api.routes_musthave import MAX_BATCH_REQUEST
+
+    c, _ = client
+    _resolved_canon(factory, MAX_BATCH_REQUEST + 25)
+
+    body = c.post("/api/musthave/canon/request", json={"tier": 1, "limit": 1000}).json()
+    assert body["requested"] <= MAX_BATCH_REQUEST
+    assert body["remaining"] > 0, "the remainder must be reported, not silently dropped"
+
+
+def test_the_batch_takes_the_strongest_claims_first(client, factory):
+    """Bounded means a choice is being made about which titles get in. It should
+    be the same choice the list itself displays — strongest claim, then fame."""
+    from sift.db.models import Action
+
+    c, factory_ = client
+    _resolved_canon(factory_, 5)
+
+    c.post("/api/musthave/canon/request", json={"tier": 1, "limit": 2})
+    with factory_() as session:
+        ids = [a.movie_tmdb_id for a in session.scalars(select(Action))]
+    # Votes descend with n, so the first two entries are the most famous.
+    assert sorted(ids) == [7000, 7001], ids
+
+
+def test_a_staged_instance_requests_nothing(client, factory, settings):
+    """NEGATIVE CONTROL. The dry-run floor is server-authoritative everywhere
+    else; a batch endpoint that quietly bypassed it would be the one place a
+    staged instance spends real disk."""
+    from sift.db.models import Action, ActionStatus
+
+    c, factory_ = client
+    _resolved_canon(factory_, 3)
+    assert settings.actions.dry_run is True  # the default, and the point
+
+    body = c.post("/api/musthave/canon/request", json={"tier": 1, "limit": 3}).json()
+    assert body["dry_run"] is True
+    with factory_() as session:
+        actions = list(session.scalars(select(Action)))
+    assert actions, "the intent is still recorded — staged is audited, not ignored"
+    assert all(a.dry_run for a in actions)
+    assert all(a.status != ActionStatus.FAILED for a in actions)
+
+
+def test_an_empty_canon_is_not_an_error(client, factory):
+    """Nothing resolved yet is the normal state for the first few scans."""
+    c, _ = client
+    body = c.post("/api/musthave/canon/request", json={"tier": 1, "limit": 5}).json()
+    assert body == {"requested": 0, "failed": 0, "remaining": 0, "dry_run": True}

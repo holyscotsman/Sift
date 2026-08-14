@@ -843,3 +843,14 @@ class ShowSuggestionsResponse(BaseModel):
     # Said plainly when the list is short or empty, rather than leaving a blank
     # panel to be read as a failure.
     detail: str = ""
+
+
+class CanonBatchRequestIn(BaseModel):
+    """How many canon films to request, and from which tier.
+
+    ``limit`` is required rather than defaulted to everything: the batch spends
+    disk, and the count is the whole safety story.
+    """
+
+    tier: int | None = None
+    limit: int = 10
