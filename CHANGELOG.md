@@ -2,6 +2,27 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.30.0 — Request the essential canon, a handful at a time
+
+The Canon tab gains one batch action: request the next few essential films you do
+not own, strongest claim first.
+
+**The count is the entire safety story, so it is bounded three ways.** Tier 1
+alone is over four thousand entries and ten thousand films is fifty to eighty
+terabytes, which makes an unbounded batch button a disk incident one click away.
+So: the server caps any request at fifty however many are asked for; the caller
+must name a number rather than being offered an "all" that quietly means four
+thousand; and the button arms on the first click and only files on the second,
+like every other action that changes something outside Sift.
+
+The dry-run floor applies exactly as it does to a single request. A staged
+instance records the intent and sends nothing, and says so on the button rather
+than reporting a success that did not happen.
+
+Each title becomes its own audited action. A batch is a convenience for the person
+clicking, not a different kind of write — and one title being unavailable does not
+abandon the rest, which would leave the batch neither done nor undone.
+
 ## 2607.29.0 — A Canon tab, and the last whole-table read in the scan
 
 **Missing gains a Canon tab.** The canon films not on your server, strongest

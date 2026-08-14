@@ -10,11 +10,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..actions.engine import ActionEngine
 from ..ai import musthave
+from ..config import Settings
 from ..db.models import Movie, MustHaveSuggestion
 from ..services.counts_cache import CountsCache
-from .deps import AuthDep, get_counts_cache, get_session_factory, get_state
-from .schemas import MustHaveListResponse, MustHaveOut, MustHaveRunResponse
+from .deps import (
+    AuthDep,
+    get_action_engine,
+    get_counts_cache,
+    get_session_factory,
+    get_settings,
+    get_state,
+)
+from .routes_actions import request_movie
+from .schemas import (
+    AddMovieIn,
+    CanonBatchRequestIn,
+    MustHaveListResponse,
+    MustHaveOut,
+    MustHaveRunResponse,
+)
 
 router = APIRouter(prefix="/api/musthave", tags=["musthave"], dependencies=[AuthDep])
 
@@ -142,4 +158,63 @@ def canon_missing(
         ],
         "total": total,
         "coverage": counts,
+    }
+
+
+# The most titles one batch call may request. Tier 1 alone is over four thousand
+# entries, and ten thousand films is fifty to eighty terabytes — a batch button
+# with no ceiling is a disk incident one click away. The caller must also ask for
+# a number explicitly; there is deliberately no "request everything".
+MAX_BATCH_REQUEST = 50
+
+
+@router.post("/canon/request")
+async def request_canon_batch(
+    body: CanonBatchRequestIn,
+    engine: ActionEngine = Depends(get_action_engine),
+    settings: Settings = Depends(get_settings),
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> dict[str, object]:
+    """Request the next few unowned canon films, strongest claim first.
+
+    Bounded on purpose, in three ways. The count is capped at
+    ``MAX_BATCH_REQUEST``; the caller has to name a number rather than being
+    offered an "all" that quietly means four thousand; and the server's dry-run
+    floor applies exactly as it does to a single request, so a staged instance
+    records the intent and sends nothing.
+
+    Each title becomes its own audited action, like every other request. A batch
+    here is a convenience for the person clicking, not a different kind of write.
+    """
+    from ..analysis import canon_missing as canon_missing_analysis
+
+    limit = max(1, min(int(body.limit), MAX_BATCH_REQUEST))
+    with factory() as session:
+        rows, remaining = canon_missing_analysis.missing(
+            session, tier=body.tier, limit=limit
+        )
+    if not rows:
+        return {"requested": 0, "failed": 0, "remaining": 0, "dry_run": settings.actions.dry_run}
+
+    requested = 0
+    failed: list[dict[str, object]] = []
+    for row in rows:
+        try:
+            await request_movie(
+                AddMovieIn(tmdb_id=row.tmdb_id, title=row.title, year=row.year),
+                engine,
+                settings,
+            )
+            requested += 1
+        except HTTPException as exc:
+            # One title failing must not abandon the rest — a single unavailable
+            # film is not a reason to stop, and stopping halfway would leave the
+            # batch neither done nor undone.
+            failed.append({"tmdb_id": row.tmdb_id, "title": row.title, "detail": exc.detail})
+    return {
+        "requested": requested,
+        "failed": len(failed),
+        "failures": failed[:10],
+        "remaining": max(0, remaining - requested),
+        "dry_run": settings.actions.dry_run,
     }

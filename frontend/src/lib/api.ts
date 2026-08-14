@@ -338,6 +338,16 @@ export const api = {
   update: () => request<UpdateResponse>("/api/system/update", { method: "POST" }, 40_000),
   canonMissing: (limit = 500) =>
     request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
+  requestCanonBatch: (tier: number, limit: number) =>
+    request<{
+      requested: number;
+      failed: number;
+      remaining: number;
+      dry_run: boolean;
+    }>("/api/musthave/canon/request", {
+      method: "POST",
+      body: JSON.stringify({ tier, limit }),
+    }),
   canonRefresh: () =>
     request<CanonRefreshResponse>("/api/missing/canon/refresh", { method: "POST" }),
   // The validated ten-thousand-title canon, distinct from canonMissing above,
