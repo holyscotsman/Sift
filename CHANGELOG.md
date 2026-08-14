@@ -2,6 +2,46 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.28.0 — The validated canon, and the shield it gives owned films
+
+Ten thousand films worth owning, assembled outside the app from Criterion,
+Wikipedia's cult list, award records and an IMDb consensus sweep, with the design
+documents and regeneration tooling behind them.
+
+The canon is a fact about cinema rather than about this household, and that is
+what lets it answer both of Sift's questions at once. A canon film not owned is
+something to acquire. A canon film owned is something the junk queue must leave
+alone — otherwise the Missing page recommends acquiring the very title the Junk
+page proposed deleting.
+
+**The shield.** Tiers 1–3 — curated, award and consensus entries — join the set
+whose recognition is floored, which is the existing mechanism that stops obscurity
+condemning a Criterion title. Tier 4 stays out on purpose: it is fame-fill, and a
+famous film nobody in the house watches is precisely what the junk queue exists to
+surface. Absence from the canon remains evidence of nothing; ten thousand films is
+not every good film.
+
+**Resolution is the load-bearing step.** The canon arrives keyed by IMDb id and
+the library is keyed by TMDB id, so nothing can be compared until the two are
+reconciled. The TMDB client gains an exact `find_by_imdb` lookup, where a title
+search would be a guess between remakes ten thousand times over. Resolution is
+budgeted at 400 per scan and ordered by tier, so if the budget only ever covers
+part of the list it covers the part that matters most. A miss is a counted attempt
+rather than a verdict.
+
+**Two read surfaces**, both backend for now: canon coverage, and the unowned canon
+ranked `(tier, -votes, tmdb_id)`. Only resolved entries appear — an unresolved one
+is not "missing", it is unknown, and listing it would invite acquiring a film
+already on the shelf. Coverage reports its unresolved remainder for the same
+reason: the figure is a floor while resolution catches up, and should not read as
+complete.
+
+`CanonEntry` is a new table rather than columns on an existing one, because
+`create_all` adds tables on a live database and never adds columns. Seeding
+inserts in bulk: ten thousand rows added one at a time is ten thousand round trips
+on the first scan, which against a hosted database is close to a minute and
+indistinguishable from a stall. 10,002 statements became 1,733.
+
 ## 2607.27.0 — Read a collection's members once, not once per collection
 
 Two places fetched each collection's members with a query of their own, inside a

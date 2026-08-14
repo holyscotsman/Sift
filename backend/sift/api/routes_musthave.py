@@ -85,3 +85,61 @@ def restore(
         session.commit()
         counts_cache.invalidate()
         return MustHaveOut.model_validate(row)
+
+
+@router.get("/canon/coverage")
+def canon_coverage(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> dict[str, int]:
+    """How much of the validated canon is on the server.
+
+    ``owned`` counts only entries already resolved to a TMDB id, so it is a floor
+    rather than an estimate: while resolution is still catching up the real figure
+    is higher than this. ``unresolved`` ships alongside it for exactly that reason
+    — a coverage number without it would read as complete when it is not.
+    """
+    from ..services import canon_entries
+
+    with factory() as session:
+        return canon_entries.coverage(session)
+
+
+@router.get("/canon")
+def canon_missing(
+    tier: int | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> dict[str, object]:
+    """Canon films not on the server, strongest claim to canon first.
+
+    Only entries already resolved to a TMDB id can be compared with the library,
+    so this list grows as resolution catches up. It is a floor, not an estimate —
+    which is what the coverage endpoint's ``unresolved`` count is there to say.
+    """
+    from ..analysis import canon_missing as canon_missing_analysis
+    from ..services import canon_entries
+
+    with factory() as session:
+        rows, total = canon_missing_analysis.missing(
+            session, tier=tier, limit=limit, offset=offset
+        )
+        counts = canon_entries.coverage(session)
+    return {
+        "items": [
+            {
+                "tmdb_id": row.tmdb_id,
+                "imdb_id": row.imdb_id,
+                "title": row.title,
+                "year": row.year,
+                "tier": row.tier,
+                "sources": row.sources,
+                "spine": row.spine,
+                "rating": row.rating,
+                "votes": row.votes,
+            }
+            for row in rows
+        ],
+        "total": total,
+        "coverage": counts,
+    }
