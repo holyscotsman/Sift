@@ -72,6 +72,19 @@ class TmdbClient(BaseClient):
         data: dict[str, Any] = await self.get_json(f"/collection/{collection_id}")
         return data
 
+    async def find_by_imdb(self, imdb_id: str) -> int | None:
+        """Resolve an IMDb id to a TMDB id — exact, where a search is a guess.
+
+        The canon arrives keyed by IMDb id, and the overwhelming majority carry
+        one. Matching those by title and year instead would mean guessing between
+        remakes and re-releases ten thousand times; this asks the question that
+        has a single right answer.
+        """
+        data = await self.get_json(f"/find/{imdb_id}", params={"external_source": "imdb_id"})
+        results = data.get("movie_results", []) if isinstance(data, dict) else []
+        first = results[0] if results else None
+        return int(first["id"]) if isinstance(first, dict) and first.get("id") else None
+
     async def search_movie(self, title: str, year: int | None = None) -> int | None:
         """Resolve a title (optionally disambiguated by year) to a TMDB id."""
         params: dict[str, Any] = {"query": title}

@@ -88,6 +88,13 @@ SERIES_BATCH = 25
 # for minutes. Whatever is done by then is kept.
 AI_BUDGET_SECONDS = 120.0
 
+# Canon entries resolved to TMDB ids per scan. The canon arrives keyed by IMDb id
+# and cannot be compared with the library until it is reconciled, but ten thousand
+# lookups against a rate-limited API is not something to do while a scan is
+# waiting. At this rate the list resolves over roughly twenty-five scans, and the
+# coverage figure says so rather than pretending to be complete.
+CANON_RESOLVE_BUDGET = 400
+
 
 @dataclass
 class ScanProgress:
@@ -873,6 +880,7 @@ class ScanPipeline:
                 enriched.append(normalize.normalize_tmdb_movie(raw))
             stats.update(await asyncio.to_thread(self._persist_tmdb, enriched))
         stats.update(await self._resolve_curated_lists())
+        stats.update(await self._resolve_canon())
         return stats
 
     async def _resolve_curated_lists(self) -> dict[str, int]:
@@ -891,6 +899,63 @@ class ScanPipeline:
                 resolved[entry_id] = tmdb_id
         applied = await asyncio.to_thread(self._curated_apply, resolved)
         return {"curated_resolved": applied}
+
+    async def _resolve_canon(self) -> dict[str, int]:
+        """Seed the canon and resolve a budgeted slice of it to TMDB ids.
+
+        Seeding is free and idempotent; resolution is the part that costs API
+        calls, so it is capped per scan. Entries carrying an IMDb id are resolved
+        exactly; the few without fall back to a title-and-year search, which is a
+        guess and is treated as one — a miss is a counted attempt, not a verdict.
+        """
+        if self.tmdb is None:
+            return {}
+        from ..services import canon_entries
+
+        seeded = await asyncio.to_thread(self._seed_canon)
+        pending = await asyncio.to_thread(
+            self._canon_pending, canon_entries.CANON_BUDGET_OVERRIDE or CANON_RESOLVE_BUDGET
+        )
+        if not pending:
+            return {"canon_seeded": seeded, "canon_resolved": 0}
+
+        await self._note(f"resolving {len(pending):,} canon titles")
+        resolved: dict[int, int | None] = {}
+        for entry_id, imdb_id, title, year in pending:
+            try:
+                found = (
+                    await self.tmdb.find_by_imdb(imdb_id)
+                    if imdb_id
+                    else await self.tmdb.search_movie(title, year)
+                )
+            except Exception as exc:  # noqa: BLE001 - resolution is best-effort
+                log.info("canon resolve failed for %r: %s", title, exc)
+                continue
+            resolved[entry_id] = found
+        found_count, exhausted = await asyncio.to_thread(self._canon_apply, resolved)
+        return {
+            "canon_seeded": seeded,
+            "canon_resolved": found_count,
+            "canon_unresolvable": exhausted,
+        }
+
+    def _seed_canon(self) -> int:
+        from ..services import canon_entries
+
+        with self.factory() as session:
+            return canon_entries.seed(session)
+
+    def _canon_pending(self, limit: int) -> list[tuple[int, str | None, str, int | None]]:
+        from ..services import canon_entries
+
+        with self.factory() as session:
+            return canon_entries.pending_resolution(session, limit)
+
+    def _canon_apply(self, resolved: dict[int, int | None]) -> tuple[int, int]:
+        from ..services import canon_entries
+
+        with self.factory() as session:
+            return canon_entries.apply_resolution(session, resolved)
 
     def _curated_seed_and_pending(self) -> list[tuple[int, str, int | None]]:
         from ..services import curated_lists

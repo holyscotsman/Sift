@@ -85,3 +85,20 @@ def restore(
         session.commit()
         counts_cache.invalidate()
         return MustHaveOut.model_validate(row)
+
+
+@router.get("/canon/coverage")
+def canon_coverage(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> dict[str, int]:
+    """How much of the validated canon is on the server.
+
+    ``owned`` counts only entries already resolved to a TMDB id, so it is a floor
+    rather than an estimate: while resolution is still catching up the real figure
+    is higher than this. ``unresolved`` ships alongside it for exactly that reason
+    — a coverage number without it would read as complete when it is not.
+    """
+    from ..services import canon_entries
+
+    with factory() as session:
+        return canon_entries.coverage(session)

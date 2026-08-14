@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import JunkThresholds
 from ..db.models import CanonMovie, CuratedListEntry, Movie, Rating, Score, WatchHistory
+from ..services import canon_entries
 from . import recognition, scoring
 from .classify import MovieFacts, Verdict, classify
 
@@ -64,13 +65,25 @@ def _best_ratings(
 def _canon_ids(session: Session) -> frozenset[int]:
     """Titles the backend canon or a curated list vouches for. Recognition floors
     these — it's what stops culling-the-obscure from deleting exactly the Criterion
-    and cult titles the Missing page tells you to acquire."""
+    and cult titles the Missing page tells you to acquire.
+
+    The validated canon joins them at tiers 1-3, which are curated, award and
+    consensus entries: proposing that one be deleted would contradict the
+    acquisition half of the same app, which is busy telling you to go and get it.
+    Tier 4 is deliberately excluded — it is fame-fill, and a famous film nobody in
+    the house watches is exactly what the junk queue exists to surface.
+
+    Note what this is not: absence from the canon is never evidence of junk. Ten
+    thousand films is not every good film, so a title the list omits has had
+    nothing said about it at all.
+    """
     ids = set(session.scalars(select(CanonMovie.tmdb_id)))
     ids.update(
         session.scalars(
             select(CuratedListEntry.tmdb_id).where(CuratedListEntry.tmdb_id.is_not(None))
         )
     )
+    ids.update(canon_entries.protected_tmdb_ids(session))
     return frozenset(ids)
 
 

@@ -368,6 +368,48 @@ class CanonMovie(Base):
     )
 
 
+class CanonEntry(Base):
+    """The validated canon — films worth owning, from outside this library.
+
+    A *new table* rather than columns on ``curated_list_entries``, for the
+    reason recorded throughout this schema: ``create_all`` adds tables on a live
+    database and never adds columns, and the import needs an ``imdb_id`` that
+    table does not have.
+
+    It arrives keyed by IMDb id and must be resolved to TMDB ids before it can be
+    compared with the library, so ``tmdb_id`` is nullable and filled in over
+    several scans within a per-scan budget. ``review_status`` records what
+    happened: pending, resolved, or unresolvable after repeated attempts.
+
+    ``file_version`` is the version string of the data file a row came from, so a
+    refreshed canon reseeds without duplicating and without wiping resolutions
+    already earned.
+    """
+
+    __tablename__ = "canon_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    imdb_id: Mapped[str | None] = mapped_column(String(16), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer)
+    # 1 is the strongest claim to canon, 4 the weakest. Tiers 1-3 protect an
+    # owned title from the junk queue; tier 4 is advisory only.
+    tier: Mapped[int] = mapped_column(Integer, index=True, default=4)
+    # Which pillars vouch for it: criterion, cult, award, imdb_wr, canon_patch.
+    sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Criterion spine number where the entry carries one.
+    spine: Mapped[int | None] = mapped_column(Integer)
+    rating: Mapped[float | None] = mapped_column(Float)
+    votes: Mapped[int | None] = mapped_column(Integer)
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    resolve_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    review_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    file_version: Mapped[str | None] = mapped_column(String(32))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class PlexCopy(Base):
     """One row per *item* in a Plex movie section — not per film.
 
