@@ -6,6 +6,8 @@
 
 import { useEffect, useState } from "react";
 
+import { CanonList } from "@/components/CanonList";
+
 import { RequestAllButton, RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
@@ -16,7 +18,7 @@ import type { CanonMovieItem } from "@/lib/types";
 const FOLD = 30;
 
 export function Missing() {
-  const [tab, setTab] = useState<"movies" | "tv">("movies");
+  const [tab, setTab] = useState<"movies" | "tv" | "canon">("movies");
   const [items, setItems] = useState<CanonMovieItem[]>([]);
   const [total, setTotal] = useState(0);
   const [requestedTotal, setRequestedTotal] = useState(0);
@@ -67,6 +69,7 @@ export function Missing() {
         [
           ["movies", "Movies"],
           ["tv", "TV Shows"],
+          ["canon", "Canon"],
         ] as const
       ).map(([value, label]) => (
         <button
@@ -85,6 +88,22 @@ export function Missing() {
       ))}
     </div>
   );
+
+  if (tab === "canon") {
+    return (
+      <div className="page-enter">
+        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
+          Missing
+        </h1>
+        <p className="mb-4 mt-1 max-w-2xl text-sm text-fg2">
+          Ten thousand films worth owning, drawn from Criterion, the cult canon, award records
+          and broad consensus — minus what is already on your server. Strongest claim first.
+        </p>
+        {tabs}
+        <CanonList />
+      </div>
+    );
+  }
 
   if (tab === "tv") {
     return (

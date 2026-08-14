@@ -9,11 +9,13 @@ second, because that is the direction where being wrong deletes a film.
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from sift.analysis import junk
 from sift.config import JunkThresholds
 from sift.db.models import CanonEntry, Movie, Score
+from sift.main import create_app
 from sift.services import canon_entries
 
 _FILE = {
@@ -30,6 +32,15 @@ _FILE = {
         {"title": "No Id Here", "year": 1930, "tier": 2, "sources": ["award"]},
     ],
 }
+
+
+@pytest.fixture
+def client(settings, factory):
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    app = create_app(settings, session_factory=factory)
+    with TestClient(app) as c:
+        yield c, factory
 
 
 @pytest.fixture
@@ -309,3 +320,45 @@ def test_paging_the_missing_list_is_stable(factory, canon_file):
     # The tied block must come back in id order, not insertion order.
     tied = [t for t in first_pass if 9000 <= t <= 9003]
     assert tied == [9000, 9001, 9002, 9003], tied
+
+
+def test_the_canon_endpoint_serves_the_tab(client, monkeypatch):
+    """The read surface behind the Canon tab, including its coverage line.
+
+    The coverage figure ships with its unresolved remainder because the canon is
+    matched to the library a few hundred titles per scan — a bare "N of 10,000"
+    would read as complete while most of the list had never been looked up.
+    """
+    monkeypatch.setattr(canon_entries, "load_file", lambda: _FILE)
+    c, factory = client
+
+    with factory() as session:
+        canon_entries.seed(session)
+        entries = list(session.scalars(select(CanonEntry).order_by(CanonEntry.tier)))
+        canon_entries.apply_resolution(session, {entries[0].id: 4001, entries[1].id: 4002})
+        session.add(Movie(tmdb_id=4001, title="Owned Canon", in_plex=True))
+        session.commit()
+
+    body = c.get("/api/musthave/canon").json()
+    assert [i["tmdb_id"] for i in body["items"]] == [4002], body
+    assert body["coverage"]["owned"] == 1
+    assert body["coverage"]["unresolved"] == 3
+
+    tiered = c.get("/api/musthave/canon?tier=4").json()
+    assert tiered["items"] == []
+
+
+def test_the_canon_endpoint_needs_a_session(client):
+    """Every read surface is gated once an account exists.
+
+    Asserted against a configured account, because with no account at all the API
+    is open by design — the setup wizard has to reach it. A test that accepted
+    either answer would pass whatever the code did, which is worse than no test.
+    """
+    from sift.db.models import Setting
+
+    c, factory = client
+    with factory() as session:
+        session.merge(Setting(key="auth", value={"username": "x", "password_hash": "y"}))
+        session.commit()
+    assert c.get("/api/musthave/canon").status_code == 401
