@@ -2,6 +2,23 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.27.0 — Read a collection's members once, not once per collection
+
+Two places fetched each collection's members with a query of their own, inside a
+loop over every collection: the Collections page, on every load, and the scan's
+finalize phase, on every scan. Members are now read once and grouped.
+
+Fourteen reads become three for a twelve-collection library, and the count no
+longer grows with the number of collections. That costs nothing on the SQLite the
+tests run against and one network round trip apiece on the hosted database — the
+same shape 2607.15.1 was about.
+
+The ordering moved with the query rather than being dropped. Members were fetched
+with `ORDER BY year NULLS LAST`, and a collection reads as a timeline, so the
+order is part of the answer. It is now sorted in code, with the id as a tie-break
+so a collection whose members share a year does not rearrange itself between
+requests.
+
 ## 2607.26.0 — Show each series at the resolution most of it is in
 
 **Every show was listed at its rarest resolution.** The quality shown against each
