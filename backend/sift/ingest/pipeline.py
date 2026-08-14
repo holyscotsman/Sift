@@ -186,12 +186,33 @@ class ScanPipeline:
             ScanProgress(scan_run_id, phase, index, len(PHASES), status, message, counts or {})
         )
 
-    async def _note(self, message: str, counts: dict[str, int] | None = None) -> None:
-        """Say what a long phase is doing while it does it."""
+    async def _note(
+        self,
+        message: str,
+        counts: dict[str, int] | None = None,
+        *,
+        done: int | None = None,
+        total: int | None = None,
+    ) -> None:
+        """Say what a long phase is doing while it does it.
+
+        ``done``/``total`` are how far through the phase itself we are, sent as
+        ``phase_done``/``phase_total`` in the counts. The dial is otherwise driven
+        by the phase index alone, so it cannot move until a phase ends — and the
+        Plex phase is by far the longest, which is why a large library sits on one
+        frozen number long enough to look crashed.
+
+        Only sent where a real denominator exists. An invented one that reaches 90%
+        and stops is worse than a number that never moves, because it also lies.
+        """
         if self._progress_at is None:
             return
         scan_run_id, phase, index = self._progress_at
-        await self._emit(scan_run_id, phase, index, "running", message, counts=counts)
+        payload = dict(counts or {})
+        if done is not None and total:
+            payload["phase_done"] = done
+            payload["phase_total"] = total
+        await self._emit(scan_run_id, phase, index, "running", message, counts=payload)
 
     # ---------------------------------------------------------------------- phases
 
@@ -308,6 +329,8 @@ class ScanPipeline:
                         await self._note(
                             f"{title}: {episode_count:,} episodes",
                             {"plex_episodes": episode_count},
+                            done=episode_count,
+                            total=self.plex.last_section_total or None,
                         )
                 if pending:
                     written = await asyncio.to_thread(self._persist_plex_episodes, pending)
@@ -398,18 +421,36 @@ class ScanPipeline:
         if not episodes:
             return {"plex_episodes": 0, "plex_episode_files": 0}
         with self.factory() as session:
-            by_rating_key: dict[str, Show] = {
-                s.plex_rating_key: s
-                for s in session.scalars(select(Show).where(Show.plex_rating_key.is_not(None)))
-                if s.plex_rating_key
-            }
+            # Every preload here is scoped to this batch, and that is the whole
+            # point. Read whole, these three are a full hydration of the shows,
+            # seasons and episodes table *per batch* — so batch 15 of a 30,000
+            # episode library re-reads 28,000 rows to write 2,000, and the scan
+            # gets steadily slower until it looks stopped. Quadratic work is worse
+            # than the memory problem batching was introduced to solve.
+            wanted_keys = sorted({e["show_rating_key"] for e in episodes if e["show_rating_key"]})
+            by_rating_key: dict[str, Show] = {}
+            for start in range(0, len(wanted_keys), 500):
+                for row in session.scalars(
+                    select(Show).where(Show.plex_rating_key.in_(wanted_keys[start : start + 500]))
+                ):
+                    if row.plex_rating_key:
+                        by_rating_key[row.plex_rating_key] = row
 
-            seasons: dict[tuple[int, int], Season] = {
-                (s.show_id, s.season_number): s for s in session.scalars(select(Season))
-            }
+            show_ids = sorted({s.tvdb_id for s in by_rating_key.values()})
+            seasons: dict[tuple[int, int], Season] = {}
+            for start in range(0, len(show_ids), 500):
+                for season_row in session.scalars(
+                    select(Season).where(Season.show_id.in_(show_ids[start : start + 500]))
+                ):
+                    seasons[(season_row.show_id, season_row.season_number)] = season_row
+
+            season_ids = sorted({s.id for s in seasons.values() if s.id is not None})
             known: dict[tuple[int, int], Episode] = {}
-            for episode_row in session.scalars(select(Episode)):
-                known[(episode_row.season_id, episode_row.episode_number)] = episode_row
+            for start in range(0, len(season_ids), 500):
+                for episode_row in session.scalars(
+                    select(Episode).where(Episode.season_id.in_(season_ids[start : start + 500]))
+                ):
+                    known[(episode_row.season_id, episode_row.episode_number)] = episode_row
 
             records: list[tuple[Episode, dict[str, Any]]] = []
             written = 0
@@ -1018,23 +1059,35 @@ class ScanPipeline:
             session.execute(delete(MediaFile).where(MediaFile.id.in_(stale[start : start + 500])))
         return written
 
-    def _upsert_movie(self, session: Session, tmdb_id: int) -> Movie:
-        movie = session.get(Movie, tmdb_id)
-        if movie is None:
-            movie = Movie(tmdb_id=tmdb_id, title="")
-            session.add(movie)
-        return movie
-
     def _persist_radarr(
         self, movies: list[dict[str, Any]], collections: list[dict[str, Any]]
     ) -> dict[str, int]:
         written = 0
         with self.factory() as session:
+            # Preloaded, both of them. This loop ran two queries per film — a
+            # `session.get` for the row and another for its ratings — which is free
+            # on SQLite and 10,000 network round trips against hosted Postgres for
+            # a 5,000-film library. It is the same shape 2607.15.1 fixed in the
+            # Plex phase and it was still here in the Radarr one.
+            wanted = sorted({d["tmdb_id"] for d in movies if d.get("tmdb_id")})
+            known: dict[int, Movie] = {}
+            ratings_by_movie: dict[int, dict[RatingSource, Rating]] = {}
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start : start + 500]
+                for row in session.scalars(select(Movie).where(Movie.tmdb_id.in_(chunk))):
+                    known[row.tmdb_id] = row
+                for rating in session.scalars(select(Rating).where(Rating.movie_id.in_(chunk))):
+                    ratings_by_movie.setdefault(rating.movie_id, {})[rating.source] = rating
+
             for data in movies:
                 tmdb_id = data["tmdb_id"]
                 if not tmdb_id:
                     continue
-                movie = self._upsert_movie(session, tmdb_id)
+                movie = known.get(tmdb_id)
+                if movie is None:
+                    movie = Movie(tmdb_id=tmdb_id, title="")
+                    session.add(movie)
+                    known[tmdb_id] = movie
                 movie.radarr_id = data["radarr_id"]
                 movie.imdb_id = data["imdb_id"] or movie.imdb_id
                 movie.title = data["title"] or movie.title
@@ -1051,7 +1104,9 @@ class ScanPipeline:
                 movie.cutoff_unmet = data["cutoff_unmet"]
                 movie.file_size = data["file_size"]
                 movie.added_at = data["added_at"]
-                self._sync_ratings(session, tmdb_id, data["ratings"])
+                self._sync_ratings(
+                    session, tmdb_id, data["ratings"], ratings_by_movie.get(tmdb_id, {})
+                )
                 written += 1
             for coll in collections:
                 self._upsert_collection(session, coll)
@@ -1092,11 +1147,19 @@ class ScanPipeline:
             )
         return covered
 
-    def _sync_ratings(self, session: Session, movie_id: int, ratings: list[dict[str, Any]]) -> None:
-        existing = {
-            r.source: r
-            for r in session.scalars(select(Rating).where(Rating.movie_id == movie_id))
-        }
+    def _sync_ratings(
+        self,
+        session: Session,
+        movie_id: int,
+        ratings: list[dict[str, Any]],
+        existing: dict[RatingSource, Rating],
+    ) -> None:
+        """Upsert one film's ratings against rows the caller already loaded.
+
+        ``existing`` is passed in rather than queried here: this runs once per film,
+        so a query of its own is one round trip per film in the largest loop of the
+        Radarr phase.
+        """
         for entry in ratings:
             source = RatingSource(entry["source"])
             row = existing.get(source)

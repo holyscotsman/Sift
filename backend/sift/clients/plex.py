@@ -57,6 +57,10 @@ class PlexClient(BaseClient):
             health_path="/identity",
             **kwargs,
         )
+        # How many items the last section sweep said it held. Read from Plex's own
+        # MediaContainer, so it is a real denominator rather than a guess — the
+        # scan uses it to report how far through a long phase it is.
+        self.last_section_total = 0
 
     async def health(self) -> HealthStatus:
         start = time.monotonic()
@@ -107,6 +111,7 @@ class PlexClient(BaseClient):
             yield batch
 
             total = int(container.get("totalSize", container.get("size", len(batch))))
+            self.last_section_total = total
             start += _PAGE_SIZE
             seen += len(batch)
             pages += 1
