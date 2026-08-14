@@ -2,6 +2,23 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.26.0 — Show each series at the resolution most of it is in
+
+**Every show was listed at its rarest resolution.** The quality shown against each
+series came from a dict comprehension over rows ordered by count descending — and
+a comprehension keeps the *last* value written, so the final row, the least common
+resolution, won every time. A series of nineteen 1080p episodes and one stray 480p
+displayed as 480p. It now takes the most common, with ties breaking toward the
+lower rung as they do elsewhere: the reading that never overstates what a library
+is held in.
+
+**The show list also re-scanned the whole library on every page.** Both grouped
+aggregates join media files to episodes to seasons, and neither was limited to the
+page being asked for, so scrolling a thirty-thousand-episode library read all of
+it twice per page. The page is now fetched first and the aggregates cover only the
+shows on it. The library-wide size total became a plain sum, computed once on the
+first page like the row count beside it.
+
 ## 2607.25.0 — Fix the scan slowing to a stop, and the dial that could not move
 
 The scan reached the Plex phase and then appeared to stop at 16%. Three separate
