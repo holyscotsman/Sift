@@ -208,3 +208,104 @@ def test_seeding_the_canon_does_not_cost_a_statement_per_title(factory, canon_fi
         event.remove(engine, "before_cursor_execute", _record)
 
     assert len(statements) < 20, f"{len(statements)} statements for 600 titles"
+
+
+def _resolve_all(factory) -> None:
+    """Give every seeded entry a tmdb_id, as resolution eventually would."""
+    with factory() as session:
+        entries = list(session.scalars(select(CanonEntry)))
+        canon_entries.apply_resolution(
+            session, {e.id: 1000 + i for i, e in enumerate(entries)}
+        )
+
+
+def test_unresolved_canon_is_not_reported_as_missing(factory, canon_file):
+    """An entry with no tmdb_id is not "missing", it is *unknown*.
+
+    The canon arrives keyed by IMDb id and the library by TMDB id, so an
+    unresolved entry cannot be compared with anything. Listing it as missing would
+    invite you to acquire a film you may already own — the exact failure the
+    coverage endpoint's unresolved count exists to warn about.
+    """
+    from sift.analysis import canon_missing
+
+    with factory() as session:
+        canon_entries.seed(session)
+        rows, total = canon_missing.missing(session)
+    assert rows == [] and total == 0
+
+
+def test_missing_canon_is_ranked_by_tier_then_fame(factory, canon_file):
+    """The canon's own judgement leads; fame only breaks ties inside a tier. A
+    famous tier-4 title must not outrank an obscure tier-1 one — that would invert
+    the whole point of tiering."""
+    from sift.analysis import canon_missing
+
+    with factory() as session:
+        canon_entries.seed(session)
+    _resolve_all(factory)
+
+    with factory() as session:
+        rows, total = canon_missing.missing(session)
+
+    assert total == 5
+    assert [r.tier for r in rows] == sorted(r.tier for r in rows)
+    assert rows[0].title == "Seven Samurai"  # tier 1, most votes
+
+
+def test_owning_a_canon_film_removes_it_from_the_missing_list(factory, canon_file):
+    """The list is canon minus the library. Owning one must take it off."""
+    from sift.analysis import canon_missing
+
+    with factory() as session:
+        canon_entries.seed(session)
+    _resolve_all(factory)
+
+    with factory() as session:
+        first = canon_missing.missing(session)[0][0]
+        session.add(Movie(tmdb_id=first.tmdb_id, title=first.title, in_plex=True))
+        session.commit()
+        rows, total = canon_missing.missing(session)
+
+    assert total == 4
+    assert first.tmdb_id not in {r.tmdb_id for r in rows}
+
+
+def test_paging_the_missing_list_is_stable(factory, canon_file):
+    """NEGATIVE CONTROL for the id in the sort key. Two equally famous titles with
+    no total order swap places between requests, and paging then skips one
+    entirely — the reader never sees it and never knows."""
+    from sift.analysis import canon_missing
+
+    with factory() as session:
+        canon_entries.seed(session)
+        # Four entries tied on tier and votes: only the id can order them. Written
+        # in *descending* id order on purpose — inserted ascending, the database's
+        # natural row order already matches the intended one and a missing
+        # tie-break is invisible. Running the query twice proves nothing either:
+        # SQLite is stable within a process, which is exactly how this class of
+        # bug survives until it reaches Postgres.
+        for n in reversed(range(4)):
+            session.add(
+                CanonEntry(
+                    imdb_id=f"tt900000{n}", title=f"Tied {n}", year=2000,
+                    tier=1, sources=["award"], votes=500, tmdb_id=9000 + n,
+                    review_status="resolved",
+                )
+            )
+        session.commit()
+
+    with factory() as session:
+        first_pass = [r.tmdb_id for r in canon_missing.missing(session, limit=100)[0]]
+    with factory() as session:
+        second_pass = [r.tmdb_id for r in canon_missing.missing(session, limit=100)[0]]
+    assert first_pass == second_pass
+
+    with factory() as session:
+        page1 = [r.tmdb_id for r in canon_missing.missing(session, limit=2, offset=0)[0]]
+        page2 = [r.tmdb_id for r in canon_missing.missing(session, limit=2, offset=2)[0]]
+    assert len(set(page1) & set(page2)) == 0, "a title appeared on two pages"
+    assert page1 + page2 == first_pass[:4]
+    # The tied block must come back in id order, not insertion order.
+    tied = [t for t in first_pass if 9000 <= t <= 9003]
+    assert tied == [9000, 9001, 9002, 9003], tied
