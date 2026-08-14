@@ -441,3 +441,20 @@ Next (from the parallel audit, still open): `_persist_plex_shows:390` unscoped
 `select(Show)` — once per section, linear, low severity. `_upsert_person` and
 `_finalize_counts` both run a query per item inside a loop. `analysis/collections.py:23`
 has the same shape.
+
+### Iter 20 · 2026-08-14 · perf
+The last two N+1s the parallel audit flagged, both the same shape: a query per
+collection to fetch its members. One is `analysis/collections.collection_gaps`,
+which runs on **every load of the Collections page**; the other is
+`_finalize_counts`, which runs on every scan. Members are now read once and
+grouped in Python.
+**14 reads → 3 for a 12-collection library**, and it no longer grows with the
+number of collections. Free on SQLite, one network round trip each against Neon.
+The ordering had to move with it: members were fetched with
+`ORDER BY year NULLS LAST`, and a collection reads as a timeline, so the sort is
+part of the answer rather than incidental. Now sorted in Python with `tmdb_id` as
+a tie-break, so a collection whose members share a year does not reorder itself
+between requests — the same rule as iter 8.
+Remaining from the audit: `_persist_plex_shows:390` unscoped `select(Show)` (once
+per section, linear) and `_upsert_person` (bounded by `tmdb_enrich_limit`). Both
+low value. `frontend/` still unexamined beyond `scan.tsx`.

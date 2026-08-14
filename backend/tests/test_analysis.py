@@ -210,3 +210,82 @@ def test_missing_collections_endpoint(client):
     gap = body["collections"][0]
     assert gap["owned_count"] == 1 and gap["total_count"] == 2
     assert {m["tmdb_id"] for m in gap["members"]} == {603, 605}
+
+
+def _collection(session, coll_id: int, *, members: list[tuple[int, str, int | None, bool]]):
+    from sift.db.models import Collection, CollectionMember
+
+    session.add(
+        Collection(
+            tmdb_collection_id=coll_id,
+            name=f"Collection {coll_id}",
+            owned_count=sum(1 for m in members if m[3]),
+            total_count=len(members),
+        )
+    )
+    for tmdb_id, title, year, owned in members:
+        session.add(
+            CollectionMember(
+                collection_id=coll_id, tmdb_id=tmdb_id, title=title, year=year, owned=owned
+            )
+        )
+
+
+def test_collection_members_come_back_oldest_first(factory):
+    """Members were fetched per collection with an ORDER BY; they are now read in
+    one query and sorted here. The order is part of the answer — a collection
+    reads as a timeline — so grouping must not quietly lose it."""
+    from sift.analysis.collections import collection_gaps
+
+    with factory() as session:
+        _collection(
+            session,
+            77,
+            members=[
+                (3, "Third", 2005, False),
+                (1, "First", 1999, True),
+                (4, "Undated", None, False),
+                (2, "Second", 2002, True),
+            ],
+        )
+        session.commit()
+
+    with factory() as session:
+        gaps = collection_gaps(session)
+
+    assert [m["title"] for m in gaps[0]["members"]] == ["First", "Second", "Third", "Undated"]
+
+
+def test_the_collections_page_does_not_query_per_collection(factory):
+    """One round trip per collection is free on SQLite and the dominant cost
+    against the hosted database — on every load of the page. Counted rather than
+    timed, for exactly that reason."""
+    from sqlalchemy import event
+
+    from sift.analysis.collections import collection_gaps
+
+    with factory() as session:
+        for n in range(12):
+            _collection(
+                session,
+                100 + n,
+                members=[(n * 10 + 1, "Owned", 2000, True), (n * 10 + 2, "Missing", 2001, False)],
+            )
+        session.commit()
+
+    engine = factory.kw["bind"]
+    selects: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects.append(statement)
+
+    try:
+        with factory() as session:
+            gaps = collection_gaps(session)
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert len(gaps) == 12, "the fixture must produce gaps to read"
+    assert len(selects) <= 3, f"{len(selects)} reads for 12 collections"

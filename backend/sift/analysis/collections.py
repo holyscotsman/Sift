@@ -16,15 +16,26 @@ from ..db.models import Collection, CollectionMember
 
 
 def collection_gaps(session: Session) -> list[dict[str, Any]]:
+    """Collections you own part of and are missing part of.
+
+    Members are read in one query and grouped here rather than fetched per
+    collection. A query inside the loop is one network round trip per collection —
+    free against the SQLite the tests use, and the dominant cost against the hosted
+    database this runs on, on every load of the page.
+    """
+    by_collection: dict[int, list[CollectionMember]] = {}
+    for member in session.scalars(select(CollectionMember)):
+        by_collection.setdefault(member.collection_id, []).append(member)
+    for members in by_collection.values():
+        # Oldest first, undated last — and by id within a year, so a collection
+        # that ties on year does not reorder itself between requests.
+        members.sort(key=lambda m: (m.year is None, m.year or 0, m.tmdb_id))
+
     gaps: list[dict[str, Any]] = []
     for coll in session.scalars(select(Collection)):
         if coll.owned_count == 0 or coll.owned_count >= coll.total_count:
             continue  # own none, or already complete
-        members = session.scalars(
-            select(CollectionMember)
-            .where(CollectionMember.collection_id == coll.tmdb_collection_id)
-            .order_by(CollectionMember.year.asc().nulls_last())
-        ).all()
+        members = by_collection.get(coll.tmdb_collection_id, [])
         gaps.append(
             {
                 "collection_id": coll.tmdb_collection_id,

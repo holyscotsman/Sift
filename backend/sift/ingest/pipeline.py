@@ -1422,12 +1422,15 @@ class ScanPipeline:
                     select(Movie.tmdb_id).where(Movie.in_plex.is_(True))
                 )
             }
+            # Grouped from one read. A query per collection is a round trip per
+            # collection, which is the shape 2607.15.1 was about and is still worth
+            # avoiding in a phase that runs on every scan.
+            by_collection: dict[int, list[CollectionMember]] = {}
+            for member in session.scalars(select(CollectionMember)):
+                by_collection.setdefault(member.collection_id, []).append(member)
+
             for coll in session.scalars(select(Collection)):
-                members = session.scalars(
-                    select(CollectionMember).where(
-                        CollectionMember.collection_id == coll.tmdb_collection_id
-                    )
-                ).all()
+                members = by_collection.get(coll.tmdb_collection_id, [])
                 for m in members:
                     m.owned = m.tmdb_id in owned_ids
                 coll.owned_count = sum(1 for m in members if m.owned)

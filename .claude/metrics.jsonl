@@ -33,3 +33,4 @@
 {"iter":17,"item":"return abandoned claims to the queue","metric":"jobs_stuck_claimed_forever","before":1,"after":0,"direction":"lower_is_better"}
 {"iter":19,"item":"scope the show-list aggregates and fix dominant resolution","metric":"whole_library_scans_per_page","before":2,"after":0,"direction":"lower_is_better"}
 {"iter":19,"item":"scope the show-list aggregates and fix dominant resolution","metric":"shows_listed_at_the_wrong_resolution","before":1,"after":0,"direction":"lower_is_better"}
+{"iter":20,"item":"group collection members instead of querying per collection","metric":"reads_for_12_collections","before":14,"after":3,"direction":"lower_is_better"}
