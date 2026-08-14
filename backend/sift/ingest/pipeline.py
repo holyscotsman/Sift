@@ -394,7 +394,18 @@ class ScanPipeline:
         visible at all — the same reason ``plex_copies`` exists for films.
         """
         with self.factory() as session:
-            existing: dict[int, Show] = {s.tvdb_id: s for s in session.scalars(select(Show))}
+            # Scoped to the shows in hand, like every other preload in this file.
+            # Called once per TV library section rather than per batch, so reading
+            # the whole table was linear rather than quadratic — but a library with
+            # several sections still re-read every show for each one, and the rule
+            # is easier to keep than to remember the exception to.
+            wanted = sorted({data["tvdb_id"] for data in shows if data.get("tvdb_id")})
+            existing: dict[int, Show] = {}
+            for start in range(0, len(wanted), 500):
+                for row in session.scalars(
+                    select(Show).where(Show.tvdb_id.in_(wanted[start : start + 500]))
+                ):
+                    existing[row.tvdb_id] = row
             by_rating_key: dict[str, Show] = {}
             for data in shows:
                 tvdb_id = data["tvdb_id"]
