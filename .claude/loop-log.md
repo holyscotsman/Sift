@@ -419,3 +419,25 @@ the job row to `queued` while the handout stayed `None`. Asserting on the handou
 proved nothing; it now asserts on the row. Also fixed an edit that landed the new
 assertion in the wrong test entirely.
 Next: `frontend/` still unexamined. `services/`: autoscan, posters, reset, updates.
+
+### Iter 19 · 2026-08-14 · correctness + perf (user-visible)
+Two bugs in `routes_shows.list_shows`, one of them wrong output rather than slow
+output.
+**Every show was listed at its rarest resolution.** The map was a dict
+comprehension over rows ordered by count descending — and a comprehension keeps
+the *last* value written, so the final row (the least common resolution) won every
+time. Nineteen episodes of 1080p and one of 480p displayed as 480p. Now takes the
+max by count with ties toward the lower rung, matching the rule established in
+iter 7.
+**Both aggregates scanned the whole TV library on every page.** They join
+media_file→episode→season and were ungrouped by page, so an infinite scroll over
+30,000 episodes re-scanned everything twice per page. Now the page is fetched
+first and the aggregates are scoped to its shows; the library-wide total moved to
+a plain `SUM` gated on `page == 1`, like the row count beside it.
+Negative control worth keeping: "pick the highest resolution present" also fixes
+the rarest-wins bug and is equally wrong the other way — a mostly-SD show with one
+HD episode is an SD show.
+Next (from the parallel audit, still open): `_persist_plex_shows:390` unscoped
+`select(Show)` — once per section, linear, low severity. `_upsert_person` and
+`_finalize_counts` both run a query per item inside a loop. `analysis/collections.py:23`
+has the same shape.
