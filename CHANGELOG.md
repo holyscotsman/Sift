@@ -2,6 +2,27 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.29.0 — A Canon tab, and the last whole-table read in the scan
+
+**Missing gains a Canon tab.** The canon films not on your server, strongest
+claim first, filterable by tier. The coverage line reports how many are still
+being matched up rather than a bare "N of 10,000" — the canon is reconciled with
+the library a few hundred titles per scan, so early on the list is shorter than
+the truth and a plain figure would read as complete.
+
+Renamed on the way in: the app already had a canon, the smaller list Sift builds
+for itself from TMDB charts and serves at `/api/missing/canon`. The imported list
+is `ValidatedCanon` throughout the client, and both carry a comment saying which
+is which. Two things called canon in one codebase is a trap for whoever reads it
+next.
+
+**The last unscoped preload in the ingest path.** `_persist_plex_shows` read every
+row of the shows table in order to write one section's worth. It runs once per TV
+library section rather than per batch, so the cost was linear rather than
+quadratic — but a library with several sections still re-read every show for each
+of them. That closes every finding from the audit that ran alongside the
+scan-slowdown fix.
+
 ## 2607.28.0 — The validated canon, and the shield it gives owned films
 
 Ten thousand films worth owning, assembled outside the app from Criterion,
