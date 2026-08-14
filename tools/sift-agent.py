@@ -31,6 +31,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 log = logging.getLogger("sift-agent")
@@ -50,6 +51,11 @@ DURATION_TOLERANCE_SECONDS = 5.0
 # And it must be at least this fraction of the original. An encode that comes
 # back at 2% of the source did not work, whatever its duration says.
 MIN_OUTPUT_FRACTION = 0.05
+
+# How hard to try to hand a result back. The report is the only record that the
+# work happened, and a job nothing reports stays claimed for ever.
+REPORT_ATTEMPTS = 4
+REPORT_BACKOFF_SECONDS = 2.0
 
 
 
@@ -75,10 +81,18 @@ def _free_name(target: Path) -> Path:
 
 
 class Agent:
-    def __init__(self, base_url: str, token: str, *, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        *,
+        dry_run: bool = False,
+        sleep: "Callable[[float], None]" = time.sleep,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.dry_run = dry_run
+        self._sleep = sleep
 
     # ------------------------------------------------------------------ transport
 
@@ -112,12 +126,42 @@ class Agent:
             return None
 
     def report(self, job_id: int, payload: dict) -> None:
-        try:
-            self._post(f"/api/agent/{job_id}/result", payload)
-        except urllib.error.URLError as exc:
-            # The work is done either way; losing the report only means Sift shows
-            # the job as still claimed until the next scan reconciles it.
-            log.error("Couldn't report job %s back to Sift: %s", job_id, exc)
+        """Tell Sift what happened, and try hard, because nothing else will.
+
+        By the time this runs the file has already been moved. The report is the
+        *only* record that it happened: a job that is never reported stays
+        ``claimed`` for ever — nothing on the server reconciles one — so the audit
+        log shows an approved action that never executed, for work that did. It is
+        also never handed out again, which at least means the work is not repeated.
+
+        Reporting the same result twice is harmless, so retrying is safe. A 4xx is
+        not retried: a bad token or an unknown job will not become true by asking
+        again.
+        """
+        for attempt in range(REPORT_ATTEMPTS):
+            try:
+                self._post(f"/api/agent/{job_id}/result", payload)
+                return
+            except urllib.error.HTTPError as exc:
+                if exc.code < 500:
+                    log.error(
+                        "Sift refused the report for job %s (HTTP %s) — not retrying",
+                        job_id,
+                        exc.code,
+                    )
+                    return
+                last = f"HTTP {exc.code}"
+            except urllib.error.URLError as exc:
+                last = str(exc.reason)
+            if attempt + 1 < REPORT_ATTEMPTS:
+                self._sleep(REPORT_BACKOFF_SECONDS * (2**attempt))
+        log.error(
+            "Could not report job %s to Sift after %s attempts (%s). "
+            "The work was done; Sift will keep showing that job as claimed.",
+            job_id,
+            REPORT_ATTEMPTS,
+            last,
+        )
 
     # --------------------------------------------------------------------- probing
 
@@ -208,11 +252,26 @@ class Agent:
             log.error("  rejected: %s", verdict)
             return {"ok": False, "error": verdict}
 
+        # Where the encode will end up. Re-encoding /tv/film.avi produces
+        # /tv/film.mkv, so if a *different* file already sits there the swap would
+        # destroy it — and a second copy of one film in one folder is not a corner
+        # case, it is precisely what the duplicate report exists to find. Checked
+        # before anything moves, so refusing leaves the library exactly as it was.
+        final = path.with_suffix(output.suffix)
+        if final.exists() and not final.samefile(path):
+            output.unlink(missing_ok=True)
+            return {
+                "ok": False,
+                "error": (
+                    f"{final.name} already exists and is a different file — "
+                    "resolve that copy first, this would overwrite it"
+                ),
+            }
+
         # Only now is the original expendable, and even then it is only moved.
         trash = path.parent / TRASH_DIRNAME
         trash.mkdir(exist_ok=True)
         shutil.move(str(path), str(_free_name(trash / path.name)))
-        final = path.with_suffix(output.suffix)
         shutil.move(str(output), str(final))
         size = final.stat().st_size
         log.info("  done — %.1f GB (was %.1f GB)", size / 1e9, (job.get("source_size") or 0) / 1e9)
@@ -240,17 +299,22 @@ class Agent:
         if expected_max and size > expected_max:
             return f"output grew to {size / 1e9:.1f} GB, which is larger than asked for"
 
+        # Both durations, or no verdict. Requiring only the output's left a gap: a
+        # source that would not probe skipped the comparison entirely and fell
+        # through to "passed", and the size floor above is 5%, so an encode holding
+        # half the episode cleared it comfortably. A truncated file that plays is
+        # indistinguishable from a good one to everything downstream, which is the
+        # whole reason this function exists.
         source_seconds = self.duration_seconds(source)
         output_seconds = self.duration_seconds(output)
-        if source_seconds and output_seconds:
-            drift = abs(source_seconds - output_seconds)
-            if drift > DURATION_TOLERANCE_SECONDS:
-                return (
-                    f"output runs {output_seconds / 60:.1f} min against "
-                    f"{source_seconds / 60:.1f} min — it is truncated"
-                )
-        elif output_seconds is None:
-            return "output could not be probed, so it cannot be verified"
+        if source_seconds is None or output_seconds is None:
+            return "could not probe both files, so the encode cannot be verified"
+        drift = abs(source_seconds - output_seconds)
+        if drift > DURATION_TOLERANCE_SECONDS:
+            return (
+                f"output runs {output_seconds / 60:.1f} min against "
+                f"{source_seconds / 60:.1f} min — it is truncated"
+            )
         return None
 
     # ------------------------------------------------------------------------ loop

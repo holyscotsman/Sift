@@ -492,3 +492,57 @@ def test_the_catalog_preloads_name_the_shows_they_want(factory, settings):
         event.remove(engine, "before_cursor_execute", _record)
 
     assert not unfiltered, f"unscoped catalog read: {unfiltered}"
+
+
+def test_the_episode_batch_write_never_reads_a_whole_table(factory, settings):
+    """The stall that survived three streaming fixes.
+
+    Episodes are written in `EPISODE_BATCH` chunks. `_persist_plex_episodes` used
+    to preload every show, every season and every episode in the database on each
+    call — so batch 15 of a 30,000-episode library re-hydrated 28,000 rows to write
+    2,000, and the scan got slower the further it went. That is quadratic work
+    introduced by the very batching that fixed the memory problem, and it reads to
+    a user as a progress bar that climbs and then stops.
+
+    Pinned structurally rather than by the clock: on SQLite the rows are local and
+    cheap, which is exactly why this survived. Against hosted Postgres every one of
+    them crosses the network.
+    """
+    from sift.ingest.pipeline import ScanPipeline
+
+    with factory() as session:
+        session.add(Show(tvdb_id=4242, title="Scrubs", plex_rating_key="rk1", in_plex=True))
+        session.commit()
+
+    pipe = ScanPipeline(factory, settings)
+    engine = factory.kw["bind"]
+    unscoped: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        text = " ".join(statement.split())
+        if not text.upper().startswith("SELECT") or " WHERE " in text.upper():
+            return
+        if any(f" FROM {table}" in text for table in ("shows", "seasons", "episodes")):
+            unscoped.append(text)
+
+    batch = [
+        {
+            "show_rating_key": "rk1", "season_number": 1, "episode_number": n,
+            "title": f"E{n}", "plex_rating_key": f"rk1-1-{n}",
+            "media_files": [{
+                "path": f"/tv/s01e{n:03d}.mkv", "size": 1_000_000_000,
+                "duration_ms": 1_320_000, "width": 1920, "height": 1080,
+                "resolution": "1080p", "video_codec": "h264", "container": "mkv",
+                "part_group": None, "rating_key": None,
+            }],
+        }
+        for n in range(1, 6)
+    ]
+    try:
+        pipe._persist_plex_episodes(batch)
+        pipe._persist_plex_episodes(batch)  # a second batch is where the cost showed
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert not unscoped, f"whole-table read inside a per-batch write: {unscoped}"

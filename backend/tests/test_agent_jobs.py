@@ -339,3 +339,78 @@ def test_a_transcode_still_has_to_bring_its_numbers(client, engine, factory):
         json={"ok": True},
     )
     assert response.status_code == 400
+
+
+def test_a_job_claimed_and_never_reported_returns_to_the_queue(client, engine, factory):
+    """A claim used to be a one-way door.
+
+    Nothing anywhere moved a job out of `claimed`, so an agent that did the work
+    and then failed to report — a dropped connection, a restart, a sleeping
+    machine — left the job claimed for ever and its action recorded as approved
+    but never executed, for work that had in fact happened.
+    """
+    from datetime import timedelta
+
+    from sift.db.models import utcnow
+
+    c, _ = client
+    _configure_agent(factory)
+    _action_id, job_id = _queue_delete_job(factory, engine)
+
+    first = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()
+    assert first["job"]["id"] == job_id
+    assert c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()["job"] is None
+    # The agent vanishes without reporting.
+    with factory() as session:
+        job = session.get(FileJob, job_id)
+        job.claimed_at = utcnow() - timedelta(hours=routes_agent.STALE_CLAIM_HOURS + 1)
+        session.commit()
+
+    again = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()
+    assert again["job"] is not None and again["job"]["id"] == job_id
+
+
+def test_a_job_claimed_moments_ago_is_left_alone(client, engine, factory):
+    """NEGATIVE CONTROL, and the one that stops this being dangerous. A window too
+    short would hand the same job to a second agent while the first is still
+    encoding it — so a fresh claim must never be reclaimable."""
+    c, _ = client
+    _configure_agent(factory)
+    _action_id, job_id = _queue_delete_job(factory, engine)
+
+    claimed = c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()
+    assert claimed["job"]["id"] == job_id
+    for _ in range(3):
+        assert (
+            c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()["job"] is None
+        )
+
+
+def test_a_finished_job_is_never_requeued(client, engine, factory):
+    """NEGATIVE CONTROL. Only `claimed` is swept. A job that reported is done, and
+    re-running a delete that already succeeded would be work nobody asked for."""
+    from datetime import timedelta
+
+    from sift.db.models import utcnow
+
+    c, _ = client
+    _configure_agent(factory)
+    _action_id, job_id = _queue_delete_job(factory, engine)
+    c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN})
+    c.post(
+        f"/api/agent/{job_id}/result",
+        headers={"X-Sift-Agent-Token": TOKEN},
+        json={"ok": True, "output_path": "/movies/.sift-trash/matrix.dup.mkv"},
+    )
+    with factory() as session:
+        job = session.get(FileJob, job_id)
+        assert job.status == "done"
+        job.claimed_at = utcnow() - timedelta(hours=routes_agent.STALE_CLAIM_HOURS + 1)
+        session.commit()
+
+    assert c.post("/api/agent/claim", headers={"X-Sift-Agent-Token": TOKEN}).json()["job"] is None
+    with factory() as session:
+        # Asserted on the row, not on whether it was handed out. The claim loop
+        # already refuses an executed action, so a handout check passes even when
+        # the sweep has wrongly dragged a finished job back to "queued".
+        assert session.get(FileJob, job_id).status == "done"

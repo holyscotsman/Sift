@@ -111,6 +111,9 @@ class FakePlex(FakeService):
     # streaming path is only worth having if it is exercised in more than one
     # batch, and a fake that returns everything at once would never prove it.
     page_size = 2
+    # The real client records the section size Plex reported, which is what lets a
+    # long phase say how far through it is.
+    last_section_total = 0
 
     async def get_sections(self):
         return PLEX_SECTIONS
@@ -122,6 +125,7 @@ class FakePlex(FakeService):
 
     async def iter_section_items(self, key, *, item_type=1):
         items = self._items(key, item_type)
+        self.last_section_total = len(items)
         for start in range(0, len(items), self.page_size):
             yield items[start : start + self.page_size]
 
@@ -380,6 +384,9 @@ class StreamingPlex(FakePlex):
                 if self.probe is not None:
                     self.probe()
 
+    def __init_subclass__(cls, **kwargs):  # pragma: no cover - documentation only
+        super().__init_subclass__(**kwargs)
+
 
 async def test_episodes_are_written_as_they_arrive_and_every_batch_survives(
     factory, settings, monkeypatch
@@ -520,3 +527,70 @@ async def test_a_long_phase_reports_progress_while_it_runs(factory, settings, mo
     mid = [m for phase, status, m in seen if phase == "plex" and status == "running" and m]
     assert len(mid) >= 2
     assert any("episodes" in m for m in mid)
+
+
+async def test_the_dial_can_move_inside_the_long_phase(factory, settings, monkeypatch):
+    """A phase that reports no fraction pins the dial for its whole duration.
+
+    The percentage is computed from the phase index, so every update during the
+    Plex phase produced the identical number — 16% on a nine-phase pipeline. On a
+    large library that is the only thing on screen for many minutes, and it reads
+    as a crash rather than as work.
+
+    The sweep knows its section size from Plex's own MediaContainer, so it can send
+    a real fraction. Only a real one: an invented denominator that reaches 90% and
+    stops is worse than a number that never moves, because it also lies.
+    """
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 4)
+    fractions: list[tuple[int, int]] = []
+
+    async def progress_cb(update):
+        counts = update.counts or {}
+        if "phase_total" in counts:
+            fractions.append((counts["phase_done"], counts["phase_total"]))
+
+    plex = StreamingPlex(_many_episodes(23))
+    scan_id = create_scan_run(factory)
+    await ScanPipeline(
+        factory, _configure_kids(settings), radarr=FakeRadarr(), plex=plex,
+        tautulli=FakeTautulli(), tmdb=None, progress_cb=progress_cb,
+    ).run(scan_id)
+
+    assert len(fractions) >= 2, "the long phase never reported a fraction"
+    # Monotonic, and never claiming more than there is.
+    assert fractions == sorted(fractions)
+    for done, total in fractions:
+        assert 0 < done <= total == 23
+
+
+async def test_no_fraction_is_invented_when_none_is_known(factory, settings, monkeypatch):
+    """NEGATIVE CONTROL. A client that cannot say how large the section is must
+    produce no denominator at all, rather than a fabricated one. The dial falls
+    back to its old fixed position, which is honest.
+
+    The batch size is forced down so the mid-phase report actually fires — without
+    that this test passes by never reaching the code it is meant to police.
+    """
+    monkeypatch.setattr(pipeline_mod, "EPISODE_BATCH", 4)
+    seen: list[dict] = []
+
+    async def progress_cb(update):
+        seen.append(update.counts or {})
+
+    plex = StreamingPlex(_many_episodes(9))
+    plex.last_section_total = 0  # a client that never learned the size
+
+    class Silent(type(plex)):
+        async def iter_section_items(self, key, *, item_type=1):
+            async for batch in super().iter_section_items(key, item_type=item_type):
+                self.last_section_total = 0
+                yield batch
+
+    quiet = Silent(_many_episodes(9))
+    scan_id = create_scan_run(factory)
+    await ScanPipeline(
+        factory, _configure_kids(settings), radarr=FakeRadarr(), plex=quiet,
+        tautulli=FakeTautulli(), tmdb=None, progress_cb=progress_cb,
+    ).run(scan_id)
+
+    assert not any("phase_total" in counts for counts in seen)

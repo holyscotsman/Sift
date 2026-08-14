@@ -2,6 +2,48 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.25.0 — Fix the scan slowing to a stop, and the dial that could not move
+
+The scan reached the Plex phase and then appeared to stop at 16%. Three separate
+faults, and the earlier streaming fixes were what exposed the first one.
+
+**The batch write got slower the further it went.** Episodes are written in
+batches of 2,000, and each batch preloaded *every* show, *every* season and
+*every* episode in the database. Batch fifteen of a thirty-thousand-episode
+library therefore re-read twenty-eight thousand rows in order to write two
+thousand. That is quadratic work introduced by the very batching that fixed the
+original memory problem: the scan starts briskly, slows steadily, and ends up
+looking stopped.
+
+Measured on a 30,000-episode library, the last batch took **2.6x** the first;
+scoped to the batch in hand it now takes **0.7x**. That measurement is on SQLite,
+where the rows are local — against hosted Postgres every one of them crosses the
+network, so the real effect is considerably larger. This is the third time that
+gap has hidden something, which is why the pin is structural: a whole-table read
+inside a per-batch write now fails the suite.
+
+**The Radarr phase cost two round trips per film.** One `session.get` for the
+film and one query for its ratings, inside the loop over every film — ten
+thousand round trips on a five-thousand-film library. Both are now preloaded in
+chunks, the same shape 2607.15.1 applied to the Plex phase and never reached
+here.
+
+**The dial genuinely could not move.** The percentage is derived from the phase
+index alone — `(index + 0.4) / 9` — so every update during the Plex phase
+produced the identical 16%, no matter how many episodes had been read. On a large
+library that is the only thing on screen for many minutes, and it reads as a
+crash. The sweep now reports how far through the section it is, using the size
+Plex itself reports, and the dial interpolates within the phase. Only where a real
+denominator exists: an invented one that climbs to 90% and stops is worse than a
+number that never moves, because it also lies.
+
+**The checklist was missing a phase.** `SCAN_PHASES` in the frontend listed eight
+phases where the pipeline has nine — `sonarr` was absent — so that phase never
+appeared while it ran, and the polling fallback divided by eight against the
+server's nine. The two progress figures disagreed for the whole scan. A test now
+reads the frontend list and compares it with the pipeline, so they cannot drift
+apart again.
+
 ## 2607.24.0 — Six real bugs, and the measurements that found them
 
 A continuous-improvement pass over the analysis and action code. It began as

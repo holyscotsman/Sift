@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
@@ -127,6 +128,50 @@ def list_jobs(
         return [_job_out(j) for j in jobs]
 
 
+# How long a job may sit claimed before it is assumed abandoned. The agent's own
+# encode ceiling is twelve hours, so a day is comfortably past any real job and
+# well short of leaving a stuck one to sit for ever.
+STALE_CLAIM_HOURS = 24
+
+
+def _requeue_abandoned(session: Session) -> int:
+    """Return long-claimed jobs to the queue.
+
+    A claim was previously a one-way door: nothing anywhere moved a job out of
+    ``claimed``. So an agent that finished the work and then failed to report —
+    a dropped connection, a restart, a machine going to sleep — left the job
+    claimed for ever, and its action recorded as approved-but-never-executed for
+    work that had actually happened.
+
+    Re-queueing is safe for both kinds, which is why this can be automatic. A
+    delete whose file is already gone reports success on the spot rather than
+    erroring, so the second run is what finally records the truth. A transcode
+    re-runs the encode and verifies it before swapping anything, so the worst case
+    is wasted CPU rather than a wrong file.
+    """
+    cutoff = utcnow() - timedelta(hours=STALE_CLAIM_HOURS)
+    stale = list(
+        session.scalars(
+            select(FileJob).where(
+                FileJob.status == "claimed",
+                FileJob.claimed_at.is_not(None),
+                FileJob.claimed_at < cutoff,
+            )
+        )
+    )
+    for job in stale:
+        log.warning(
+            "job %s was claimed %s and never reported — returning it to the queue",
+            job.id,
+            job.claimed_at,
+        )
+        job.status = "queued"
+        job.claimed_at = None
+    if stale:
+        session.commit()
+    return len(stale)
+
+
 @agent_router.post("/claim", response_model=FileJobClaimOut)
 def claim(
     x_sift_agent_token: str | None = Header(default=None),
@@ -140,6 +185,7 @@ def claim(
     """
     _require_agent(factory, x_sift_agent_token)
     with factory() as session:
+        _requeue_abandoned(session)
         queued = session.scalars(
             select(FileJob).where(FileJob.status == "queued").order_by(FileJob.id)
         )

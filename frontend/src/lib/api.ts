@@ -166,11 +166,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
-  changePassword: (currentPassword: string, newPassword: string) =>
-    request<{ ok: boolean }>("/api/auth/password", {
+  // Changing the password rotates the server's signing secret, which signs out
+  // every other session. The replacement token is stored immediately so this
+  // device is not one of them.
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const result = await request<TokenResponse>("/api/auth/password", {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-    }),
+    });
+    setToken(result.token);
+    return result;
+  },
   // In-app connection config.
   getConfig: () => request<ConnectionsResponse>("/api/config"),
   saveConfig: (connections: Record<string, Record<string, unknown>>) =>

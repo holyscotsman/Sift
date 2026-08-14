@@ -18,7 +18,6 @@ from .schemas import (
     AuthStatus,
     ChangePasswordRequest,
     LoginRequest,
-    OkResponse,
     SetupRequest,
     TokenResponse,
 )
@@ -78,16 +77,23 @@ def login(
     return TokenResponse(token=token, username=username)
 
 
-@router.post("/password", response_model=OkResponse, dependencies=[AuthDep])
+@router.post("/password", response_model=TokenResponse, dependencies=[AuthDep])
 def change_password(
     body: ChangePasswordRequest,
     factory: sessionmaker[Session] = Depends(get_session_factory),
-) -> OkResponse:
+) -> TokenResponse:
     """Change the password without a factory reset. Gated (must be signed in) AND
-    re-verifies the current password; existing sessions stay valid."""
+    re-verifies the current password.
+
+    Returns a **new token**: changing the password rotates the signing secret, so
+    every other session is signed out. Store the returned token or this device
+    signs itself out too.
+    """
     if len(body.new_password) < 8:
         raise HTTPException(status_code=422, detail="password must be at least 8 characters")
     with factory() as session:
-        if not auth.change_password(session, body.current_password, body.new_password):
+        token = auth.change_password(session, body.current_password, body.new_password)
+        if token is None:
             raise HTTPException(status_code=401, detail="current password is wrong")
-    return OkResponse(ok=True)
+        username = str((auth.get_auth(session) or {}).get("username", ""))
+    return TokenResponse(token=token, username=username)

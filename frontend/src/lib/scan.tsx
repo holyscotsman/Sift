@@ -20,6 +20,7 @@ export const SCAN_PHASES: { key: string; label: string }[] = [
   { key: "preflight", label: "Checking connections" },
   { key: "plex", label: "Reading Plex catalog" },
   { key: "radarr", label: "Reading Radarr catalog" },
+  { key: "sonarr", label: "Reading Sonarr catalog" },
   { key: "tautulli", label: "Pulling Tautulli history" },
   { key: "tmdb", label: "Grabbing TMDB metadata" },
   { key: "finalize", label: "Finalizing snapshot" },
@@ -134,7 +135,16 @@ export function ScanProvider({ children, onComplete }: { children: ReactNode; on
             setPhaseCounts((prev) => ({ ...prev, [evt.phase]: evt.counts }));
           }
           const done = evt.status === "done" || evt.status === "skipped";
-          const p = Math.round(((evt.phase_index + (done ? 1 : 0.4)) / total) * 100);
+          // How far through this phase we are. The backend sends a real
+          // denominator only where it has one (the Plex sweep knows its section
+          // size), so the dial moves during the long phase instead of sitting on
+          // one integer for minutes and reading as a crash. Without it, fall back
+          // to the old fixed 0.4 through the phase.
+          const phaseTotal = evt.counts?.phase_total ?? 0;
+          const phaseDone = evt.counts?.phase_done ?? 0;
+          const within =
+            phaseTotal > 0 ? Math.min(0.95, phaseDone / phaseTotal) : 0.4;
+          const p = Math.round(((evt.phase_index + (done ? 1 : within)) / total) * 100);
           setPct((prev) => Math.min(100, Math.max(prev, p)));
         } else if (evt.event === "terminal") {
           finish(evt.status, "error" in evt ? evt.error : null);

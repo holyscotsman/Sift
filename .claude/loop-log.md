@@ -322,3 +322,100 @@ exactly like a success and swapping it in destroys the film.
 Next: nothing in `frontend/` has been examined. Also `_transcode`'s `final =
 path.with_suffix(output.suffix)` misnames the output when the source has no
 extension.
+
+### Iter 13 · 2026-08-13 · correctness (data loss)
+Logged as a cosmetic naming issue; it is the iter-11 family again. `_transcode`
+computes `final = path.with_suffix(output.suffix)`, so re-encoding `film.avi`
+writes `film.mkv` — and `shutil.move` onto an existing `film.mkv` destroys it. A
+second copy of one film in one folder is not a corner case: it is exactly what the
+duplicate report surfaces, so the bystander is a file nobody approved for
+deletion.
+Destination is now checked **before** the original is moved to trash, so refusing
+leaves the library untouched. `samefile` rather than a path comparison, so the
+ordinary same-extension re-encode (`film.mkv` → `film.mkv`, destination *is* the
+source) still works — that is the negative control, and refusing on
+`final.exists()` alone would block every one of them.
+Added the agent's first transcode tests with a fake HandBrake.
+Next: the agent still has no test for `_verify` (duration tolerance, min output
+fraction) — the guard that stops a truncated encode being swapped in. Nothing in
+`frontend/` examined yet.
+
+### Iter 14 · 2026-08-13 · correctness (data loss)
+`_verify` — described in its own docstring as "the load-bearing part of the whole
+agent" — had a hole and no tests. The duration comparison ran only `if
+source_seconds and output_seconds`, with an `elif output_seconds is None` refusal.
+So when the **source** would not probe and the output would, both branches fell
+through and the function returned `None`, meaning *passed*. The only remaining
+floor is the 5% size check, which an encode containing half the episode clears
+easily — and a truncated file that plays is indistinguishable from a good one to
+everything downstream.
+Now refuses unless both durations are known. Behaviour is unchanged where ffprobe
+is missing entirely (that already refused). Truthiness replaced with `is None`, so
+a 0.0-second probe is a fact rather than a skip.
+Four tests added, three mutations verified including the over-broad one (refusing
+whenever a duration is missing must not become refusing everything, or nothing
+ever swaps).
+Next: the agent's `claim`/`report` HTTP paths are still untested — `tick()` swallows
+every exception, so a persistently failing report would spin silently. Nothing in
+`frontend/` examined yet.
+
+### Iter 15 · 2026-08-13 · correctness (audit integrity)
+The agent's `report()` swallowed every network error with the comment "losing the
+report only means Sift shows the job as still claimed until the next scan
+reconciles it". **Nothing reconciles it** — grepped the whole backend; `claim`
+only ever selects `status == "queued"`, and no code path moves a stale `claimed`
+job anywhere. So a single dropped connection left the file moved, the job claimed
+for ever, and an approved action recorded as never executed for work that did
+happen. The one safe part is that the job is never handed out again, so the work
+is not repeated.
+Now retries 4× with exponential backoff, `sleep` injected for testability. A 4xx
+is deliberately **not** retried — a bad token or unknown job will not become true
+by asking again. Comment rewritten to describe what actually happens.
+Four tests, two mutations verified (no-retry; retry-4xx-too).
+Next: **server-side reconciliation of stale `claimed` jobs still does not exist**
+and is the real fix — a job claimed longer than some window should return to
+`queued` or be surfaced. Needs a timeout policy, so it is a larger slice. Also
+`frontend/` remains completely unexamined.
+
+### Iter 16 · 2026-08-13 · security
+`services/auth.py` is otherwise solid — pbkdf2 240k rounds, `compare_digest`,
+signed tokens with `exp`, per-account sliding-window rate limiting keyed by
+username rather than IP (correct behind a proxy). One gap: `change_password`
+**deliberately kept the signing secret**, documented as "existing sessions stay
+signed in". Tokens live 30 days, and the reason anyone changes a password on a
+publicly reachable instance is that they believe someone else holds one — so the
+action did nothing about the thing it is for.
+Now rotates the secret **and returns a replacement token**, so only *other*
+sessions die. That preserves the original intent (don't log the owner out of their
+own browser) without leaving a suspected intruder signed in, which is why this is
+a fix rather than an override of a deliberate decision.
+Touches three files: `auth.change_password` returns `str | None` instead of
+`bool`; `/api/auth/password` returns `TokenResponse` instead of `OkResponse`
+(**breaking API shape change**, acceptable because the only client is in this
+repo); `api.ts` stores the returned token immediately.
+Negative control is the load-bearing half: a fix that logged the owner out of
+their own browser would pass the revocation assertion and be unusable.
+Next: the logged stale-`claimed`-job reconciliation is still not done (needs a
+timeout policy — the agent's own transcode ceiling is 12h, so ~24h is the obvious
+window). `frontend/` still completely unexamined. `services/` remaining:
+autoscan, posters, reset, updates.
+
+### Iter 17 · 2026-08-13 · correctness (audit integrity)
+The server half of iter 15. A claim was a **one-way door** — nothing anywhere moved
+a job out of `claimed` — so an agent that did the work and then failed to report
+left the job claimed for ever and its action recorded as approved-but-never-
+executed for work that had happened.
+`_requeue_abandoned` now runs on every claim (the agent polls every 60s, so no
+scheduler is needed) and returns jobs claimed longer than `STALE_CLAIM_HOURS = 24`
+to the queue. The window is chosen from the agent's own encode ceiling of 12h.
+Re-queueing is safe for both kinds, which is why it can be automatic: a delete
+whose file is already gone reports success rather than erroring, so the second run
+is what finally records the truth; a transcode re-encodes and verifies before
+swapping, so the worst case is wasted CPU.
+**Another false negative caught, same shape as before.** The "a finished job is
+never requeued" control passed under mutation because the claim loop already
+refuses an *executed action* — so removing the `status == "claimed"` filter changed
+the job row to `queued` while the handout stayed `None`. Asserting on the handout
+proved nothing; it now asserts on the row. Also fixed an edit that landed the new
+assertion in the wrong test entirely.
+Next: `frontend/` still unexamined. `services/`: autoscan, posters, reset, updates.
