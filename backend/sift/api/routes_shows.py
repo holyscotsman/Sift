@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..analysis import tv_recommend
+from ..analysis import tv_recommend, tv_size
 from ..db.models import Episode, MediaFile, Season, Show
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
@@ -65,12 +65,30 @@ def list_shows(
     stmt = stmt.order_by(column.desc() if order == "desc" else column.asc())
 
     with factory() as session:
-        # Sizes come from the files themselves, in one grouped query rather than
-        # per show — a TV library has an order of magnitude more episodes than a
-        # film library has films, and a per-row lookup here is the mistake
-        # 2607.15.1 was about.
-        totals = {
-            tvdb_id: (int(size or 0), int(episodes or 0), int(seasons or 0))
+        # The page first, then aggregates for only the shows on it. Both grouped
+        # queries below join media_file to episode to season, so unscoped they scan
+        # the whole TV library — on every page of an infinite scroll, twice. The
+        # page is at most `page_size` shows; the library is tens of thousands of
+        # episodes.
+        total = 0
+        library_size = 0
+        if page == 1:
+            total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+            # The library-wide figure, needed once for the summary line rather than
+            # recomputed per page. A plain SUM, with no grouping to throw away.
+            library_size = int(
+                session.scalar(
+                    select(func.sum(MediaFile.size)).where(MediaFile.episode_id.is_not(None))
+                )
+                or 0
+            )
+        rows = list(session.scalars(stmt.offset((page - 1) * page_size).limit(page_size)))
+        page_ids = [show.tvdb_id for show in rows]
+
+        totals: dict[int, tuple[int, int, int]] = {}
+        counted: dict[int, dict[str, int]] = {}
+        for start in range(0, len(page_ids), 500):
+            chunk = page_ids[start : start + 500]
             for tvdb_id, size, episodes, seasons in session.execute(
                 select(
                     Season.show_id,
@@ -80,25 +98,32 @@ def list_shows(
                 )
                 .join(Episode, Episode.season_id == Season.id)
                 .join(MediaFile, MediaFile.episode_id == Episode.id)
+                .where(Season.show_id.in_(chunk))
                 .group_by(Season.show_id)
-            )
-        }
-        resolutions = {
-            tvdb_id: value
-            for tvdb_id, value in session.execute(
-                select(Season.show_id, MediaFile.resolution)
+            ):
+                totals[tvdb_id] = (int(size or 0), int(episodes or 0), int(seasons or 0))
+
+            for tvdb_id, value, count in session.execute(
+                select(Season.show_id, MediaFile.resolution, func.count())
                 .join(Episode, Episode.season_id == Season.id)
                 .join(MediaFile, MediaFile.episode_id == Episode.id)
-                .where(MediaFile.resolution.is_not(None))
+                .where(MediaFile.resolution.is_not(None), Season.show_id.in_(chunk))
                 .group_by(Season.show_id, MediaFile.resolution)
-                .order_by(Season.show_id, func.count().desc())
-            )
-        }
+            ):
+                counted.setdefault(tvdb_id, {})[value] = int(count)
 
-        total = 0
-        if page == 1:
-            total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-        rows = list(session.scalars(stmt.offset((page - 1) * page_size).limit(page_size)))
+        # The resolution most of the show is in. This was previously built by a
+        # dict comprehension over rows ordered by count descending — which keeps
+        # the *last* row written, so every show displayed its **rarest**
+        # resolution. A show that is 95% 1080p with one stray 480p episode showed
+        # as 480p. Ties break toward the lower rung, as everywhere else: it is the
+        # reading that never overstates what a library is held in.
+        resolutions = {
+            tvdb_id: max(
+                counts, key=lambda r: (counts[r], -tv_size.resolution_rank(r))
+            )
+            for tvdb_id, counts in counted.items()
+        }
 
     items = [
         ShowOut(
@@ -129,7 +154,7 @@ def list_shows(
         total=total,
         page=page,
         page_size=page_size,
-        total_size=sum(v[0] for v in totals.values()),
+        total_size=library_size,
     )
 
 

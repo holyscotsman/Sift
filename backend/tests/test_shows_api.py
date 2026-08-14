@@ -125,3 +125,86 @@ def test_an_empty_library_answers_cleanly(client):
     body = c.get("/api/shows").json()
     assert body["items"] == [] and body["total"] == 0
     assert c.get("/api/shows/sections").json() == []
+
+
+def _mixed_resolution_show(factory, tvdb_id: int, *, common: str, rare: str, common_count: int):
+    """A show mostly in one resolution with a stray episode in another."""
+    from sift.db.models import Episode, MediaFile, Season, Show
+
+    with factory() as session:
+        session.add(Show(tvdb_id=tvdb_id, title=f"Show {tvdb_id}", in_plex=True))
+        season = Season(show_id=tvdb_id, season_number=1)
+        session.add(season)
+        session.flush()
+        for n in range(common_count + 1):
+            episode = Episode(season_id=season.id, episode_number=n + 1, has_file=True)
+            session.add(episode)
+            session.flush()
+            session.add(
+                MediaFile(
+                    episode_id=episode.id,
+                    path=f"/tv/{tvdb_id}/e{n}.mkv",
+                    size=1_000_000_000,
+                    duration_ms=1_320_000,
+                    resolution=rare if n == common_count else common,
+                    video_codec="h264",
+                    source="plex",
+                )
+            )
+        session.commit()
+
+
+def test_a_show_is_listed_at_the_resolution_most_of_it_is_in(client):
+    """It was listed at the resolution *least* of it was in.
+
+    The map was built by a dict comprehension over rows ordered by count
+    descending, and a comprehension keeps the last value written — so the final
+    row, the rarest resolution, won every time. A show that is nineteen episodes
+    of 1080p and one of 480p was displayed as 480p.
+    """
+    c, factory = client
+    _mixed_resolution_show(factory, 5001, common="1080p", rare="480p", common_count=19)
+
+    body = c.get("/api/shows").json()
+    shown = {item["tvdb_id"]: item["resolution"] for item in body["items"]}
+    assert shown[5001] == "1080p"
+
+
+def test_the_listed_resolution_is_not_simply_the_highest(client):
+    """NEGATIVE CONTROL. Picking the best resolution present would also fix the
+    test above and be just as wrong in the other direction — a mostly-SD show with
+    one HD episode is an SD show."""
+    c, factory = client
+    _mixed_resolution_show(factory, 5002, common="480p", rare="1080p", common_count=19)
+
+    body = c.get("/api/shows").json()
+    shown = {item["tvdb_id"]: item["resolution"] for item in body["items"]}
+    assert shown[5002] == "480p"
+
+
+def test_the_show_list_does_not_scan_the_library_for_every_page(client):
+    """Both aggregates join media_file to episode to season. Unscoped they read
+    the whole TV library on every page of an infinite scroll — twice. Pinned
+    structurally, because on SQLite the scan is local and costs nothing, which is
+    exactly why it survived."""
+    from sqlalchemy import event
+
+    c, factory = client
+    for n in range(3):
+        _mixed_resolution_show(factory, 6000 + n, common="1080p", rare="480p", common_count=2)
+
+    engine = factory.kw["bind"]
+    unscoped: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+        text = " ".join(statement.split()).upper()
+        if "FROM SEASONS" in text and "JOIN MEDIA_FILES" in text and "SHOW_ID IN" not in text:
+            unscoped.append(text)
+
+    try:
+        assert c.get("/api/shows?page=2&page_size=1").status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert not unscoped, f"whole-library aggregate on a page request: {unscoped}"
