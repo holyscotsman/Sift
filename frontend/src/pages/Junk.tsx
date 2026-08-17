@@ -3,7 +3,7 @@
 // removal is actually issued to Radarr or merely staged depends on the server's
 // dry-run switch (SIFT_ACTIONS__DRY_RUN) — the UI reflects whichever is in effect.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ChevronDown, ChevronRight } from "@/components/icons";
@@ -57,6 +57,10 @@ export function Junk() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewMsg, setReviewMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Distinct from "nothing is flagged". This page's emptiness is meant to be good
+  // news, so collapsing a failed request into it tells the owner their library is
+  // clean when the truth is that Sift could not answer.
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Score is the safety-relevant default; Size serves a disk-space purge.
   // Persisted — a disk-purge session shouldn't reset on every visit.
   const [sortBy, setSortByState] = useState<"score" | "size">(() =>
@@ -67,6 +71,10 @@ export function Junk() {
     setSortByState(s);
   };
   const toastError = useToast();
+  // Read inside `load` so the loader does not depend on `decisions` — it must not
+  // be rebuilt (and refire) every time the owner keeps or removes one title.
+  const decisionsRef = useRef(decisions);
+  decisionsRef.current = decisions;
 
   async function runReview() {
     setReviewing(true);
@@ -80,7 +88,8 @@ export function Junk() {
       setReviewMsg(`Reviewed ${r.reviewed} title(s) ${src}.`);
       const fresh = await api.junk();
       setItems(fresh.items);
-      setSelected(new Set(fresh.items.map((c) => c.tmdb_id)));
+      // Deliberately does not touch the selection: re-running the explanation of
+      // a queue is not a reason to re-tick the dozen titles the owner just spared.
     } catch {
       setReviewMsg("AI review failed — check your Ollama/Anthropic settings.");
     } finally {
@@ -88,25 +97,41 @@ export function Junk() {
     }
   }
 
-  useEffect(() => {
+  const load = useCallback((limit?: number) => {
+    setLoading(true);
+    setLoadError(null);
     api
-      .junk()
+      .junk(limit)
       .then((r) => {
         setItems(r.items);
         setTotal(r.total);
-        // The owner's default: everything flagged starts selected for removal —
-        // unticking is the exception. Nothing is sent until Approve + confirm.
-        setSelected(new Set(r.items.map((c) => c.tmdb_id)));
+        // Ticked by default — unticking is the exception — but never re-ticking
+        // a title already decided this session, which would undo the review work
+        // the owner just did.
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (const c of r.items) if (!(c.tmdb_id in decisionsRef.current)) next.add(c.tmdb_id);
+          return next;
+        });
       })
-      .catch(() => setItems([]))
+      .catch((e: unknown) =>
+        setLoadError(
+          (e as { message?: string })?.message ||
+            "Couldn't load the removal queue. This is not the same as an empty queue.",
+        ),
+      )
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
     // Learn whether the server will actually issue deletes or only stage them, so
     // the confirm copy and result labels tell the truth.
     api
       .getSettings()
       .then((s) => setDryRun(s.actions_dry_run))
       .catch(() => setDryRun(true));
-  }, []);
+  }, [load]);
 
   const sortedItems = useMemo(
     () =>
@@ -194,6 +219,11 @@ export function Junk() {
           <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
             Junk
           </h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Pill tone={dryRun ? "keep" : "junk"}>
+              {dryRun ? "Staged — nothing is deleted" : "Live — deletes are real"}
+            </Pill>
+          </div>
           <p className="mt-1 max-w-2xl text-sm text-fg2">
             Every removal needs your approval. Keep is permanent; kids libraries are never
             listed.
@@ -268,6 +298,16 @@ export function Junk() {
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="mb-2 h-20" />
           ))}
+        </div>
+      ) : loadError ? (
+        <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+          <p className="font-semibold">{loadError}</p>
+          <button
+            onClick={() => load()}
+            className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Try again
+          </button>
         </div>
       ) : items.length === 0 ? (
         <div className="panel">
@@ -357,18 +397,7 @@ export function Junk() {
           <p className="mt-2 flex items-center gap-2 text-xs text-fg3">
             Showing {items.length} of {total.toLocaleString()} flagged titles.
             <button
-              onClick={() => {
-                setLoading(true);
-                api
-                  .junk(Math.min(total, 1000))
-                  .then((r) => {
-                    setItems(r.items);
-                    setTotal(r.total);
-                    setSelected(new Set(r.items.map((c) => c.tmdb_id)));
-                  })
-                  .catch(() => toastError("Couldn't load the full queue — try again."))
-                  .finally(() => setLoading(false));
-              }}
+              onClick={() => load(Math.min(total, 1000))}
               className="font-semibold text-accent hover:underline"
             >
               Load all
@@ -452,9 +481,19 @@ function Row({
               ? "removed"
               : "removal staged"}
         </Pill>
-        <button onClick={onReset} className="ml-auto shrink-0 text-xs text-fg3 hover:text-fg">
-          Change
-        </button>
+        {decision === "removed_live" ? (
+          // There is no undo for a file that is gone, and offering one next to the
+          // only irreversible action in the app reads as though there were. It also
+          // made an executed delete re-approvable, which would file a second action
+          // against a file that no longer exists.
+          <Link to="/activity" className="ml-auto shrink-0 text-xs text-fg3 hover:text-fg">
+            View in activity
+          </Link>
+        ) : (
+          <button onClick={onReset} className="ml-auto shrink-0 text-xs text-fg3 hover:text-fg">
+            Change
+          </button>
+        )}
       </div>
     );
   }

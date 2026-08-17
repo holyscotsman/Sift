@@ -506,8 +506,12 @@ Honest list, roughly by value.
 
 **Unexamined**
 
-- `frontend/` has had a UI/UX and performance audit but no correctness pass;
-  the findings are being worked through in order of how often they are hit.
+- `frontend/` has **no test harness at all** — `tsc --noEmit` and a production
+  build are the only gates, so component logic (a catch that empties a list, a
+  selection rebuilt from a response) ships compile-verified and no more. This is
+  the largest single gap in the project's verification story. It has had a UI/UX
+  and performance audit; those findings are being worked through in order of how
+  often a real user hits them.
 - The agent's `claim`/`report` HTTP paths are untested; `tick()` swallows every
   exception, so a persistently failing report would spin silently.
 - `services/` has had a security pass; autoscan, posters, reset and updates have
