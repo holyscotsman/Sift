@@ -20,20 +20,27 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
-from ..db.models import Movie, Rating
+from ..db.models import Movie, Rating, Recommendation
 
 log = logging.getLogger("sift.analysis.recommend")
 
-# How many owned titles to seed the discovery graph from, and how deep to read each
-# TMDB result page. Both are bounded so a big library still makes a small, predictable
-# number of upstream calls.
-_ANCHOR_COUNT = 12
+# How many owned titles seed the discovery graph, and how deep to read each TMDB
+# result. Twelve anchors could yield at most 240 raw candidates — and anchors
+# overlap heavily, so after de-duplication and removing what you already own the
+# distinct pool fell well short of a couple of hundred. Sixty is enough that the
+# list is genuinely long, and it costs sixty upstream calls *per scan* rather
+# than per page load, which is what makes that affordable.
+_ANCHOR_COUNT = 60
 _PER_ANCHOR = 20
+
+# How many ranked rows to keep. The queue is meant to be browsed, not just
+# skimmed, so it is stored deep and paged in the UI.
+STORED_LIMIT = 500
 
 
 @dataclass(frozen=True)
@@ -156,6 +163,22 @@ def _reason(sources: list[tuple[str, float]]) -> str:
     return "Matches your library"
 
 
+def rank(candidates: list[Candidate], taste: Taste) -> list[Candidate]:
+    """Most-recommended first.
+
+    The lead key is how many of the owner's own films independently surfaced the
+    title — that is what "recommended most" means, and it is a far more robust
+    signal than the weighted score, which one very strong anchor's top pick can
+    dominate on its own. The weighted score (with the Taste Profile's emphasis
+    applied) breaks ties, and ``tmdb_id`` breaks those, so the same library
+    produces the same order every time rather than reshuffling between visits.
+    """
+    return sorted(
+        candidates,
+        key=lambda c: (-len(c.sources), -c.score * taste.multiplier(c), c.tmdb_id),
+    )
+
+
 async def _collect(
     client: TmdbClient, anchors: list[Anchor], owned: set[int]
 ) -> tuple[dict[int, Candidate], int]:
@@ -239,9 +262,7 @@ async def recommendations(
     # The Taste Profile's emphasis sliders reorder (never gate) the ranking:
     # bounded multiplier over the anchor-derived score.
     taste = await asyncio.to_thread(_run, session_factory, _read_taste)
-    ranked = sorted(
-        candidates.values(), key=lambda c: c.score * taste.multiplier(c), reverse=True
-    )[:limit]
+    ranked = rank(list(candidates.values()), taste)[:limit]
     items = [
         {
             "tmdb_id": c.tmdb_id,
@@ -259,3 +280,100 @@ async def recommendations(
 def _run(session_factory: sessionmaker[Session], fn: Any) -> Any:
     with session_factory() as session:
         return fn(session)
+
+
+# Rows per statement, matching the ingest writers.
+_CHUNK = 500
+
+
+def _store(session: Session, ranked: list[Candidate], taste: Taste) -> int:
+    """Replace the stored queue with this scan's ranking.
+
+    Replaced wholesale rather than merged: a recommendation is a statement about
+    the library as it is now, and a title you have since acquired must leave the
+    list rather than linger because nothing thought to remove it. The rank is
+    stored alongside so the API can page without re-sorting, and so the order the
+    owner sees is the order that was computed rather than whatever the database
+    returns.
+    """
+    session.execute(delete(Recommendation))
+    rows = [
+        {
+            "tmdb_id": c.tmdb_id,
+            "title": c.title,
+            "year": c.year,
+            "vote_average": round(c.vote_average, 1),
+            "poster_path": c.poster_path,
+            "anchor_count": len(c.sources),
+            "score": round(c.score * taste.multiplier(c), 4),
+            "sources": [name for name, _ in sorted(c.sources, key=lambda s: (-s[1], s[0]))[:3]],
+            "rank": position,
+        }
+        for position, c in enumerate(ranked)
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        session.execute(insert(Recommendation), rows[start : start + _CHUNK])
+    session.commit()
+    return len(rows)
+
+
+async def refresh(
+    session_factory: sessionmaker[Session],
+    settings: Settings,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> int:
+    """Compute the ranked queue and store it. Called once per scan.
+
+    Returns how many were stored; zero when TMDB is not configured or nothing was
+    reachable, which leaves the previous list in place rather than blanking the
+    screen over a transient fault.
+    """
+    if not settings.tmdb.enabled or settings.tmdb.api_key is None:
+        return 0
+    anchors, owned = await asyncio.to_thread(_run, session_factory, _read_context)
+    if not anchors:
+        return 0
+    client = TmdbClient(settings.tmdb, transport=transport)
+    try:
+        candidates, reached = await _collect(client, anchors, owned)
+    finally:
+        await client.aclose()
+    if reached == 0 or not candidates:
+        return 0
+    taste = await asyncio.to_thread(_run, session_factory, _read_taste)
+    ranked = rank(list(candidates.values()), taste)[:STORED_LIMIT]
+
+    def _write(session: Session) -> int:
+        return _store(session, ranked, taste)
+
+    return int(await asyncio.to_thread(_run, session_factory, _write))
+
+
+def stored(session: Session, *, limit: int = 200) -> tuple[list[dict[str, Any]], int]:
+    """The stored queue, in the order it was computed. Returns ``(items, total)``."""
+    total = session.scalar(select(func.count()).select_from(Recommendation)) or 0
+    rows = session.scalars(
+        select(Recommendation).order_by(Recommendation.rank.asc()).limit(limit)
+    )
+    items = [
+        {
+            "tmdb_id": r.tmdb_id,
+            "title": r.title,
+            "year": r.year,
+            "vote_average": r.vote_average,
+            "reason": _reason_from(list(r.sources), r.anchor_count),
+        }
+        for r in rows
+    ]
+    return items, int(total)
+
+
+def _reason_from(names: list[str], anchor_count: int) -> str:
+    if not names:
+        return "Matches your library"
+    if anchor_count > len(names):
+        return f"Because you own {names[0]} and {anchor_count - 1} other titles"
+    if len(names) == 1:
+        return f"Because you own {names[0]}"
+    return "Because you own " + " and ".join(names[:2])

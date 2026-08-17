@@ -2,6 +2,48 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.36.0 — Recommendations you can actually browse
+
+The list was capped three times over, and none of the caps were visible from the
+screen.
+
+**Twelve anchor films, twenty results each.** That is 240 raw candidates before
+de-duplication and before removing what you already own — and anchors overlap
+heavily, so the distinct pool came out far short of a couple of hundred. The
+endpoint then returned **twenty-four** of them by default, and the page asked for
+no more.
+
+Sixty anchors now, and the API serves up to five hundred.
+
+**"Recommended most" now means what it says.** The ranking key was
+anchor-strength × TMDB position, so one highly-rated film's top pick could
+outrank a title that several different films in the library independently
+surfaced. The lead key is now how many of your own films recommended it; the
+weighted score (with the Taste Profile's emphasis applied) breaks ties, and
+``tmdb_id`` breaks those — so the order is stable between visits instead of
+reshuffling under the cursor.
+
+**It is computed during the scan, not on every page load.** Sixty anchor calls is
+a reasonable thing to do inside a scan you are already waiting on, and an
+unreasonable thing to make someone wait for every time they open the page — which
+is what kept the anchor count low in the first place. Results land in a new
+``recommendations`` table (a new table, so it deploys to a live database without
+a migration) and the page reads them back. A failed refresh leaves the previous
+list standing rather than blanking the shelf over a transient TMDB fault, and an
+instance that has not rescanned yet still computes live once so nothing looks
+broken in the meantime.
+
+Storing replaces rather than merges: a recommendation is a claim about the
+library as it is now, and a film you have since acquired has to leave the list
+rather than linger because nothing thought to remove it.
+
+Two of the new tests were rewritten after they passed against deliberately broken
+code. The ranking test's fixture had the weighted score and the overlap count
+agreeing, so it held under the old ranking too; it now makes them disagree
+outright — the lone pick wins on score, loses on count. The pool test gave every
+anchor its own private candidates, so de-duplication never bit and any anchor
+count passed; anchors now overlap the way real ones do.
+
 ## 2607.35.0 — Stop paying to move data nothing reads
 
 A hosted database meters **bytes moved**, not statements issued. Every previous

@@ -703,3 +703,40 @@ class ScoreV2(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class Recommendation(Base):
+    """A ranked film you don't own, computed during the scan and served from here.
+
+    A separate table rather than columns anywhere else, for the reason recorded
+    throughout this schema: ``create_all`` adds tables on a live database and
+    never adds columns.
+
+    Storing them at all is the point. This used to be computed live on every page
+    load — dozens of TMDB calls the owner waited on, repeated for every visit,
+    and capped low enough to keep that wait tolerable. Computing it once per scan
+    removes the wait, removes the cap, and makes the list stable between visits
+    rather than reshuffling under the cursor.
+
+    ``anchor_count`` is how many of the owner's own films surfaced this title. It
+    is the ranking key, because "recommended most" is a count of independent
+    recommendations, not a weighted average of one strong one.
+    """
+
+    __tablename__ = "recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tmdb_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    year: Mapped[int | None] = mapped_column(Integer)
+    vote_average: Mapped[float] = mapped_column(Float, default=0.0)
+    poster_path: Mapped[str | None] = mapped_column(String(255))
+    # How many owned titles recommended it, and the weighted strength behind that.
+    anchor_count: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    # The anchors themselves, so the card can say which of your films produced it.
+    sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    rank: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
