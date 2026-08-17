@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.35.0 — Stop paying to move data nothing reads
+
+A hosted database meters **bytes moved**, not statements issued. Every previous
+optimisation here counted round trips, because round trips were what made a scan
+look hung. That measure is blind to a query that fetches one row containing a
+kilobyte of text nobody looks at — and on a metered free tier, that is the bill.
+
+Three reads in the scoring pass, which walks the entire library on every scan:
+
+* **`select(Movie)` shipped all twenty-seven columns.** Scoring reads eleven of
+  them, all small. The other sixteen include `overview`, `poster_url`, `genres`
+  and `keywords` — roughly 1.4 KB per film against the 90 bytes that matter.
+* **`select(Score)` shipped the whole `signals` JSON blob for every film**, to
+  answer the question "does a row already exist for this id?". About a kilobyte
+  each, fetched and discarded.
+* **`select(ScoreV2)` did the same**, twice over, once for the write and once
+  for the previous band that hysteresis needs. That one was introduced two
+  releases ago by this project, which is the point: the existing statement-count
+  pins all stayed green while the transfer doubled.
+
+Scoring now selects the eleven columns it uses into a `ScoredMovie` tuple, reads
+the two score tables as keys (plus the two band columns hysteresis needs), and
+writes both in chunked bulk statements rather than a flush per film.
+
+**Modelled against a five-thousand-film library: 21.2 MB → 3.9 MB of reads per
+scan, about five and a half times less.** At a two-hourly autoscan that is the
+difference between 7.6 GB and 1.4 GB a month, against a free allowance of 5 GB.
+
+The new pin asserts the *shape* — that no statement mentions `movies.overview`,
+`movies.poster_url`, `movies.genres`, `scores.signals` or `scores_v2.signals` —
+because a byte count cannot be measured on SQLite, where all of this is free.
+Both halves are mutation-verified: restoring either the full-row movie read or
+the signals blob turns it red. It carries the usual negative control that two
+hundred films were actually scored, since a scorer that does nothing reads no
+wide columns at all.
+
 ## 2607.34.0 — Five ways the review screens told you the wrong thing
 
 All five are moments where the interface said something untrue, and none of them

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime
+from typing import NamedTuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..config import JunkThresholds
@@ -35,7 +36,46 @@ from .classify import MovieFacts, Verdict, classify
 _CHUNK = 500
 
 
-def _facts(movie: Movie, cult_ids: frozenset[int]) -> MovieFacts:
+class ScoredMovie(NamedTuple):
+    """The columns scoring actually reads — and deliberately nothing else.
+
+    ``select(Movie)`` ships all twenty-seven columns, including ``overview``,
+    ``poster_url``, ``genres`` and ``keywords``. None of them affects a score, and
+    together they are the bulk of the row: roughly 1.4 KB against the 90 bytes
+    below. Scoring walks the whole library on every scan, so on a hosted database
+    that difference is megabytes of egress per scan for data nothing reads — which
+    is how a free tier's monthly transfer allowance disappears in a week.
+    """
+
+    tmdb_id: int
+    year: int | None
+    budget: int | None
+    added_at: datetime | None
+    original_language: str | None
+    is_kids: bool
+    is_adult: bool
+    is_independent: bool
+    us_theatrical: bool
+    keep_override: bool
+    monitored: bool
+
+
+_SCORED_COLUMNS = (
+    Movie.tmdb_id,
+    Movie.year,
+    Movie.budget,
+    Movie.added_at,
+    Movie.original_language,
+    Movie.is_kids,
+    Movie.is_adult,
+    Movie.is_independent,
+    Movie.us_theatrical,
+    Movie.keep_override,
+    Movie.monitored,
+)
+
+
+def _facts(movie: ScoredMovie, cult_ids: frozenset[int]) -> MovieFacts:
     lang = movie.original_language
     return MovieFacts(
         us_theatrical=bool(movie.us_theatrical),
@@ -139,7 +179,7 @@ def _requested_at(session: Session) -> dict[int, datetime]:
 
 
 def _v2_facts(
-    movie: Movie, cult_ids: frozenset[int], canon_ids: frozenset[int]
+    movie: ScoredMovie, cult_ids: frozenset[int], canon_ids: frozenset[int]
 ) -> scoring_v2.FactsV2:
     lang = movie.original_language
     return scoring_v2.FactsV2(
@@ -154,6 +194,21 @@ def _v2_facts(
     )
 
 
+def previous_v2_bands(session: Session) -> dict[int, tuple[str, str | None]]:
+    """What v2 said last time, three columns wide.
+
+    Hysteresis needs the previous band and the previous rule, and nothing else.
+    ``select(ScoreV2)`` would ship the whole ``signals`` blob for every film —
+    about a kilobyte each, for two values.
+    """
+    return {
+        movie_id: (band, rule)
+        for movie_id, band, rule in session.execute(
+            select(ScoreV2.movie_id, ScoreV2.band, ScoreV2.rule)
+        )
+    }
+
+
 def _iter_scores(
     session: Session,
     thr: JunkThresholds,
@@ -161,7 +216,8 @@ def _iter_scores(
     *,
     cult_ids: frozenset[int] = frozenset(),
     shadow: bool = False,
-) -> Iterator[tuple[Movie, scoring.ScoreResult, scoring_v2.ScoreV2Result | None]]:
+    previous: dict[int, tuple[str, str | None]] | None = None,
+) -> Iterator[tuple[ScoredMovie, scoring.ScoreResult, scoring_v2.ScoreV2Result | None]]:
     """Score every library title, reading the database in batches rather than per
     film.
 
@@ -182,17 +238,22 @@ def _iter_scores(
     ids = list(session.scalars(select(Movie.tmdb_id).where(Movie.in_plex.is_(True))))
 
     requested: dict[int, datetime] = {}
-    previous: dict[int, tuple[str, str | None]] = {}
     if shadow:
         requested = _requested_at(session)
-        previous = {
-            row.movie_id: (row.band, row.rule) for row in session.scalars(select(ScoreV2))
-        }
+        if previous is None:
+            previous = previous_v2_bands(session)
+    previous = previous or {}
 
     for start in range(0, len(ids), _CHUNK):
         batch = ids[start : start + _CHUNK]
         movies = {
-            m.tmdb_id: m for m in session.scalars(select(Movie).where(Movie.tmdb_id.in_(batch)))
+            row.tmdb_id: row
+            for row in (
+                ScoredMovie(*values)
+                for values in session.execute(
+                    select(*_SCORED_COLUMNS).where(Movie.tmdb_id.in_(batch))
+                )
+            )
         }
         ratings = _best_ratings(session, batch)
         watches = _watch_by_movie(session, batch)
@@ -256,51 +317,78 @@ def compute_and_store(
     cult_ids: frozenset[int] = frozenset(),
 ) -> int:
     with factory() as session:
+        # Keys only, never whole rows. Deciding insert-versus-update needs an id;
+        # `select(Score)` shipped the entire `signals` JSON blob for every film to
+        # answer that — about a kilobyte each, twice over once v2 joined in. On a
+        # hosted database that is the single largest read the scan performs, and
+        # every byte of it was discarded.
+        v1_ids = {
+            movie_id: row_id
+            for row_id, movie_id in session.execute(select(Score.id, Score.movie_id))
+        }
+        v2_ids = {
+            movie_id: row_id
+            for row_id, movie_id in session.execute(select(ScoreV2.id, ScoreV2.movie_id))
+        }
+        previous = previous_v2_bands(session)
+
+        v1_new: list[dict[str, object]] = []
+        v1_edit: list[dict[str, object]] = []
+        v2_new: list[dict[str, object]] = []
+        v2_edit: list[dict[str, object]] = []
         written = 0
-        # Preloaded, because ``movie.score`` is a lazy relationship: reading it in
-        # the loop is one more round trip per film on top of the three the scoring
-        # read used to cost.
-        rows = {row.movie_id: row for row in session.scalars(select(Score))}
-        v2_rows = {row.movie_id: row for row in session.scalars(select(ScoreV2))}
+
         for movie, result, shadow in _iter_scores(
-            session, thr, now, cult_ids=cult_ids, shadow=True
+            session, thr, now, cult_ids=cult_ids, shadow=True, previous=previous
         ):
             tmdb_id = movie.tmdb_id
             # Classification overlay: the numeric band answers "low?"; the classifier
             # answers "keep or cut, given what kind of film it is".
             scored_low = result.band in ("junk", "borderline")
             verdict = classify(_facts(movie, cult_ids), scored_low=scored_low)
-            row = rows.get(tmdb_id)
-            if row is None:
-                row = Score(movie_id=tmdb_id)
-                session.add(row)
-                rows[tmdb_id] = row
-            row.junk_score = result.junk_score
-            row.signals = {
-                "signals": [s.as_dict() for s in result.signals],
-                "kids_guard": result.kids_guard,
-                "band": result.band,
-                "verdict": str(verdict.verdict),
-                "verdict_reason": verdict.reason,
+            payload: dict[str, object] = {
+                "junk_score": result.junk_score,
+                "signals": {
+                    "signals": [s.as_dict() for s in result.signals],
+                    "kids_guard": result.kids_guard,
+                    "band": result.band,
+                    "verdict": str(verdict.verdict),
+                    "verdict_reason": verdict.reason,
+                },
+                "model_used": None,  # deterministic — no model involved
             }
-            row.model_used = None  # deterministic — no model involved
+            row_id = v1_ids.get(tmdb_id)
+            if row_id is None:
+                v1_new.append({"movie_id": tmdb_id, **payload})
+            else:
+                v1_edit.append({"id": row_id, **payload})
 
-            # The shadow opinion, written beside the real one and read by nobody
-            # but the diff endpoint. `previous_band` carries what v2 said last
-            # time, which is what hysteresis needs to have an opinion about.
+            # The shadow opinion, written beside the real one and read by nobody but
+            # the diff endpoint. `previous_band` is what v2 said last scan, which is
+            # what hysteresis needs to have an opinion about.
             if shadow is not None:
-                v2_row = v2_rows.get(tmdb_id)
-                if v2_row is None:
-                    v2_row = ScoreV2(movie_id=tmdb_id)
-                    session.add(v2_row)
-                    v2_rows[tmdb_id] = v2_row
-                v2_row.previous_band = v2_row.band if v2_row.id is not None else None
-                v2_row.score = shadow.score
-                v2_row.band = shadow.band
-                v2_row.rule = shadow.rule
-                v2_row.confidence = shadow.confidence
-                v2_row.signals = shadow.as_dict()
+                v2_payload: dict[str, object] = {
+                    "score": shadow.score,
+                    "band": shadow.band,
+                    "rule": shadow.rule,
+                    "confidence": shadow.confidence,
+                    "signals": shadow.as_dict(),
+                    "previous_band": previous.get(tmdb_id, (None, None))[0],
+                }
+                v2_row_id = v2_ids.get(tmdb_id)
+                if v2_row_id is None:
+                    v2_new.append({"movie_id": tmdb_id, **v2_payload})
+                else:
+                    v2_edit.append({"id": v2_row_id, **v2_payload})
             written += 1
+
+        # Bulk, chunked, by primary key — one statement per five hundred films
+        # rather than a flush per film.
+        for model, fresh, edits in ((Score, v1_new, v1_edit), (ScoreV2, v2_new, v2_edit)):
+            for start in range(0, len(fresh), _CHUNK):
+                session.execute(insert(model), fresh[start : start + _CHUNK])
+            for start in range(0, len(edits), _CHUNK):
+                session.execute(update(model), edits[start : start + _CHUNK])
         session.commit()
         return written
 
