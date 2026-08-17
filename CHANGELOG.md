@@ -2,6 +2,49 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.34.0 — Five ways the review screens told you the wrong thing
+
+All five are moments where the interface said something untrue, and none of them
+looked like a bug from the code.
+
+**A failed request read as an empty queue.** The Junk page caught every fetch
+error with `setItems([])`, so a dead Plex connection, an expired token or a 500
+produced the green "All caught up — nothing is flagged for removal" state. This
+is the one screen whose emptiness is meant to be good news, which makes it the
+worst possible place to collapse "I could not answer" into "there is nothing to
+do". A failure now says so and offers to retry, in the same error panel the TV
+and Canon lists already use.
+
+**Staged and live looked identical.** Every red "Approve removal" button rendered
+the same whether the server would delete files or merely log the intent. The page
+knew — it fetches the flag on mount — but only ever showed it inside the confirm
+dialog, one step *after* the decision. The mode is now a pill beside the heading
+on both Junk and Storage. After a session in staged mode, an undifferentiated red
+button teaches you that red buttons are harmless.
+
+**"Change" was offered on a file that no longer existed.** A completed live
+removal collapsed to a row with a Change link, which put the row back into a
+fully actionable state — including a working Approve button — for a file that was
+gone. It reads as an undo next to the only irreversible action in the app. That
+row now links to the audit entry instead. Staged removals and Keeps still change,
+because those genuinely can.
+
+**Re-running the AI review re-ticked everything you had spared.** Both the review
+and the "Load all" path rebuilt the selection from the whole response, so working
+through two hundred rows and unticking a dozen, then loading the rest, silently
+re-selected all twelve and grew a destructive selection rather than shrinking it.
+Refetching now adds only titles that have no decision yet.
+
+**Storage always showed its generic error.** It read `.detail` from a thrown
+`ApiError`, which carries the server's message on `.message` — so the specific
+reason ("Plex not configured", "no snapshot") was discarded every single time.
+The same file gets it right twenty lines further down, which is what marks it as
+a slip rather than a decision.
+
+The frontend has no test harness, so these are verified by `tsc --noEmit` and a
+production build only. That gap is worth closing and is recorded as such rather
+than papered over.
+
 ## 2607.33.0 — Delete the scaffolding
 
 Nothing here changes what the app does. It removes documents that described work

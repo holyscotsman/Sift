@@ -150,6 +150,18 @@ export function Storage() {
   const drawer = useDrawer();
   const toastError = useToast();
 
+  // Whether the server will actually free anything, or only record the intent.
+  // This screen files reclaim jobs, so the mode belongs beside the heading rather
+  // than one dialog deeper — after a session in staged mode the buttons teach the
+  // owner that they are harmless.
+  const [dryRun, setDryRun] = useState<boolean | null>(null);
+  useEffect(() => {
+    api
+      .getSettings()
+      .then((s) => setDryRun(s.actions_dry_run))
+      .catch(() => setDryRun(true));
+  }, []);
+
   useEffect(() => {
     let live = true;
     Promise.all([
@@ -167,7 +179,13 @@ export function Storage() {
         setBook(l);
         setTv(t);
       })
-      .catch((e) => live && setError(e?.detail || "Couldn't read storage figures."));
+      .catch(
+        (e: unknown) =>
+          live &&
+          setError(
+            (e as { message?: string })?.message || "Couldn't read storage figures.",
+          ),
+      );
     return () => {
       live = false;
     };
@@ -180,7 +198,7 @@ export function Storage() {
     try {
       setPlan(await api.reclaimPlan(Math.round(gb * 1e9)));
     } catch (e) {
-      setError((e as { detail?: string })?.detail || "Couldn't work out a plan.");
+      setError((e as { message?: string })?.message || "Couldn't work out a plan.");
     } finally {
       setPlanning(false);
     }
@@ -211,10 +229,19 @@ export function Storage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageTitle
-        title="Storage"
-        subhead="Where the disk went, ranked by what you would actually get back. Nothing here removes anything — findings become actions on the Junk screen, one approval at a time."
-      />
+      <div className="flex flex-col gap-2">
+        <PageTitle
+          title="Storage"
+          subhead="Where the disk went, ranked by what you would actually get back. Nothing here removes anything — findings become actions on the Junk screen, one approval at a time."
+        />
+        {dryRun !== null && (
+          <div>
+            <Pill tone={dryRun ? "keep" : "junk"}>
+              {dryRun ? "Staged — nothing is deleted" : "Live — deletes are real"}
+            </Pill>
+          </div>
+        )}
+      </div>
 
       {error ? (
         <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
