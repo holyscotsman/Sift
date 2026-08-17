@@ -129,3 +129,65 @@ def test_a_film_with_no_ratings_is_still_scored(factory, settings):
         row = session.scalars(select(Score).where(Score.movie_id == 8)).one()
         signals = {s["key"]: s for s in row.signals["signals"]}
     assert signals["rating"]["available"] is False
+
+
+def test_scoring_never_reads_the_wide_columns(factory, settings):
+    """Egress pin, not a round-trip pin.
+
+    Scoring walks the whole library every scan. `select(Movie)` ships all
+    twenty-seven columns — `overview`, `poster_url`, `genres`, `keywords` — none
+    of which affects a score, and together they dwarf the ones that do. Worse,
+    `select(Score)` and `select(ScoreV2)` shipped a JSON blob per film purely to
+    decide insert-versus-update, then threw it away.
+
+    On the SQLite these tests run against that is free, which is exactly why it
+    survived. On a hosted database it is the largest read the scan performs, and
+    it is metered: a free tier's monthly transfer allowance disappears in a week.
+    """
+    from sqlalchemy import event
+
+    from sift.analysis import junk
+    from sift.db.models import Movie
+
+    with factory() as session:
+        for i in range(200):
+            session.add(
+                Movie(
+                    tmdb_id=9_000 + i,
+                    title=f"Film {i}",
+                    in_plex=True,
+                    overview="x" * 600,
+                    poster_url="https://image.tmdb.org/t/p/w342/" + "y" * 40,
+                    genres=["Drama", "Thriller"],
+                    keywords=["one", "two", "three"],
+                )
+            )
+        session.commit()
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        written = junk.compute_and_store(factory, settings.junk)
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    # NEGATIVE CONTROL: the work must actually have happened. A no-op scorer
+    # reads no wide columns at all and would pass every assertion below.
+    assert written == 200
+
+    reads = [s for s in seen if s.upper().startswith("SELECT")]
+    for column, table in (
+        ("movies.overview", "movies"),
+        ("movies.poster_url", "movies"),
+        ("movies.genres", "movies"),
+        ("scores.signals", "scores"),
+        ("scores_v2.signals", "scores_v2"),
+    ):
+        offenders = [s for s in reads if column in s]
+        assert not offenders, f"scoring read {column} it never uses: {offenders[0][:140]}"
+        assert any(table in s for s in reads), f"nothing read {table} at all — is it still running?"
