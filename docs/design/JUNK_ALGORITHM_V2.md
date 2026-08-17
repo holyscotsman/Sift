@@ -2,7 +2,7 @@
 
 A design spec for the next generation of the keep/junk decision. Written against
 `ARCHITECTURE.md` at 2607.24.0 and the full `CHANGELOG.md`. Intended to be handed
-to a Claude Code session (or the improvement loop) and implemented phase by
+to the improvement loop and implemented phase by
 phase, each phase verified before the next begins.
 
 Suggested location in the repo: `docs/design/JUNK_ALGORITHM_V2.md`.
@@ -346,7 +346,7 @@ unwatched tail, outliers. Note the fixture-invalidates-baselines caveat from
 `ARCHITECTURE.md` §9 applies: adding golden titles changes cohort medians, so
 regenerate baseline numbers when the fixture changes.
 
-### 7.2 Metrics — one JSON line each, appended to `.claude/metrics.jsonl`
+### 7.2 Metrics — one JSON line each, appended to `docs/optimization/metrics.jsonl`
 
 - **`removal_precision`** — of titles banded `junk`, the fraction whose golden
   label is junk. **Target: 1.0.** This is the headline. A miss here is the
@@ -444,7 +444,7 @@ one's checks pass. No timeline attached — the gate is the checks.
 
 Each phase is one-to-a-few loop iterations. The loop's existing rules apply:
 one coherent change per iteration, measure before keeping, log negative
-results in `.claude/loop-log.md`.
+results in `docs/optimization/LOOP_LOG.md`.
 
 ---
 

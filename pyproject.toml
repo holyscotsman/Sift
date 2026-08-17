@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sift"
-# Version scheme: YYMM.major.patch  (see CLAUDE.md / CHANGELOG.md)
-version = "2607.32.0"
+# Version scheme: YYMM.major.patch  (see docs/ENGINEERING.md / CHANGELOG.md)
+version = "2607.33.0"
 description = "Sift — a portable metadata brain that analyzes a Plex + Radarr library to find missing movies and flag removals."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # AI provider layer is Phase 2 — kept out of the default install so the MVP
-# stays lightweight. The runtime never uses AI to decide correctness (see CLAUDE.md).
+# stays lightweight. The runtime never uses AI to decide correctness (see docs/ENGINEERING.md).
 ai = [
     "anthropic>=0.25",
 ]

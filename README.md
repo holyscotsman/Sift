@@ -53,7 +53,7 @@ Implemented so far:
   `/ws/scan/{id}` live-progress socket.
 - `sift` CLI: `serve`, `scan`, `init`.
 
-See `STATE.md` for the current resume point and `CHANGELOG.md` for history.
+See `docs/ENGINEERING.md` for the settled decisions and `CHANGELOG.md` for history.
 
 ---
 

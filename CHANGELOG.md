@@ -2,6 +2,37 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.33.0 — Delete the scaffolding
+
+Nothing here changes what the app does. It removes documents that described work
+that has since been done, and consolidates what was left.
+
+**Gone, because they described a build that has already happened:**
+`docs/GAME_PLAN.md` (the pre-build spec, superseded by `docs/ARCHITECTURE.md`,
+which describes the system as it actually is); `docs/design/HANDOFF.md` and the
+195 KB `Sift.prototype.html` it introduced, both superseded by the shipped
+frontend; `docs/design/CANON_BUNDLE_HANDOFF.md`, which was install instructions
+for a bundle that is installed; and the nine `docs/optimization/CYCLE_0*.md`
+plans, which planned work whose outcomes are recorded a directory up. A plan for
+finished work is not history, it is a document that disagrees with the code.
+
+**Consolidated.** `CLAUDE.md` and `STATE.md` were two files answering one
+question — what is settled here and why — so they are now `docs/ENGINEERING.md`.
+The second root changelog moved to `docs/optimization/HISTORY.md`, next to the
+loop's own log and metrics, which also moved out of a tool-specific dot
+directory. The repo root is now five files instead of eight, and every document
+in it is one somebody would open.
+
+**The canon build scripts are runnable again.** All five hardcoded an absolute
+path from the machine they were first run on, so none of them would have worked
+for anyone. They now take `CANON_WORK_DIR`, and a `tools/canon/README.md`
+records what produces what and in which order — which matters, because those
+scripts are the only account of where the ten thousand canon titles came from.
+
+Cross-references were followed rather than left dangling: what pointed at a
+removed file now points at what replaced it, and the two entries in
+`ARCHITECTURE.md`'s "known gaps" that had since been fixed are gone from it.
+
 ## 2607.32.0 — Three reads that grew with the library
 
 Three places did work proportional to the whole library to answer a question
@@ -915,8 +946,8 @@ Owner-requested batch:
 
 ## 2607.8.0 — Optimization Cycle 08
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_08.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): decisions restore with preview-by-default apply
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): decisions restore with preview-by-default apply
 flow, a 500 MB poster-cache ceiling with oldest-first eviction, a Library
 section filter, persisted view/sort preferences, Esc-cancellable Ask,
 connection-URL normalization (scheme + trailing slashes), restorable dismissed
@@ -925,8 +956,8 @@ loading states.
 
 ## 2607.7.0 — Optimization Cycle 07
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_07.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): live per-phase scan counts in the panel, poster
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): live per-phase scan counts in the panel, poster
 fallbacks labeled with the title's initial, a decisions backup download
 (keep-overrides + dismissals + thresholds), a vendor chunk (app bundle 222 kB →
 59 kB), junk cap disclosure with bounded Load-all, expand-all signal
@@ -935,8 +966,8 @@ linking to Settings, and accessible gauge labels.
 
 ## 2607.6.0 — Optimization Cycle 06
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_06.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): real Ask compare mode (both tandem providers
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): real Ask compare mode (both tandem providers
 phrase one retrieval, side by side, graceful degradation), Activity movie-id
 drawer links + expandable scan receipts, collapsed decided junk rows, junk
 score/size sort, a recently-added dashboard strip, a version footer, ownership
@@ -945,8 +976,8 @@ logs), and a wizard readiness line.
 
 ## 2607.5.0 — Optimization Cycle 05
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_05.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): route-level error boundary, chooseable Radarr add
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): route-level error boundary, chooseable Radarr add
 defaults (root folder + quality profile with stale-safe fallback), streaming
 CSV export of the filtered library, 375 px mobile fixes (search row, no CTA
 wrap), memoized grid tiles/posters, a tiny Ask answer formatter, one-click
@@ -955,8 +986,8 @@ username prefill at login, and skip-to-content + labeled landmarks.
 
 ## 2607.4.0 — Optimization Cycle 04
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_04.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): cached health sweep (774 ms → 10 ms polls) with
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): cached health sweep (774 ms → 10 ms polls) with
 save/test invalidation, visibility-aware polling, page-1-only list aggregates,
 meaningful ring gauges (new `watched_titles` count), a search no-match row,
 scan-failure Retry, `g`-chord keyboard navigation + `?` shortcuts overlay,
@@ -965,8 +996,8 @@ New conversation, and a growing bounded Activity window.
 
 ## 2607.3.0 — Optimization Cycle 03
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_03.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): auditable health score with named deductions,
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): auditable health score with named deductions,
 cached status queue counts with exact write-path invalidation, login
 brute-force guard (per-account 429 + Retry-After), mid-session sign-out on dead
 tokens, sortable table columns (+ Size column), junk reclaimable-disk totals,
@@ -976,8 +1007,8 @@ toolbar accessibility.
 
 ## 2607.2.0 — Optimization Cycle 02
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_02.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): state-driven dashboard attention cards with live
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): state-driven dashboard attention cards with live
 junk/must-have queue counts, taste-profile weights that actually steer
 recommendations (bounded reorder, zero-weight equivalence test-pinned), inline
 global-search results with poster thumbs + latest-wins fetches, Ask suggestion
@@ -988,8 +1019,8 @@ async poster decoding, gzip for large JSON responses, and `junk_flagged` /
 
 ## 2607.1.0 — Optimization Cycle 01
 
-Ten reviewed changes (plan: `docs/optimization/CYCLE_01.md`, log:
-`OPTIMIZATION_CHANGELOG.md`): password-manager-friendly login + ephemeral-host
+Ten reviewed changes (log:
+`docs/optimization/HISTORY.md`): password-manager-friendly login + ephemeral-host
 warning, in-place password change, per-service "clear saved values", automatic
 rescans (6/12/24h), Junk multi-select, Library title/disk totals, ~4× faster
 Must-Have validation, drawer Esc/focus accessibility, readable Activity

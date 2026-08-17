@@ -69,7 +69,7 @@ npm --prefix frontend run build
 Mapped the repo above. Confirmed gates green. Built `bench/fixture.py` (seeded
 2000-film / 120-show / 5760-episode library with a deliberate long tail and 1-in-40
 size outliers), `bench/bench_score.py`, `bench/bench_ledger.py`. Baselines in
-`.claude/metrics.jsonl`.
+`docs/optimization/metrics.jsonl`.
 
 Headline metric choice, and why: the score bench reports **statements per film**,
 not milliseconds. The bench runs on SQLite where a round trip is free and ships

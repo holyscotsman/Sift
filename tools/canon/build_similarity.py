@@ -11,6 +11,18 @@ Output: similarity_ml25m.json keyed by imdb id ("tt...") with top-K neighbor
 members (the app only ranks acquisition candidates, so off-canon neighbors are
 noise it would re-filter anyway).
 """
+
+import os
+
+# Where the intermediate canon artefacts live. These are offline provenance
+# scripts, run by hand outside the app, so the working directory is a parameter
+# rather than a constant baked into the source.
+WORK_DIR = os.environ.get("CANON_WORK_DIR", ".")
+
+
+def work_path(name: str) -> str:
+    return os.path.join(WORK_DIR, name)
+
 import json, sys
 import numpy as np
 import pandas as pd
@@ -19,7 +31,7 @@ from scipy import sparse
 K = 25
 MIN_RATINGS = 300          # a movie needs this many ratings to have a stable vector
 
-canon = json.load(open("/home/claude/canon_10k.json"))
+canon = json.load(open(work_path("canon_10k.json")))
 canon_imdb = {t["imdb_id"] for t in canon["titles"] if "imdb_id" in t}
 print(f"canon entries with imdb id: {len(canon_imdb)}", file=sys.stderr)
 
@@ -89,6 +101,6 @@ result = {
     "count": len(out),
     "neighbors": out,
 }
-json.dump(result, open("/home/claude/similarity_ml25m.json", "w"), ensure_ascii=False, separators=(",", ":"))
+json.dump(result, open(work_path("similarity_ml25m.json"), "w"), ensure_ascii=False, separators=(",", ":"))
 import os
-print(f"wrote similarity_ml25m.json: {len(out)} titles, {os.path.getsize('/home/claude/similarity_ml25m.json')//1024} KB", file=sys.stderr)
+print(f"wrote similarity_ml25m.json: {len(out)} titles, {os.path.getsize(work_path('similarity_ml25m.json'))//1024} KB", file=sys.stderr)

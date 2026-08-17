@@ -225,7 +225,7 @@ households. Golden cases, each with a paired negative control:
 | Owned title in the canon | never suggested (the diff itself) |
 | Same fixture, different hash seed | identical list, identical order |
 
-Metrics to `.claude/metrics.jsonl`, report-only in `verify.sh`:
+Metrics to `docs/optimization/metrics.jsonl`, report-only in `verify.sh`:
 `gate_precision` (nothing gated slips through — target 1.0),
 `structural_recall` (planted completions found — target 1.0),
 `order_stability` (target 1.0), `canon_coverage` (% of canon owned — a

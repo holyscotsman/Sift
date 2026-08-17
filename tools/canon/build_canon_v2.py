@@ -4,6 +4,18 @@
    2. Cult classics (Wikipedia: List of cult films, 27 subpages)
    3. Theatrical-consensus fill (IMDb datasets, Bayesian WR ranking)
 Deterministic composition; pillar membership recorded per entry."""
+
+import os
+
+# Where the intermediate canon artefacts live. These are offline provenance
+# scripts, run by hand outside the app, so the working directory is a parameter
+# rather than a constant baked into the source.
+WORK_DIR = os.environ.get("CANON_WORK_DIR", ".")
+
+
+def work_path(name: str) -> str:
+    return os.path.join(WORK_DIR, name)
+
 import csv, gzip, json, os, re, sys, time, unicodedata, urllib.parse, urllib.request
 from collections import defaultdict
 
@@ -231,7 +243,7 @@ out = {
     "count": len(canon),
     "titles": canon,
 }
-with open("/home/claude/canon_expanded.json", "w", encoding="utf-8") as fh:
+with open(work_path("canon_expanded.json"), "w", encoding="utf-8") as fh:
     json.dump(out, fh, ensure_ascii=False, indent=1)
 print(f"wrote canon_expanded.json with {len(canon)} titles "
       f"({pillar_count} pillar + {len(canon)-pillar_count} consensus fill)", file=sys.stderr)

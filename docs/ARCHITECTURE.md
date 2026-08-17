@@ -477,7 +477,8 @@ equivalence dump that returned `[]` because the fixture exercised nothing.
 deliberately shaped like a real library: a long unwatched tail, 1-in-40 size
 outliers, duplicated episodes, inconsistent seasons, truncated files, and
 legitimate short films that must *not* be flagged. Metrics land in
-`.claude/metrics.jsonl`; the running log is `.claude/loop-log.md`.
+`docs/optimization/metrics.jsonl`; the running log is
+`docs/optimization/LOOP_LOG.md`.
 
 Note the fixture is load-bearing in non-obvious ways: because baselines are the
 library's *own* median, adding television to a fixture moves the 1080p median far
@@ -505,20 +506,17 @@ Honest list, roughly by value.
 
 **Unexamined**
 
-- `frontend/` has had no correctness or performance pass at all.
+- `frontend/` has had a UI/UX and performance audit but no correctness pass;
+  the findings are being worked through in order of how often they are hit.
 - The agent's `claim`/`report` HTTP paths are untested; `tick()` swallows every
   exception, so a persistently failing report would spin silently.
-- `services/` (auth, autoscan, posters, reset, updates) has had no review pass.
+- `services/` has had a security pass; autoscan, posters, reset and updates have
+  had no correctness or performance review.
 
 **Known smaller issues**
 
 - Old `Action` rows written before 2607.24.0 record successful deletes as
   failures; history was not rewritten.
-- `main.py:189` has a mis-indented `routes_system,` inside the router tuple.
-  Harmless, but it looks like a diff artifact.
-- `STATE.md`'s "Where we are" narrative is stale — it still describes the
-  original MVP wave. The "Working decisions" section below it is current and is
-  the part worth reading.
 
 **Deliberately not doing**
 
