@@ -37,6 +37,8 @@ from .schemas import (
     MissingListsResponse,
     RecommendationsResponse,
     RecommendedMovie,
+    ShadowDiffResponse,
+    ShadowDiffRow,
     SignalOut,
     UpgradeCandidateOut,
     UpgradesResponse,
@@ -95,6 +97,32 @@ def junk(
                 )
             )
     return JunkResponse(items=items, total=len(items))
+
+
+@router.get("/junk/shadow-diff", response_model=ShadowDiffResponse)
+def junk_shadow_diff(
+    limit: int = 200,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    settings: Settings = Depends(get_settings),
+) -> ShadowDiffResponse:
+    """Where the shadow score would disagree with the live one.
+
+    v2 computes on every scan and changes nothing. This is how it earns the right
+    to change something: the owner reads the real disagreements on their real
+    library, rather than trusting a fixture that was chosen to prove a point. The
+    cutover is a separate, deliberate decision and is not made here.
+    """
+    with factory() as session:
+        thr = settings_store.effective_junk(session, settings)
+        rows, summary = junk_analysis.shadow_diff(session, thr, limit=limit)
+    return ShadowDiffResponse(
+        items=[ShadowDiffRow(**row) for row in rows],
+        compared=summary["compared"],
+        disagreements=summary["disagreements"],
+        v2_stricter=summary["v2_stricter"],
+        v2_gentler=summary["v2_gentler"],
+        v2_abstained=summary["v2_abstained"],
+    )
 
 
 @router.get("/upgrades", response_model=UpgradesResponse)

@@ -122,7 +122,7 @@ _METADATA_HOSTS = frozenset(
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 
 
-def _reject_unsafe_base_url(service: str, base_url: str) -> None:
+def reject_unsafe_base_url(service: str, base_url: str) -> None:
     """Refuse a base URL that points at cloud instance metadata.
 
     Checked here rather than at the settings form because this is the only place
@@ -173,7 +173,7 @@ class BaseClient:
     ) -> None:
         if not base_url:
             raise ClientError(f"{service}: base_url is not configured")
-        _reject_unsafe_base_url(service, base_url)
+        reject_unsafe_base_url(service, base_url)
         self.service = service
         self.retry = retry or RetryPolicy()
         self.rate_limiter = rate_limiter or RateLimiter(0.0)

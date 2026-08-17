@@ -22,7 +22,10 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    // The dist directory is served unauthenticated, so a source map publishes
+    // the whole TypeScript source — every route name and request shape — to
+    // anyone who loads the login page.
+    sourcemap: false,
     rollupOptions: {
       output: {
         // Framework bytes change only on dependency bumps — a separate vendor

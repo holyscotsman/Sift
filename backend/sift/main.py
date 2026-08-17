@@ -122,7 +122,18 @@ def create_app(
         # every proposal is staged with dry_run unless SIFT_ACTIONS__DRY_RUN=false.
         action_engine = ActionEngine(session_factory, RadarrWriter(settings.radarr))
 
-    app = FastAPI(title="Sift", version=__version__, lifespan=_lifespan)
+    # No anonymous /docs, /redoc or /openapi.json. On a single-user instance
+    # whose login page faces the internet, the schema is pure reconnaissance —
+    # it hands an unauthenticated caller every route, every request body and the
+    # exact build version, and there is no second audience for it here.
+    app = FastAPI(
+        title="Sift",
+        version=__version__,
+        lifespan=_lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -190,7 +201,6 @@ def create_app(
         routes_musthave,
         routes_settings,
         routes_shows,
-    routes_shows,
         routes_storage,
         routes_system,
         routes_agent,
@@ -213,12 +223,27 @@ def create_app(
             app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
         index_file = _FRONTEND_DIST / "index.html"
 
+        # Resolved once: the containment check below is only meaningful against a
+        # path with no symlinks and no `..` left in it.
+        dist_root = _FRONTEND_DIST.resolve()
+
         @app.get("/{full_path:path}", include_in_schema=False)
         def spa(full_path: str) -> FileResponse:
             if full_path.startswith(("api/", "ws/")):
                 raise HTTPException(status_code=404, detail="not found")
-            candidate = _FRONTEND_DIST / full_path
-            if full_path and candidate.is_file() and candidate.is_relative_to(_FRONTEND_DIST):
+            # `is_relative_to` is a *lexical* comparison — it inspects path parts
+            # and never resolves `..`, so "../../../etc/passwd" satisfies it,
+            # while `is_file()` resolves that same string at the OS level and
+            # says yes. Together they served any readable file on the box to any
+            # anonymous caller — `/proc/self/environ` included, which on a hosted
+            # instance means the signing key, the database URL and every stored
+            # API key. Resolving first is what makes the containment check mean
+            # anything at all.
+            try:
+                candidate = (_FRONTEND_DIST / full_path).resolve(strict=True)
+            except (OSError, RuntimeError, ValueError):
+                return FileResponse(index_file)
+            if full_path and candidate.is_file() and candidate.is_relative_to(dist_root):
                 return FileResponse(candidate)
             return FileResponse(index_file)
     else:

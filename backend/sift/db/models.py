@@ -669,3 +669,37 @@ class MediaFile(Base):
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class ScoreV2(Base):
+    """The v2 junk score, computed alongside v1 and shown to nobody yet.
+
+    A separate table rather than columns on ``scores``, for the reason recorded
+    throughout this schema: ``create_all`` adds tables on a live database and
+    never adds columns. It is also the honest shape — v1 and v2 are two opinions
+    about the same film, and overwriting one with the other would destroy the
+    disagreement that the shadow diff exists to show.
+
+    ``previous_band`` is what this title's band was on the *last* scan, and it is
+    load-bearing rather than informational: band changes need a margin to stop a
+    title flapping in and out of the queue as votes tick over, and the margin
+    needs somewhere to remember from.
+    """
+
+    __tablename__ = "scores_v2"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    movie_id: Mapped[int] = mapped_column(
+        ForeignKey("movies.tmdb_id", ondelete="CASCADE"), unique=True
+    )
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    band: Mapped[str] = mapped_column(String(16), default="keep", index=True)
+    previous_band: Mapped[str | None] = mapped_column(String(16))
+    # Which P-rule fired. Stored so a changed rule can move a band immediately —
+    # a changed fact is not the same as a drifting number.
+    rule: Mapped[str | None] = mapped_column(String(8))
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    signals: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )

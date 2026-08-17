@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from dataclasses import dataclass, field
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -79,7 +80,11 @@ def token_accepted(state: AppState, presented: str | None) -> bool:
 
     static = state.settings.server.api_token
     static_secret = static.get_secret_value() if static else None
-    if static_secret and presented == static_secret:
+    # Constant-time: `==` on str short-circuits at the first differing byte,
+    # which leaks the token one character at a time to anyone willing to measure.
+    # Every other secret comparison in this codebase is already compare_digest;
+    # this one was the outlier.
+    if static_secret and presented and hmac.compare_digest(presented, static_secret):
         return True
     with state.session_factory() as session:
         account_configured = auth.is_configured(session)
