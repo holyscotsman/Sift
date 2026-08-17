@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.32.0 — Three reads that grew with the library
+
+Three places did work proportional to the whole library to answer a question
+about a handful of things. All three are invisible on the SQLite the tests run
+against, where a round trip is free, and all three are the dominant cost against
+hosted Postgres, where it is a network hop. This is the 2607.15.1 lesson turning
+up in three more places, so each now carries a structural pin rather than a
+memory.
+
+**Listing duplicates queried per group** — two statements each, the film and then
+its copies. `find` runs twice on every load of the Storage screen (directly, and
+again through the reclaim ledger) at a limit of a thousand, so a library with a
+few hundred duplicated films paid for it in the thousands. **64 statements for 60
+groups → 4**, and it no longer grows with the number of duplicates, which is the
+thing the feature exists to surface — so it was worst exactly where it mattered
+most. Copies are now read in one ordered pass, so a group's copies come back the
+same way every request instead of in whatever order the database chose.
+
+**Watch history wrote per row** — one SELECT per film per Plex user, so a
+four-person household with two thousand watched titles issued up to eight
+thousand sequential statements on every scan. The television half of the same
+write already preloaded; this was the film half, missed at the time.
+**123 statements for 120 rows → 3.**
+
+**The strand guard read the whole `media_files` table** to check two paths, then
+filtered in Python. That is one statement, so a statement count would have called
+it healthy — but it ships every row in the table over the wire on every reclaim
+action, and a thirty-thousand-episode library pays that to ask about a pair of
+files. The cost grows forever while the request stays the same size. Now two
+reads scoped to the request: which titles the requested paths belong to, then how
+many files those particular titles hold. Its pin asserts the *shape* — no
+unfiltered read of `media_files` — because the count was never what was wrong.
+
+Each pin carries a negative control asserting the work still happened, since a
+function that returns nothing satisfies any statement budget perfectly.
+
 ## 2607.31.0 — Close an unauthenticated file read, and score in shadow
 
 ### The serious one

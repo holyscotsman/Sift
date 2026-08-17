@@ -384,3 +384,41 @@ def test_removing_a_films_only_copy_is_refused(client):
     )
     assert response.status_code == 400
     assert "last copy" in response.json()["detail"]
+
+
+def test_the_strand_check_reads_only_what_the_request_touches(client):
+    """The guard must not cost the whole library to answer a question about two
+    files.
+
+    It was written as one unfiltered read of `media_files`, filtered in Python.
+    That is one statement — so a statement count would have called it fine — but
+    it ships every row in the table over the wire on every reclaim action, and a
+    thirty-thousand-episode library pays that to check two paths. The cost grows
+    forever while the request stays the same size, which is the shape worth
+    pinning rather than the count.
+    """
+    from sqlalchemy import event
+
+    c, factory = client
+    paths = _seed_actionable(factory)
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        response = c.post(
+            "/api/storage/act",
+            json={"target_kind": "show", "target_id": "76156", "paths": [paths[1]], "label": "one"},
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    assert response.status_code == 200  # the work really happened
+    reads = [s for s in seen if "FROM media_files" in s and s.upper().startswith("SELECT")]
+    assert reads, "the guard did not read media_files at all — is it still running?"
+    unscoped = [s for s in reads if "WHERE" not in s.upper()]
+    assert not unscoped, f"whole-table read of media_files: {unscoped[0][:120]}"

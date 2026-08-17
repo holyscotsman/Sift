@@ -135,3 +135,104 @@ def test_the_plex_phase_does_not_query_per_film(factory, settings):
     # 200 films: per-item work would be ~800 statements. A preloaded pass is a
     # handful regardless of library size.
     assert statements["n"] < 25, f"{statements['n']} statements for 200 films — per-item again?"
+
+
+def test_finding_duplicates_does_not_query_per_group(factory):
+    """Regression pin, same shape as the Plex-phase one above.
+
+    Listing duplicates was written as two statements per group — the film, then
+    its copies. `find` runs twice on every load of the Storage screen (directly,
+    and again through the reclaim ledger) with a limit of a thousand, so a
+    library with a few hundred duplicated films paid for it in the thousands.
+    Free on this SQLite; a network round trip each against hosted Postgres.
+
+    Measured on the fixture below: 64 statements for 60 groups, now 4.
+    """
+    from sqlalchemy import event
+
+    from sift.analysis import duplicates
+    from sift.db.models import Movie, PlexCopy
+
+    with factory() as session:
+        for i in range(1, 61):
+            tmdb_id = 5_000 + i
+            session.add(Movie(tmdb_id=tmdb_id, title=f"Film {i}", in_plex=True))
+            for copy in range(3):
+                session.add(
+                    PlexCopy(
+                        rating_key=f"{tmdb_id}-{copy}",
+                        movie_tmdb_id=tmdb_id,
+                        title=f"Film {i}",
+                    )
+                )
+        session.commit()
+
+    statements = {"n": 0}
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_a, **_kw):
+        statements["n"] += 1
+
+    try:
+        with factory() as session:
+            groups, surplus = duplicates.find(session, limit=1000)
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+
+    # NEGATIVE CONTROL for the budget: assert the work actually happened. A
+    # function that returned nothing would satisfy a statement budget perfectly.
+    assert len(groups) == 60
+    assert surplus == 120
+    assert all(len(g.copies) == 3 for g in groups)
+    assert statements["n"] < 10, f"{statements['n']} statements for 60 groups — per-group again?"
+
+
+def test_persisting_watch_history_does_not_query_per_row(factory, settings):
+    """The film half of the watch write was still per-row.
+
+    One SELECT per (film × Plex user): a four-person household with two thousand
+    watched titles issued up to eight thousand sequential statements every scan.
+    `_persist_show_watch` already preloaded; this one was missed. Free on SQLite,
+    a network round trip each against Neon — the 2607.15.1 shape exactly.
+    """
+    from sqlalchemy import event
+
+    from sift.db.models import WatchHistory
+    from sift.ingest.pipeline import ScanPipeline
+
+    pipe = ScanPipeline(factory, settings)
+    pipe._persist_plex([_plex_item(str(2_000 + i), 700 + i, f"Film {i}") for i in range(60)])
+    aggregates = [
+        {
+            "plex_rating_key": str(2_000 + i),
+            "plex_user": user,
+            "plays": 2,
+            "last_played_at": None,
+            "completion_pct": 1.0,
+            "is_kids_account": False,
+        }
+        for i in range(60)
+        for user in ("Dad", "Mum")
+    ]
+    pipe._persist_watch(aggregates)  # first pass creates the rows
+
+    statements = {"n": 0}
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_a, **_kw):
+        statements["n"] += 1
+
+    try:
+        result = pipe._persist_watch(aggregates)  # the rescan, which runs every scan
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+
+    # NEGATIVE CONTROL for the budget: a write that silently did nothing would
+    # satisfy any statement bound. Assert the rows are actually there and updated.
+    assert result["watch_records"] == 120
+    with factory() as session:
+        assert session.query(WatchHistory).count() == 120
+    # Per-row lookups would be ~120 statements on top of the writes.
+    assert statements["n"] < 20, f"{statements['n']} statements for 120 rows — per-row again?"
