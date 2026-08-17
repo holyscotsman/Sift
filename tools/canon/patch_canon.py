@@ -6,6 +6,18 @@ enter under a canon-source exemption: no vote floor (>=200 sanity only), but
 the owner's rating >= 6.0 floor holds — canonical-but-bad titles are reported,
 not added. List stays exactly 10,000 by displacing the lowest-fame 'popular'
 entries."""
+
+import os
+
+# Where the intermediate canon artefacts live. These are offline provenance
+# scripts, run by hand outside the app, so the working directory is a parameter
+# rather than a constant baked into the source.
+WORK_DIR = os.environ.get("CANON_WORK_DIR", ".")
+
+
+def work_path(name: str) -> str:
+    return os.path.join(WORK_DIR, name)
+
 import csv, gzip, json, re, sys, unicodedata
 from collections import defaultdict
 
@@ -104,7 +116,7 @@ def resolve(title, year):
     return max({m["id"]: m for m in cands}.values(), key=lambda m: (m["votes"], m["id"]))
 
 # ── current canon ─────────────────────────────────────────────────────────────
-canon = json.load(open("/home/claude/canon_10k.json"))
+canon = json.load(open(work_path("canon_10k.json")))
 titles = canon["titles"]
 canon_ids = {t["imdb_id"] for t in titles if "imdb_id" in t}
 canon_ny = set()
@@ -163,11 +175,11 @@ canon["pillars"]["canon_patch"] = ("Gap-fill from authoritative canons (AFI, Sig
                                    "National Film Registry, Palme d'Or/Golden Lion/Golden Bear, BFI 100, box-office): "
                                    "features these lists name that fame ranking missed. No vote floor (>=200 sanity); "
                                    "owner's >=6.0 rating floor enforced. Displaced an equal count of lowest-fame popular fill.")
-json.dump(canon, open("/home/claude/canon_10k.json", "w"), ensure_ascii=False, indent=1)
+json.dump(canon, open(work_path("canon_10k.json"), "w"), ensure_ascii=False, indent=1)
 
 lines = sorted((f"{e['title']} ({e['year']})" for e in full),
                key=lambda s: norm(s.rsplit(" (", 1)[0]) or s.lower())
-with open("/home/claude/canon_10k_list.txt", "w", encoding="utf-8") as fh:
+with open(work_path("canon_10k_list.txt"), "w", encoding="utf-8") as fh:
     fh.write(f"SIFT CANON - {len(full)} MOVIES\n")
     fh.write("Criterion Collection + cult classics + acclaimed consensus + popular favorites + award/festival/registry canon\n")
     fh.write("Alphabetical (ignoring articles).\n\n")
@@ -197,5 +209,5 @@ for key, (tag, label) in SOURCES.items():
 
 json.dump({"per_source": report, "final": final,
            "gaps_added": gap_list, "excluded_below_floor": sorted(set(excluded_low))},
-          open("/home/claude/validation_data.json", "w"), ensure_ascii=False, indent=1, default=list)
+          open(work_path("validation_data.json"), "w"), ensure_ascii=False, indent=1, default=list)
 print("\nsaved validation_data.json", file=sys.stderr)

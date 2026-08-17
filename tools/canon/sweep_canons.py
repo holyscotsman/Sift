@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
 """Fetch every parseable authoritative film canon and measure the 10k list's coverage."""
+
+import os
+
+# Where the intermediate canon artefacts live. These are offline provenance
+# scripts, run by hand outside the app, so the working directory is a parameter
+# rather than a constant baked into the source.
+WORK_DIR = os.environ.get("CANON_WORK_DIR", ".")
+
+
+def work_path(name: str) -> str:
+    return os.path.join(WORK_DIR, name)
+
 import json, os, re, sys, time, unicodedata, urllib.parse, urllib.request
 
 UA = {"User-Agent": "SiftCanonBuilder/1.0 (jasonsimmonds13@gmail.com) personal library research"}
@@ -93,7 +105,7 @@ def norm(t):
     t = re.sub(r"^(the|a|an|le|la|les|el|il|der|die|das)\s+", "", t)
     return re.sub(r"[^a-z0-9]", "", t)
 
-canon = json.load(open("/home/claude/canon_10k.json"))
+canon = json.load(open(work_path("canon_10k.json")))
 have = set()
 for t in canon["titles"]:
     n = norm(t["title"])
@@ -113,5 +125,5 @@ for key, page in SOURCES:
     pct = 100 * results[key]["matched"] / max(1, len(entries))
     print(f"{key}: parsed {len(entries)}, matched {results[key]['matched']} ({pct:.0f}%), missing {len(missing)}", file=sys.stderr)
 
-json.dump(results, open("/home/claude/sweep_results.json", "w"), ensure_ascii=False, indent=1)
+json.dump(results, open(work_path("sweep_results.json"), "w"), ensure_ascii=False, indent=1)
 print("saved sweep_results.json", file=sys.stderr)

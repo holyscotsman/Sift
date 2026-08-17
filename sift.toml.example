@@ -5,7 +5,7 @@
 # get committed. See `.env.example`.
 
 [server]
-host = "127.0.0.1"        # bind localhost by default (see CLAUDE.md non-functionals)
+host = "127.0.0.1"        # bind localhost by default (see docs/ENGINEERING.md)
 port = 8756
 # api_token is a secret — set SIFT_SERVER__API_TOKEN in .env instead.
 

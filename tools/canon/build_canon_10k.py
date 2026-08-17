@@ -9,6 +9,18 @@ fame (vote volume), gated by quality floors:
   - votes >= 10,000 (below that, nobody is reaching for it on movie night)
 Existing 5,000 (criterion/cult/consensus) kept verbatim.
 """
+
+import os
+
+# Where the intermediate canon artefacts live. These are offline provenance
+# scripts, run by hand outside the app, so the working directory is a parameter
+# rather than a constant baked into the source.
+WORK_DIR = os.environ.get("CANON_WORK_DIR", ".")
+
+
+def work_path(name: str) -> str:
+    return os.path.join(WORK_DIR, name)
+
 import csv, gzip, json, re, sys, unicodedata
 
 def norm(t):
@@ -16,7 +28,7 @@ def norm(t):
     t = re.sub(r"^(the|a|an)\s+", "", t)
     return re.sub(r"[^a-z0-9]", "", t)
 
-base = json.load(open("/home/claude/canon_expanded.json"))
+base = json.load(open(work_path("canon_expanded.json")))
 existing = base["titles"]
 taken_ids = {e["imdb_id"] for e in existing if "imdb_id" in e}
 taken_ny = {(norm(e["title"]), e["year"]) for e in existing}
@@ -88,13 +100,13 @@ out["pillars"] = dict(base["pillars"])
 out["pillars"]["popular"] = ("Watch-desire coverage: fame-ranked (votes desc) IMDb features, "
                              "rating >= 6.0, votes >= 10k; non-English-original requires rating >= 7.0 "
                              "and votes >= 25k. Tiered 2/3/4 by fame rank.")
-with open("/home/claude/canon_10k.json", "w", encoding="utf-8") as fh:
+with open(work_path("canon_10k.json"), "w", encoding="utf-8") as fh:
     json.dump(out, fh, ensure_ascii=False, indent=1)
 
 # plain-text list, alphabetical ignoring leading articles
 lines = sorted((f"{e['title']} ({e['year']})" for e in full),
                key=lambda s: norm(s.rsplit(" (", 1)[0]) or s.lower())
-with open("/home/claude/canon_10k_list.txt", "w", encoding="utf-8") as fh:
+with open(work_path("canon_10k_list.txt"), "w", encoding="utf-8") as fh:
     fh.write(f"SIFT CANON - {len(full)} MOVIES\n")
     fh.write("Criterion Collection + cult classics + acclaimed consensus + popular favorites\n")
     fh.write("Alphabetical (ignoring The/A/An).\n\n")

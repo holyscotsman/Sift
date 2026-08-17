@@ -9,7 +9,6 @@ approval-gated, dry-run stays the default, AI advises and never decides.
 
 ## 2607.16.0 — Cycle 09
 
-**Plan:** `docs/optimization/CYCLE_09.md` (8 changes, shipped as 11 slices).
 
 Disk-space reclamation across TV and movies. Measurement first: `media_files`
 records the size, duration, resolution and codec that Radarr and Plex were
@@ -28,7 +27,6 @@ guard and are carried out by an agent on the media box, never by Sift.
 
 ## 2607.8.0 — Cycle 08
 
-**Plan:** `docs/optimization/CYCLE_08.md` (10/10 approved after change review, 4 amended).
 
 1. **Decisions restore** — the other half of Cycle 7's backup. `POST
    /api/import/decisions` previews by DEFAULT ("would set 1 keep-override, 1
@@ -79,7 +77,6 @@ missing from api.ts imports (tsc caught it).
 
 ## 2607.7.0 — Cycle 07
 
-**Plan:** `docs/optimization/CYCLE_07.md` (10/10 approved after change review, 4 amended).
 
 1. **The scan panel shows what it's counting** — the streamed per-phase counts
    ("Reading Plex catalog · plex items 1,234") render inline on active/done
@@ -129,7 +126,6 @@ behind proxies); the expand-all toggle had to compare against `items`, not
 
 ## 2607.6.0 — Cycle 06
 
-**Plan:** `docs/optimization/CYCLE_06.md` (10/10 approved after change review, 4 amended).
 
 1. **Ask compare mode, made real** — the long-dead `mode: "compare"` flag now
    works: under tandem, one deterministic retrieval is phrased by BOTH providers
@@ -180,7 +176,6 @@ removed rather than left to rot.
 
 ## 2607.5.0 — Cycle 05
 
-**Plan:** `docs/optimization/CYCLE_05.md` (10/10 approved after change review, 6 amended).
 
 1. **A crashed page no longer kills the app** — a route-level React error
    boundary keeps the shell alive, offers Try again / Reload, resets on route
@@ -236,7 +231,6 @@ the dominant era, confirmed intact.
 
 ## 2607.4.0 — Cycle 04
 
-**Plan:** `docs/optimization/CYCLE_04.md` (10/10 approved after change review, 5 amended).
 
 1. **Health probes stopped hammering dead hosts** — the full connection sweep
    behind `/api/health` and `/api/settings` is cached 15 s and invalidated on
@@ -285,7 +279,6 @@ closes the help overlay even when a dialog check would otherwise suppress it.
 
 ## 2607.3.0 — Cycle 03
 
-**Plan:** `docs/optimization/CYCLE_03.md` (10/10 approved after change review, 5 amended).
 
 1. **Auditable library health** — the placeholder score is gone. Health now starts
    at 100 and subtracts *named* deductions (junk backlog and quality-cutoff share
@@ -344,7 +337,6 @@ had no failure surface (errors now toast and leave remaining rows undecided).
 
 ## 2607.2.0 — Cycle 02
 
-**Plan:** `docs/optimization/CYCLE_02.md` (10/10 approved after change review, 4 amended).
 
 1. **Dashboard that tells you what's next** — "Needs your attention" is now
    state-driven: junk queue and pending Must-Have picks (with live counts, from
@@ -405,7 +397,6 @@ graceful-fallback path).
 
 ## 2607.1.0 — Cycle 01
 
-**Plan:** `docs/optimization/CYCLE_01.md` (10/10 approved after change review, 5 amended).
 
 1. **Credentials that stick** *(owner-reported)* — login + wizard forms carry the
    `name`/`id` attributes password managers require, so browsers finally offer to

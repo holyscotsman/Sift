@@ -51,7 +51,7 @@ year).
 
 ## Is it advanced enough? An honest answer
 
-What "advanced" cannot mean here: the repo's constitution (CLAUDE.md §4,
+What "advanced" cannot mean here: the repo's constitution (docs/ENGINEERING.md §4,
 ARCHITECTURE §2) forbids AI-decided verdicts, and every ranking must be
 deterministic and explainable. A neural scorer deciding deletions is off the
 table *by design*, and that design is correct for an app that proposes
