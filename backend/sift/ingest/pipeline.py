@@ -1417,19 +1417,26 @@ class ScanPipeline:
                 )
             ):
                 rk_to_tmdb.setdefault(rk, tmdb)
+            # Existing rows read once, keyed the way the loop looks them up. The
+            # per-aggregate SELECT this replaces ran once per (film × Plex user),
+            # so a four-person household with two thousand watched titles issued
+            # up to eight thousand sequential statements every scan — free here on
+            # SQLite, and the dominant cost against Neon. `_persist_show_watch`
+            # already preloads; this was the film half that was missed.
+            existing: dict[tuple[int, str | None], WatchHistory] = {
+                (row.movie_id, row.plex_user): row
+                for row in session.scalars(select(WatchHistory))
+            }
             for data in aggregates:
                 tmdb_id = rk_to_tmdb.get(data["plex_rating_key"])
                 if tmdb_id is None:
                     continue
-                row = session.scalars(
-                    select(WatchHistory).where(
-                        WatchHistory.movie_id == tmdb_id,
-                        WatchHistory.plex_user == data["plex_user"],
-                    )
-                ).first()
+                key = (tmdb_id, data["plex_user"])
+                row = existing.get(key)
                 if row is None:
                     row = WatchHistory(movie_id=tmdb_id, plex_user=data["plex_user"])
                     session.add(row)
+                    existing[key] = row
                 row.plays = data["plays"]
                 row.last_played_at = data["last_played_at"]
                 row.completion_pct = data["completion_pct"]

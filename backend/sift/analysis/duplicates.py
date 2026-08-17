@@ -38,6 +38,10 @@ class DuplicateGroup:
         return max(0, len(self.copies) - 1)
 
 
+# Films per database round trip, matching the ingest writers and the scoring loop.
+_CHUNK = 500
+
+
 def find(session: Session, *, limit: int = 200) -> tuple[list[DuplicateGroup], int]:
     """Films held more than once, most-duplicated first.
 
@@ -57,12 +61,30 @@ def find(session: Session, *, limit: int = 200) -> tuple[list[DuplicateGroup], i
             .limit(limit)
         )
     )
+    # Both lookups are read once for the whole page rather than once per group.
+    # The per-group shape cost two round trips each, and `find` is called twice on
+    # every load of the Storage screen (once directly, once through the ledger)
+    # with a limit of a thousand — so a library with a few hundred duplicated
+    # films paid for it in the thousands. Free on the SQLite the tests run
+    # against, dominant against hosted Postgres: the 2607.15.1 lesson again.
+    ids = [int(tmdb_id) for tmdb_id, _count in rows]
+    movies: dict[int, Movie] = {}
+    copies_by_movie: dict[int, list[PlexCopy]] = {}
+    for start in range(0, len(ids), _CHUNK):
+        batch = ids[start : start + _CHUNK]
+        for found in session.scalars(select(Movie).where(Movie.tmdb_id.in_(batch))):
+            movies[found.tmdb_id] = found
+        # Ordered so the copies of a film come back the same way every request;
+        # the first one names the group when the film itself is unknown.
+        for copy in session.scalars(
+            select(PlexCopy).where(PlexCopy.movie_tmdb_id.in_(batch)).order_by(PlexCopy.rating_key)
+        ):
+            copies_by_movie.setdefault(copy.movie_tmdb_id, []).append(copy)
+
     groups: list[DuplicateGroup] = []
-    for tmdb_id, _count in rows:
-        movie = session.get(Movie, tmdb_id)
-        copies = list(
-            session.scalars(select(PlexCopy).where(PlexCopy.movie_tmdb_id == tmdb_id))
-        )
+    for tmdb_id in ids:
+        movie = movies.get(tmdb_id)
+        copies = copies_by_movie.get(tmdb_id, [])
         groups.append(
             DuplicateGroup(
                 tmdb_id=tmdb_id,

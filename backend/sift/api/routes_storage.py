@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import ledger as ledger_analysis
@@ -43,6 +43,9 @@ from .schemas import (
     TierSummary,
     TvStorageResponse,
 )
+
+# Paths or ids per statement, matching the ingest writers.
+_CHUNK = 500
 
 router = APIRouter(prefix="/api/storage", tags=["storage"], dependencies=[AuthDep])
 
@@ -271,26 +274,48 @@ def _would_strand(factory: sessionmaker[Session], paths: Sequence[str]) -> int:
     everything on record, so removing three copies of an episode that has three is
     refused while removing two of them is allowed.
     """
-    requested = set(paths)
+    requested = sorted(set(paths))
+    if not requested:
+        return 0
+
+    def _owner(episode_id: int | None, movie_id: int | None) -> tuple[str, int] | None:
+        if episode_id is not None:
+            return ("episode", episode_id)
+        if movie_id is not None:
+            return ("movie", movie_id)
+        return None
+
     with factory() as session:
-        rows = session.execute(
-            select(MediaFile.path, MediaFile.episode_id, MediaFile.movie_tmdb_id)
-        )
-        held: dict[tuple[str, int], int] = {}
+        # Scoped to the request rather than to the library. Reading every
+        # media_files row to answer a question about a handful of paths meant a
+        # thirty-thousand-episode library shipped thirty thousand rows over the
+        # wire on every reclaim action — a cost that grows forever while the
+        # request itself stays the same size. Two bounded reads instead: which
+        # titles the requested paths belong to, then how many files those
+        # particular titles hold.
         losing: dict[tuple[str, int], int] = {}
-        for path, episode_id, movie_id in rows:
-            owner = (
-                ("episode", episode_id)
-                if episode_id is not None
-                else ("movie", movie_id)
-                if movie_id is not None
-                else None
-            )
-            if owner is None:
-                continue
-            held[owner] = held.get(owner, 0) + 1
-            if path in requested:
-                losing[owner] = losing.get(owner, 0) + 1
+        for start in range(0, len(requested), _CHUNK):
+            batch = requested[start : start + _CHUNK]
+            for episode_id, movie_id in session.execute(
+                select(MediaFile.episode_id, MediaFile.movie_tmdb_id).where(
+                    MediaFile.path.in_(batch)
+                )
+            ):
+                owner = _owner(episode_id, movie_id)
+                if owner is not None:
+                    losing[owner] = losing.get(owner, 0) + 1
+        if not losing:
+            return 0
+
+        held: dict[tuple[str, int], int] = {}
+        for column, kind in ((MediaFile.episode_id, "episode"), (MediaFile.movie_tmdb_id, "movie")):
+            ids = sorted({oid for owner_kind, oid in losing if owner_kind == kind})
+            for start in range(0, len(ids), _CHUNK):
+                batch_ids = ids[start : start + _CHUNK]
+                for owner_id, count in session.execute(
+                    select(column, func.count()).where(column.in_(batch_ids)).group_by(column)
+                ):
+                    held[(kind, owner_id)] = int(count)
     return sum(1 for owner, count in losing.items() if count >= held.get(owner, 0))
 
 
