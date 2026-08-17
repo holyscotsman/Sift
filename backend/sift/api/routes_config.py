@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import anthropic as anthropic_ai
 from ..ai.registry import anthropic_key
+from ..clients.base import ClientError, reject_unsafe_base_url
 from ..ingest import sections as section_plan
 from ..services import config_store, reset, runtime
 from ..services.health import check_service
@@ -93,6 +94,14 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
 
     if service == "ollama":
         base = trial.ai.local_base_url.rstrip("/")
+        # The link-local / metadata-host guard lives in BaseClient, and this probe
+        # builds its own httpx client — so it was the one path that could be
+        # pointed at 169.254.169.254 and used as a reachability oracle. Private
+        # ranges stay allowed: that is where a local Ollama actually lives.
+        try:
+            reject_unsafe_base_url("ollama", base)
+        except ClientError as exc:
+            return ServiceHealth(service="ollama", ok=False, detail=str(exc), latency_ms=None)
         try:
             async with httpx.AsyncClient(timeout=6.0) as client:
                 resp = await client.get(f"{base}/api/tags")

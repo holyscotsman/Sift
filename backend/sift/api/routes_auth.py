@@ -8,12 +8,19 @@ the client stores and sends like the access token.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..services import auth
 from ..services.ratelimit import LoginRateLimiter
-from .deps import AuthDep, get_login_limiter, get_session_factory
+from .deps import (
+    AuthDep,
+    get_login_limiter,
+    get_session_factory,
+    get_state,
+    presented_token,
+    token_accepted,
+)
 from .schemas import (
     AuthStatus,
     ChangePasswordRequest,
@@ -26,17 +33,45 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.get("/status", response_model=AuthStatus)
-def status(factory: sessionmaker[Session] = Depends(get_session_factory)) -> AuthStatus:
+def status(
+    request: Request,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    authorization: str | None = Header(default=None),
+    x_sift_token: str | None = Header(default=None),
+) -> AuthStatus:
     with factory() as session:
         configured = auth.is_configured(session)
-        username = (auth.get_auth(session) or {}).get("username") if configured else None
+        # The username is returned only to a caller who already holds a valid
+        # credential. Login refuses on an unknown username before it ever checks
+        # the password, and the rate limiter is keyed by username — so handing
+        # the real one to anonymous callers turns a two-dimensional guess into a
+        # one-dimensional one. The sign-in screen needs `setup_complete` alone;
+        # it prefills the name from its own local storage.
+        known = configured and token_accepted(
+            get_state(request), presented_token(authorization, x_sift_token)
+        )
+        username = (auth.get_auth(session) or {}).get("username") if known else None
     return AuthStatus(setup_complete=configured, username=username)
 
 
 @router.post("/setup", response_model=TokenResponse, status_code=201)
 def setup(
-    body: SetupRequest, factory: sessionmaker[Session] = Depends(get_session_factory)
+    request: Request,
+    body: SetupRequest,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    authorization: str | None = Header(default=None),
+    x_sift_token: str | None = Header(default=None),
 ) -> TokenResponse:
+    # The only guard used to be "no account exists yet", which is a window rather
+    # than a wall: anyone who reached the hostname first got the account, and the
+    # owner got a 409. Worse, the window reopens every time the settings table is
+    # empty on boot. Where a static server token is configured — the hosted
+    # Blueprint generates one — creating the account now requires it, so the
+    # first-runner has to be somebody holding a deploy credential.
+    state = get_state(request)
+    static = state.settings.server.api_token
+    if static and not token_accepted(state, presented_token(authorization, x_sift_token)):
+        raise HTTPException(status_code=401, detail="setup requires the server access token")
     username = body.username.strip()
     if len(username) < 3:
         raise HTTPException(status_code=422, detail="username must be at least 3 characters")

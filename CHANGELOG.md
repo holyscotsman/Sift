@@ -2,6 +2,92 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.31.0 — Close an unauthenticated file read, and score in shadow
+
+### The serious one
+
+Anyone who knew this instance's address could read any file on the server,
+without logging in.
+
+The route that serves the built UI checked containment with
+`candidate.is_relative_to(dist)`. That comparison is **lexical** — it inspects
+path segments and never resolves `..` — so `../../../etc/passwd` satisfied it.
+The `is_file()` check beside it *does* resolve `..`, at the OS level, and
+cheerfully said yes. Each check looked correct in isolation; together they served
+whatever the second one could find. A browser collapses a literal `../` before
+sending, which is why this never showed up by hand, but `%2e%2e` survives the
+client, is decoded by the server, and is not re-normalised.
+
+The file that matters is `/proc/self/environ`. On a hosted instance that is the
+signing key, the database URL and every stored API key, which makes credential
+encryption at rest irrelevant — the key and the ciphertext came through the same
+hole. The path is now resolved before it is compared, and the containment check
+finally means what it says.
+
+**Rotate the credentials on any instance that has been publicly reachable.** The
+fix closes the door; it cannot un-disclose anything already read.
+
+### The rest of the same audit
+
+* **The setup wizard was a window, not a wall.** Its only guard was "no account
+  exists yet", so whoever reached a fresh instance first got the account and the
+  owner got a 409 — and the window reopened every time the settings table came up
+  empty. Where a static server token is configured, which the hosted Blueprint
+  generates, creating the account now requires it.
+* **The schema is no longer public.** `/openapi.json`, `/docs` and `/redoc` were
+  served to anonymous callers, handing over every route, every request body and
+  the exact build version. There is no second audience for that here.
+* **The username is no longer public.** Login refuses on an unknown username
+  before it checks the password, and the rate limiter is keyed by username, so
+  publishing the real one turned a two-dimensional guess into a one-dimensional
+  one. A signed-in caller still gets it; Settings renders it.
+* **The static token is compared in constant time.** `==` on a string
+  short-circuits at the first differing byte. Every other secret comparison in
+  the codebase already used `compare_digest`; this was the outlier.
+* **The Ollama connection test honours the URL guard.** It built its own HTTP
+  client, so it was the one path that could be aimed at cloud metadata. Private
+  ranges stay allowed — that is where a local Ollama lives.
+* **Source maps are out of the production bundle**, and `routes_shows` is no
+  longer registered twice.
+
+### Scoring, second opinion
+
+`scores_v2` now computes on every scan, in its own table, and changes nothing.
+
+v1 blends signals additively: every signal pushes the same number, so enough
+small pushes add up to a removal. v2 states the asymmetry as arithmetic instead —
+obscurity is the only thing that presses toward deletion, and protection
+multiplies it away:
+
+```
+score = 100 · clamp(pressure · (1 − protection) + w_q · quality_deficit)
+```
+
+Full protection zeroes any amount of obscurity pressure; zero protection leaves
+it untouched. There is no combination of weak signals that condemns a film
+somebody actually watched. Three consequences, each a v1 bug made structural: a
+never-played title cannot be condemned, and neither can one abandoned eight
+minutes in; quality is capped below a third of the smaller real signal, so a
+famously bad film stays; and a title with thin evidence returns `insufficient`
+rather than guessing.
+
+It also reads the audit trail for the first time — a film you *asked for* and
+never watched is a different thing from one nobody wanted, and from watch history
+alone those look identical.
+
+Bands move only on a 3-point margin, so a title stops flapping in and out of the
+queue as votes tick over. Cutoffs are 70/50 against v1's 60/40, which visibly
+shrinks the queue — which is exactly why none of it is shown yet.
+`GET /api/junk/shadow-diff` lists every title the two disagree about, with both
+scores. The golden set checks the rules; the shadow diff checks the judgement, on
+your library rather than on cases chosen to prove a point. Cutover stays a
+separate, deliberate decision.
+
+Twenty-four new tests. Every negative control mutation-verified: reverting the
+traversal fix turns four of them red, and the engagement-floor control was
+rewritten after the first version of it passed against a deliberately broken
+implementation.
+
 ## 2607.30.0 — Request the essential canon, a handful at a time
 
 The Canon tab gains one batch action: request the next few essential films you do

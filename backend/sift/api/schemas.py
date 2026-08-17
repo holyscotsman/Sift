@@ -854,3 +854,26 @@ class CanonBatchRequestIn(BaseModel):
 
     tier: int | None = None
     limit: int = 10
+
+
+class ShadowDiffRow(BaseModel):
+    """One title where the shadow score disagrees with the live one."""
+
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    v1_band: str
+    v1_score: float
+    v2_band: str
+    v2_score: float
+    v2_rule: str | None = None
+    v2_confidence: float
+
+
+class ShadowDiffResponse(BaseModel):
+    items: list[ShadowDiffRow]
+    compared: int
+    disagreements: int
+    v2_stricter: int
+    v2_gentler: int
+    v2_abstained: int
