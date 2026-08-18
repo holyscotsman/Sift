@@ -8,7 +8,7 @@ import { ConnectionsForm } from "@/components/ConnectionsForm";
 import { SectionsForm } from "@/components/SectionsForm";
 import { LockIcon } from "@/components/icons";
 import { Pill } from "@/components/ui";
-import { api, getToken, setToken } from "@/lib/api";
+import { api, setToken, urlToken } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 import { useToast } from "@/components/Toast";
 import type {
@@ -685,7 +685,7 @@ function RestoreBackup() {
 // A download link can't send auth headers — token rides the query string, same
 // as the poster and CSV routes.
 function decisionsBackupHref(): string {
-  const token = getToken();
+  const token = urlToken();
   return `/api/export/decisions.json${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 }
 

@@ -15,12 +15,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import SecretStr
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import __version__
@@ -142,6 +143,34 @@ def create_app(
     )
     # Large JSON pages (library lists) compress ~10x; small responses skip it.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    @app.exception_handler(OperationalError)
+    @app.exception_handler(DBAPIError)
+    async def _database_unavailable(
+        _request: Request, exc: Exception
+    ) -> JSONResponse:
+        """Say the database is unreachable, rather than "Internal Server Error".
+
+        A hosted database can refuse queries for reasons that have nothing to do
+        with this app — a connection limit, a suspended compute, an exhausted
+        free-tier transfer allowance. From the browser all of those looked
+        identical to a bug in Sift: a bare 500 on one screen and a spinner that
+        never resolves on another. Naming the cause is the difference between
+        "something is broken" and "the database is refusing queries, here is
+        where to look".
+        """
+        log.error("database unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": (
+                    "The database is not accepting queries right now. Sift itself is "
+                    "running — this is the database refusing the connection. Check "
+                    "your database provider's dashboard for a suspended compute or "
+                    "an exhausted plan limit."
+                )
+            },
+        )
 
     @app.middleware("http")
     async def _security_headers(request, call_next):  # type: ignore[no-untyped-def]

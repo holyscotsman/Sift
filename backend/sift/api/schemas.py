@@ -877,3 +877,10 @@ class ShadowDiffResponse(BaseModel):
     v2_stricter: int
     v2_gentler: int
     v2_abstained: int
+
+
+class AssetTokenResponse(BaseModel):
+    """A short-lived, read-only credential for URLs that cannot carry a header."""
+
+    token: str
+    expires_in: int

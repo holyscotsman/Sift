@@ -69,7 +69,9 @@ def presented_token(authorization: str | None, x_sift_token: str | None) -> str 
     return x_sift_token
 
 
-def token_accepted(state: AppState, presented: str | None) -> bool:
+def token_accepted(
+    state: AppState, presented: str | None, *, allow_asset: bool = False
+) -> bool:
     """Central auth decision, shared by the API gate and the poster route.
 
     Accepts (a) the static ``SIFT_SERVER__API_TOKEN`` when configured, or (b) a valid
@@ -86,9 +88,20 @@ def token_accepted(state: AppState, presented: str | None) -> bool:
     # this one was the outlier.
     if static_secret and presented and hmac.compare_digest(presented, static_secret):
         return True
+    # Asset scope is opened only by the routes that need it — a poster, a CSV
+    # download, the scan socket — because those are the URLs that carry a token
+    # in the query string. Everything else requires a full session token, so a
+    # token recovered from an access log cannot reach the API.
+    scopes = (
+        (auth.SCOPE_SESSION, auth.SCOPE_ASSET) if allow_asset else (auth.SCOPE_SESSION,)
+    )
     with state.session_factory() as session:
         account_configured = auth.is_configured(session)
-        if account_configured and presented and auth.token_valid(session, presented):
+        if (
+            account_configured
+            and presented
+            and auth.token_valid(session, presented, scopes=scopes)
+        ):
             return True
     # Nothing configured yet → open (fresh install, local dev). Once either the static
     # token or an account exists, a valid credential is required.

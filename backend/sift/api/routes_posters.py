@@ -38,9 +38,11 @@ async def poster(
     authorization: str | None = Header(default=None),
     x_sift_token: str | None = Header(default=None),
 ) -> FileResponse:
-    # <img> can't send headers, so the token also comes via ?token=.
+    # <img> can't send headers, so the token also comes via ?token=. That URL is
+    # recorded by every proxy it passes, so the query form should be a
+    # short-lived asset token rather than the session credential.
     presented = token or presented_token(authorization, x_sift_token)
-    if not token_accepted(get_state(request), presented):
+    if not token_accepted(get_state(request), presented, allow_asset=True):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="login required")
     path = await get_state(request).posters.get(tmdb_id)
     if path is None:
@@ -49,5 +51,7 @@ async def poster(
     return FileResponse(
         path,
         media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=604800"},  # a week; ids are stable
+        # `private`, not `public`: the URL carries a credential, and a shared
+        # cache has no business keeping a copy of it keyed by that URL.
+        headers={"Cache-Control": "private, max-age=604800"},  # a week; ids are stable
     )

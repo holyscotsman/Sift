@@ -2,6 +2,45 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.39.0 — Say when it is the database, and keep credentials out of URLs
+
+### A refusing database is not a bug in this app
+
+A hosted database can stop accepting queries for reasons that have nothing to do
+with Sift: a connection limit, a suspended compute, an exhausted free-tier
+transfer allowance. All of them arrive as the same exception, and all of them
+used to surface as a bare **"Internal Server Error"** on one screen and a spinner
+that never resolved on another — from the browser, indistinguishable from the app
+being broken.
+
+Those now return **503** with a plain sentence: the database is refusing queries,
+Sift itself is running, go and look at the provider's dashboard. That is the
+difference between "something is broken" and knowing where to look. The negative
+control matters as much as the pin: a handler that caught everything would turn
+ordinary responses into 503s and make a healthy app look permanently down.
+
+### Credentials no longer travel in URLs
+
+An `<img>`, a download link and a WebSocket cannot send a header, so posters, CSV
+exports and the scan socket all carried `?token=` — and a query string is recorded
+by every proxy it passes, kept in browser history, and stored by shared caches.
+What travelled there was the **thirty-day credential that opens the entire API**.
+
+Tokens now carry a scope. URLs get a separate one that lasts fifteen minutes and
+opens nothing but the asset it was minted for; every other route requires a full
+session token. A token recovered from an access log is both expired and useless
+against the API. The poster response also changed from `Cache-Control: public` to
+`private`, since a shared cache has no business keeping a copy of a URL that
+contains a credential.
+
+Tokens issued before scopes existed carry no scope field and are still read as
+session tokens, so nobody is signed out by this. If the short-lived token is
+unavailable for any reason the session token stands in exactly as before — a
+failure here must never mean a page of broken thumbnails.
+
+Mutation-verified in both directions: not enforcing the scope, never granting
+asset scope, and giving asset tokens a thirty-day life each turn a pin red.
+
 ## 2607.38.0 — Three more places the interface was quietly wrong
 
 **The audit log said nothing had happened.** `Activity` destructured two of the

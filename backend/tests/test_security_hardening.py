@@ -166,3 +166,128 @@ def test_the_schema_is_not_served_anonymously(client: TestClient) -> None:
         assert '"openapi"' not in body, path
         assert '"/api/agent/claim"' not in body, path
         assert "swagger-ui" not in body.lower(), path
+
+
+def _signed_in(client: TestClient, factory) -> str:
+    with factory() as session:
+        auth.create_account(session, "owner", "correct-horse-battery")
+    return str(
+        client.post(
+            "/api/auth/login", json={"username": "owner", "password": "correct-horse-battery"}
+        ).json()["token"]
+    )
+
+
+def test_an_asset_token_cannot_open_the_api(client: TestClient, factory) -> None:
+    """The whole point of minting a separate one.
+
+    Posters, downloads and the scan socket carry their credential in the query
+    string, because an <img>, a download link and a WebSocket cannot send a
+    header. Query strings are recorded by every proxy they pass and kept in
+    browser history — so what travels there must not be the thirty-day
+    credential that opens the entire API.
+    """
+    session_token = _signed_in(client, factory)
+    asset = client.get("/api/auth/asset-token", headers={"X-Sift-Token": session_token}).json()
+
+    # It opens the asset route it was minted for...
+    assert client.get(f"/api/poster/603?token={asset['token']}").status_code in (404, 200)
+    # ...and nothing else.
+    for path in ("/api/movies", "/api/status", "/api/config", "/api/activity"):
+        assert (
+            client.get(path, headers={"X-Sift-Token": asset["token"]}).status_code == 401
+        ), path
+    assert asset["expires_in"] <= 60 * 60
+
+
+def test_the_session_token_still_opens_everything(client: TestClient, factory) -> None:
+    """NEGATIVE CONTROL: scoping must not lock the real session out.
+
+    A gate that refused both kinds would satisfy the test above and log the owner
+    out of their own app.
+    """
+    session_token = _signed_in(client, factory)
+    for path in ("/api/movies", "/api/status", "/api/config"):
+        assert client.get(path, headers={"X-Sift-Token": session_token}).status_code == 200, path
+    assert client.get(f"/api/poster/603?token={session_token}").status_code in (404, 200)
+
+
+def test_an_asset_token_expires_quickly() -> None:
+    """A leaked access log should yield something already dead."""
+    from sift.services import auth as auth_service
+
+    issued = auth_service.issue_token("secret", "owner", now=0, scope=auth_service.SCOPE_ASSET)
+    assert auth_service.verify_token(
+        "secret", issued, now=60, scopes=(auth_service.SCOPE_ASSET,)
+    ) == "owner"
+    # Well inside the thirty-day session lifetime, and long gone.
+    assert (
+        auth_service.verify_token(
+            "secret", issued, now=60 * 60 * 24, scopes=(auth_service.SCOPE_ASSET,)
+        )
+        is None
+    )
+
+
+def test_tokens_issued_before_scopes_still_work() -> None:
+    """NEGATIVE CONTROL: nobody is logged out by this change.
+
+    A token minted before the scope field existed carries no `s` and must still
+    read as a full session token rather than being rejected.
+    """
+    import base64
+    import hashlib
+    import hmac as _hmac
+    import json
+
+    from sift.services import auth as auth_service
+
+    body = json.dumps({"u": "owner", "iat": 0, "exp": 10_000}).encode()
+    payload = base64.urlsafe_b64encode(body).decode().rstrip("=")
+    sig = _hmac.new(b"secret", payload.encode(), hashlib.sha256).hexdigest()
+    legacy = f"{payload}.{sig}"
+
+    assert auth_service.verify_token("secret", legacy, now=100) == "owner"
+
+
+def test_a_refusing_database_says_so_rather_than_500(factory, settings) -> None:
+    """A hosted database that stops accepting queries is not a bug in this app.
+
+    A connection limit, a suspended compute or an exhausted free-tier allowance
+    all arrive as the same exception, and all of them used to surface as bare
+    "Internal Server Error" on one screen and a spinner that never resolved on
+    another — indistinguishable, from the browser, from Sift being broken.
+    """
+    from sqlalchemy import event
+    from sqlalchemy.exc import OperationalError
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    app = create_app(settings, session_factory=factory)
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _refuse(*_a, **_kw):
+        raise OperationalError("SELECT 1", {}, Exception("transfer allowance exceeded"))
+
+    try:
+        with TestClient(app, raise_server_exceptions=False) as c:
+            response = c.get("/api/junk")
+    finally:
+        event.remove(engine, "before_cursor_execute", _refuse)
+
+    assert response.status_code == 503
+    detail = response.json()["detail"]
+    assert "database" in detail.lower()
+    # And it must not blame Sift for something Sift did not do.
+    assert "internal server error" not in detail.lower()
+
+
+def test_a_healthy_database_is_not_reported_as_unavailable(factory, settings) -> None:
+    """NEGATIVE CONTROL: a handler that caught everything would turn ordinary
+    responses into 503s and make the app look permanently broken."""
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    with TestClient(create_app(settings, session_factory=factory)) as c:
+        assert c.get("/api/junk").status_code == 200
+        assert c.get("/api/status").status_code == 200

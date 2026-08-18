@@ -52,7 +52,9 @@ async def scan_ws(
     # Same auth as the REST gate: a login session token or the static API token.
     # (Previously only the static token was accepted, so progress silently dropped
     # for logged-in users on a token-configured deploy.)
-    if not token_accepted(state, token):
+    # The socket URL carries the token in its query string for the same reason
+    # the poster route does, so it takes the same short-lived asset scope.
+    if not token_accepted(state, token, allow_asset=True):
         await websocket.close(code=4401)
         return
     hub: ScanHub = state.hub

@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { GridIcon, TableIcon } from "@/components/icons";
 import { ShowsList } from "@/components/ShowsList";
-import { api, getToken } from "@/lib/api";
+import { api, urlToken } from "@/lib/api";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
@@ -177,7 +177,7 @@ export function Library() {
       if (k === "page" || k === "page_size" || v === undefined || v === null) continue;
       usp.set(k, String(v));
     }
-    const token = getToken();
+    const token = urlToken();
     if (token) usp.set("token", token);
     return `/api/movies.csv?${usp.toString()}`;
   }, [buildQuery]);

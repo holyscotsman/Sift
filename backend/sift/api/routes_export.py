@@ -68,7 +68,10 @@ def export_movies_csv(
     order: str = "asc",
 ) -> StreamingResponse:
     presented = token or presented_token(authorization, x_sift_token)
-    if not token_accepted(get_state(request), presented):
+    # A download link cannot send a header, so this accepts the short-lived asset
+    # token as well. Read-only by construction — the restore route below is a
+    # write and deliberately does not.
+    if not token_accepted(get_state(request), presented, allow_asset=True):
         raise HTTPException(status_code=401, detail="login required")
 
     stmt = build_movie_stmt(
@@ -128,7 +131,10 @@ def export_decisions(
     tuned thresholds (titles included so the file reads as a document, not just
     ids). Export only — restoring is a write surface that gets its own review."""
     presented = token or presented_token(authorization, x_sift_token)
-    if not token_accepted(get_state(request), presented):
+    # A download link cannot send a header, so this accepts the short-lived asset
+    # token as well. Read-only by construction — the restore route below is a
+    # write and deliberately does not.
+    if not token_accepted(get_state(request), presented, allow_asset=True):
         raise HTTPException(status_code=401, detail="login required")
 
     state = get_state(request)
