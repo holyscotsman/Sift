@@ -2,6 +2,48 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.43.0 — The frontend gets a test harness
+
+Until now the frontend had **no tests at all**. `tsc --noEmit` and a successful
+bundle were the only gates, which check that the code compiles and say nothing
+about whether it does the right thing. The last several releases fixed component
+logic of exactly the kind that regresses silently — a catch that emptied a list,
+a selection rebuilt from a response, focus landing on the destructive button —
+and none of it was pinned by anything.
+
+Vitest with Testing Library over jsdom, run by `npm test` and **gated in CI**, so
+it fails a pull request rather than sitting there decoratively.
+
+**Sixteen tests, covering the bugs the recent releases fixed:**
+
+* a failed junk fetch says so instead of reporting "All caught up"
+* retry actually refetches
+* staged and live are each stated before anything is clicked
+* a title can be kept from the keyboard
+* the confirm dialog focuses Cancel, so Enter on open cancels rather than deletes
+* focus is trapped in the dialog and returns to whatever opened it
+* a dropped library page says the list is incomplete, and retries **the page that
+  failed** rather than the one after it
+* the activity log distinguishes "could not load" from "nothing has happened"
+
+Every one has a negative control, and **every control is mutation-verified**:
+reverting each fix in turn turns the matching test red, and each was checked
+individually rather than assumed. Two of the tests were rewritten first — one
+stubbed the intersection observer into silence, so paging never happened and the
+test proved nothing; the other used a short first page, which tells the list it
+has reached the end for the same reason.
+
+Scope is deliberately narrow. These check logic, not appearance. Markup snapshots
+fail on every deliberate change and pass on every change that matters, which
+trains people to update them without reading them — so there are none, and how it
+*looks* stays a human judgement.
+
+One thing found on the way in: the versions first installed carried two critical
+advisories in the test runner itself, so it ships on current ones instead.
+`react-router` and `vite` carry high advisories that predate this and are
+untouched here — worth their own change rather than a silent bump inside a
+testing PR.
+
 ## 2607.42.0 — A finished scan now changes the screen
 
 **Scanning updated nothing you were looking at.** From the Junk page you could
