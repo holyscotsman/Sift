@@ -403,3 +403,56 @@ def test_export_filenames_carry_the_date(settings, factory):
         ).headers["content-disposition"]
         assert re.search(r"sift-library-\d{4}-\d{2}-\d{2}\.csv", csv_cd)
         assert re.search(r"sift-decisions-\d{4}-\d{2}-\d{2}\.json", json_cd)
+
+
+def test_status_answers_in_a_handful_of_statements(client):
+    """The one endpoint whose cost is paid for ever.
+
+    `/api/status` is polled every eight seconds for as long as a tab is open, so
+    its statement count is not a one-off — it is a permanent background load on
+    the database. It used to issue eight separate COUNT statements, four of them
+    over `movies` with different filters, which is four scans of the same table
+    to answer one question. Conditional aggregates get all four from one pass.
+    """
+    from sqlalchemy import event
+
+    c, factory = client
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True, monitored=True))
+        session.add(
+            Movie(
+                tmdb_id=604,
+                title="Reloaded",
+                in_plex=True,
+                monitored=True,
+                has_file=True,
+                cutoff_unmet=True,
+            )
+        )
+        session.add(Movie(tmdb_id=605, title="Revolutions"))
+        session.commit()
+
+    c.get("/api/status")  # prime the queue-count cache, which is a separate concern
+
+    statements = {"n": 0}
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_a, **_kw):
+        statements["n"] += 1
+
+    try:
+        counts = c.get("/api/status").json()["counts"]
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+
+    # NEGATIVE CONTROL: an endpoint that returned zeros would satisfy any
+    # statement budget. Every figure the four filters produce must still be right.
+    assert counts["movies"] == 3
+    assert counts["owned"] == 2
+    assert counts["monitored"] == 2
+    assert counts["upgrades"] == 1
+
+    # Eight COUNTs plus the scan-run lookup was ten. Six leaves room for the
+    # scan-run read, the two aggregates, collections, actions and a transaction.
+    assert statements["n"] <= 6, f"{statements['n']} statements for one status poll"

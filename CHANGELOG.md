@@ -2,6 +2,35 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.37.0 — The poll that never stops
+
+`/api/status` is requested every eight seconds for as long as a tab is open. Its
+cost is not paid once; it is paid for ever, which makes it the only endpoint
+where a handful of statements is worth arguing about.
+
+It was doing the work twice over, at both ends.
+
+**On the server**, eight separate `COUNT` statements — four of them over the same
+`movies` table with different filters, so four scans to answer one question.
+Conditional aggregates get all four numbers from a single pass, and the two watch
+figures from another. **Ten statements per poll to five.**
+
+**In the browser**, `TopNav` and `Dashboard` both call `useStatus`, and
+`HealthDots` and `Dashboard` both call `useHealth`. Each hook holds its own state
+and its own interval, so on the dashboard the server answered the identical
+question twice every tick. Polled requests now share: one map of in-flight
+promises, one of recent results, both keyed by endpoint, with a window set to
+three quarters of the poll interval. A second consumer joins the tick already
+running instead of doubling it, and successive ticks still fetch for real. No
+cache library, about twenty lines.
+
+**Together: 9,000 statements an hour with one tab open, down to 2,250.**
+
+The pin carries a negative control on the numbers themselves — an endpoint
+returning zeros would satisfy any statement budget perfectly, so it asserts that
+all four filtered figures are still correct on a fixture built to distinguish
+them. Mutation-verified: restoring the per-filter counts turns it red.
+
 ## 2607.36.0 — Recommendations you can actually browse
 
 The list was capped three times over, and none of the caps were visible from the
