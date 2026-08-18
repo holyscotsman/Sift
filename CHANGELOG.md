@@ -2,6 +2,29 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.42.0 — A finished scan now changes the screen
+
+**Scanning updated nothing you were looking at.** From the Junk page you could
+press "Run scan" in the header, watch the panel count to 100%, watch it close
+itself — and the queue underneath was still the pre-scan list, with no hint that
+it had gone stale. The only way to see the new state was a manual reload. The
+completion hook existed in the scan provider and was simply never passed.
+
+Junk and Storage now refetch when a scan finishes. **Refetch, not reload**: a
+full page reload would throw away scroll position and anything half-armed, which
+on a screen full of delete buttons is its own small betrayal.
+
+**"Approve all" ignored the selection sitting beside it.** Two bulk paths were on
+screen at once: a sticky toolbar reading "Approve removal (12)", which acted on
+what you had ticked, and a header button reading "Approve all (200)", which acted
+on every undecided row regardless. Spend five minutes curating a selection and
+the second button silently discards it — and the broader, more destructive one
+was styled as the quieter of the two.
+
+It now reads "Select all and approve", and ticks the rows first, so the count on
+the button, the count in the toolbar and the list in the confirm dialog all agree
+before you commit to anything.
+
 ## 2607.41.0 — Work the queue from the keyboard
 
 **Reviewing a queue was mouse-only.** Sift has a real shortcut system — `g` plus a

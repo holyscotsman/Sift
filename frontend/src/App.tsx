@@ -31,7 +31,12 @@ export default function App() {
       <ToastProvider>
         <AuthGate>
           <DrawerProvider>
-            <ScanProvider>
+            {/* A finished scan used to change nothing on screen: the panel
+                counted to 100%, closed itself, and the queue underneath was
+                still the pre-scan list. The hook existed and was simply unused. */}
+            <ScanProvider
+              onComplete={() => window.dispatchEvent(new Event("sift:scan-complete"))}
+            >
               <BrowserRouter>
                 <Routes>
                   <Route element={<AppShell />}>
