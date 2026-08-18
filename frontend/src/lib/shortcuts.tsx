@@ -98,6 +98,9 @@ export function Shortcuts() {
           {ROUTES.map((r) => (
             <ShortcutRow key={r.key} keys={`g ${r.key}`} label={`Go to ${r.label}`} />
           ))}
+          <ShortcutRow keys="k" label="Keep the focused title (review queues)" />
+          <ShortcutRow keys="x" label="Select / deselect the focused title" />
+          <ShortcutRow keys="Enter" label="Open details for the focused title" />
           <ShortcutRow keys="Esc" label="Close drawer / dialogs" />
           <ShortcutRow keys="?" label="Toggle this help" />
         </ul>

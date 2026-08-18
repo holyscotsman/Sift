@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Pill, Poster } from "@/components/ui";
 import { api } from "@/lib/api";
-import { useDrawer } from "@/lib/drawer";
+import { useDrawer, useDrawerTarget } from "@/lib/drawer";
 import type { MovieDetail } from "@/lib/types";
 
 function MovieActions({ movie }: { movie: MovieDetail }) {
@@ -138,7 +138,8 @@ function bandTone(band: string): "junk" | "borderline" | "keep" {
 }
 
 export function MovieDrawer() {
-  const { movieId, close } = useDrawer();
+  const { close } = useDrawer();
+  const movieId = useDrawerTarget();
   const [movie, setMovie] = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [raw, setRaw] = useState(false);
