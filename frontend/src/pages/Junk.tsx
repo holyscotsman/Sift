@@ -131,6 +131,11 @@ export function Junk() {
       .getSettings()
       .then((s) => setDryRun(s.actions_dry_run))
       .catch(() => setDryRun(true));
+    // A scan rewrites this queue, so a finished scan should refresh it rather
+    // than leaving a stale list that looks current.
+    const onScanned = () => load();
+    window.addEventListener("sift:scan-complete", onScanned);
+    return () => window.removeEventListener("sift:scan-complete", onScanned);
   }, [load]);
 
   const sortedItems = useMemo(
@@ -245,7 +250,7 @@ export function Junk() {
               onClick={() => setModal({ candidates: pending })}
               className="rounded-pill border border-line px-4 py-1.5 text-sm font-semibold text-fg2 hover:bg-bg2"
             >
-              Approve all ({pending.length})
+              Select all and approve ({pending.length})
             </button>
           )}
         </div>

@@ -8,7 +8,7 @@
 // Duplicate copies come from /api/duplicates, which the backend has served since
 // 2607.14.0 with nothing on screen to show it.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
@@ -162,9 +162,9 @@ export function Storage() {
       .catch(() => setDryRun(true));
   }, []);
 
-  useEffect(() => {
-    let live = true;
-    Promise.all([
+  const load = useCallback((live: () => boolean) => {
+    setError(null);
+    return Promise.all([
       api.movieSizes(),
       api.duplicates(),
       api.baselines(),
@@ -172,7 +172,7 @@ export function Storage() {
       api.tvStorage(),
     ])
       .then(([s, d, b, l, t]) => {
-        if (!live) return;
+        if (!live()) return;
         setSizes(s);
         setDupes(d);
         setBaselines(b);
@@ -181,15 +181,27 @@ export function Storage() {
       })
       .catch(
         (e: unknown) =>
-          live &&
+          live() &&
           setError(
             (e as { message?: string })?.message || "Couldn't read storage figures.",
           ),
       );
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const alive = () => live;
+    void load(alive);
+    // A scan rebuilds every figure on this page, so a finished scan refetches
+    // them — refetch rather than reload, so scroll position and anything the
+    // owner has half-armed survive.
+    const onScanned = () => void load(alive);
+    window.addEventListener("sift:scan-complete", onScanned);
     return () => {
       live = false;
+      window.removeEventListener("sift:scan-complete", onScanned);
     };
-  }, []);
+  }, [load]);
 
   async function makePlan() {
     const gb = Number(targetGb);
