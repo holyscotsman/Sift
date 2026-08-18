@@ -498,14 +498,42 @@ function Row({
     );
   }
   return (
-    <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onCheck}
-        aria-label={`Select ${c.title}`}
-        className="mt-1 h-4 w-4 shrink-0 accent-[color:var(--accent)]"
-      />
+    // Focusable and operable from the keyboard. Deciding two hundred candidates
+    // is the most repeated interaction in this app, and it was mouse-only: move,
+    // click, dialog, click, two hundred times. `k` keeps, `x` toggles selection,
+    // Enter opens the details. Typing in a field is excluded so the page search
+    // and any input keep their letters.
+    <div
+      tabIndex={0}
+      role="group"
+      aria-label={c.title}
+      onKeyDown={(e) => {
+        const el = e.target as HTMLElement;
+        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
+        if (e.key === "k") {
+          e.preventDefault();
+          onKeep();
+        } else if (e.key === "x") {
+          e.preventDefault();
+          onCheck();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          open(c.tmdb_id);
+        }
+      }}
+      className="flex flex-col gap-3 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--accent)] md:flex-row md:items-start"
+    >
+      {/* A 44px hit area around a 16px box: the visual stays small, the target
+          stops being a phone-hostile pinprick sitting next to a delete button. */}
+      <label className="-m-3 grid h-11 w-11 shrink-0 cursor-pointer place-items-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onCheck}
+          aria-label={`Select ${c.title}`}
+          className="h-4 w-4 accent-[color:var(--accent)]"
+        />
+      </label>
       <button
         onClick={() => open(c.tmdb_id)}
         aria-label={`Details for ${c.title}`}

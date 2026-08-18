@@ -2,6 +2,32 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.41.0 — Work the queue from the keyboard
+
+**Reviewing a queue was mouse-only.** Sift has a real shortcut system — `g` plus a
+letter to navigate, `/` to search, `?` for help — and it stopped at the door of
+the thing you actually do most. Deciding two hundred junk candidates meant two
+hundred rounds of move, click, dialog, click.
+
+Rows are now focusable, and on a focused row: **`k`** keeps it, **`x`** toggles
+its selection, **Enter** opens the details. All three are listed in the help
+overlay. Typing in a field is excluded, so the search box keeps its letters.
+
+**The select checkbox was a 16-pixel target sitting next to a delete button.**
+It now carries a 44-pixel hit area while looking exactly the same — a negative
+margin around an oversized label, so nothing moves and the pinprick goes away.
+
+**The drawer no longer re-renders the whole library to open one panel.** Its
+context held both the actions and the currently-open film in one value, so every
+open and close produced a new context object — and `memo` does not stop a context
+update. Every mounted tile re-rendered, twice per interaction. Library appends on
+infinite scroll and never trims, so after scrolling a large library that is
+thousands of re-renders for a click that changes one panel.
+
+It is two contexts now: a stable actions object that never changes identity, and
+the open film, which only the drawer itself subscribes to. Nine of the ten
+consumers only ever wanted to *open* the drawer.
+
 ## 2607.40.0 — Build the catalog without asking four hundred times
 
 "Build the catalog" on the Missing page sweeps several hundred titles out of TMDB
