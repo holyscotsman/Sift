@@ -240,13 +240,23 @@ def missing_lists(
 
 @router.get("/missing/recommendations", response_model=RecommendationsResponse)
 async def missing_recommendations(
-    limit: int = 24,
+    limit: int = 200,
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
 ) -> RecommendationsResponse:
     """Taste-based suggestions grounded in your highest-rated owned titles, via TMDB's
     discovery graph. Deterministic: TMDB picks the candidates, we rank and explain them."""
-    result = await recommend_analysis.recommendations(factory, settings, limit=limit)
+    capped = max(1, min(limit, recommend_analysis.STORED_LIMIT))
+    with factory() as session:
+        items, total = recommend_analysis.stored(session, limit=capped)
+    if items:
+        return RecommendationsResponse(
+            items=[RecommendedMovie(**m) for m in items],
+            note=None if total <= len(items) else f"Showing {len(items)} of {total}.",
+        )
+    # Nothing stored yet — an instance that has not rescanned since this became a
+    # scan phase. Compute live this once rather than showing an empty shelf.
+    result = await recommend_analysis.recommendations(factory, settings, limit=capped)
     return RecommendationsResponse(
         items=[RecommendedMovie(**item) for item in result["items"]],
         note=result["note"],

@@ -22,6 +22,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import junk
+from ..analysis import recommend as recommend_analysis
 from ..clients.plex import EPISODE as PLEX_EPISODE
 from ..clients.plex import SHOW as PLEX_SHOW
 from ..clients.plex import PlexClient
@@ -982,7 +983,17 @@ class ScanPipeline:
             return curated_lists.apply_resolution(session, resolved)
 
     async def _phase_finalize(self) -> dict[str, int]:
-        return await asyncio.to_thread(self._finalize_counts)
+        counts = await asyncio.to_thread(self._finalize_counts)
+        # Recommendations are computed here, once, rather than on every page load.
+        # Sixty anchor calls is a reasonable thing to do during a scan the owner is
+        # already waiting on, and an unreasonable thing to make them wait for every
+        # time they open the page. A failure leaves the previous list standing.
+        try:
+            stored = await recommend_analysis.refresh(self.factory, self.settings)
+            counts["recommendations"] = stored
+        except Exception as exc:  # noqa: BLE001 - never fail a scan over suggestions
+            log.info("recommendation refresh failed: %s", exc)
+        return counts
 
     async def _phase_score(self) -> dict[str, int]:
         # Deterministic junk scoring over the Plex library. Data decides the score.
