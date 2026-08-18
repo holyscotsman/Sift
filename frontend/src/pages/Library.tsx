@@ -79,6 +79,9 @@ export function Library() {
   const [totalSize, setTotalSize] = useState(0);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
+  // A failed *page* is different from a failed list: the titles already on screen
+  // are still good, so this is reported at the bottom rather than replacing them.
+  const [pageError, setPageError] = useState<string | null>(null);
   const pageRef = useRef(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -135,6 +138,7 @@ export function Library() {
   const fetchPage = useCallback(
     async (page: number, replace: boolean) => {
       setLoading(true);
+      setPageError(null);
       try {
         const res = await api.movies(buildQuery(page));
         // The server only computes totals for page 1 — appended pages return
@@ -146,6 +150,17 @@ export function Library() {
         setItems((prev) => (replace ? res.items : [...prev, ...res.items]));
         setDone(
           res.items.length < pageSize || (replace && res.total <= page * pageSize),
+        );
+      } catch (e: unknown) {
+        // A dropped page used to vanish without trace: the failure was an
+        // unhandled rejection, the page counter had already advanced, and the
+        // sentinel simply asked for the *next* one. Those titles were gone from
+        // the list with nothing on screen to distinguish it from the real end of
+        // the data. Roll the counter back so a retry asks for the same page.
+        if (!replace) pageRef.current = Math.max(1, page - 1);
+        setPageError(
+          (e as { message?: string })?.message ||
+            "Couldn't load more titles — this list is incomplete.",
         );
       } finally {
         setLoading(false);
@@ -173,15 +188,18 @@ export function Library() {
     setItems([]);
     setTotal(0);
     setDone(false);
+    setPageError(null);
     void fetchPage(1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey]);
 
   const loadMore = useCallback(() => {
-    if (loading || done) return;
+    // `pageError` stops the observer re-firing into the same failure while the
+    // sentinel stays on screen; clearing it is what the retry button does.
+    if (loading || done || pageError) return;
     pageRef.current += 1;
     void fetchPage(pageRef.current, false);
-  }, [loading, done, fetchPage]);
+  }, [loading, done, pageError, fetchPage]);
 
   // Observe a sentinel near the bottom; fetch the next page as it approaches.
   useEffect(() => {
@@ -416,7 +434,22 @@ export function Library() {
       {!firstLoad && loading && items.length > 0 && (
         <p className="py-4 text-center text-sm text-fg3">Loading more…</p>
       )}
-      {done && items.length > 0 && (
+      {pageError && (
+        <div className="py-4 text-center text-sm" style={{ color: "var(--junk)" }}>
+          <p className="font-semibold">{pageError}</p>
+          <button
+            onClick={() => {
+              setPageError(null);
+              pageRef.current += 1;
+              void fetchPage(pageRef.current, false);
+            }}
+            className="mt-2 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Load the rest
+          </button>
+        </div>
+      )}
+      {done && !pageError && items.length > 0 && (
         <p className="py-6 text-center text-xs text-fg3">
           That’s everything · {total.toLocaleString()} titles
         </p>

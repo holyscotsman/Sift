@@ -2,6 +2,41 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.38.0 — Three more places the interface was quietly wrong
+
+**The audit log said nothing had happened.** `Activity` destructured two of the
+four values its hook returns, so a failed fetch left `data` null and the page
+rendered "No activity yet — actions you approve or that run autonomously will
+appear here." That page's own header calls it the trust surface. If a delete has
+just executed and the request fails, the app states the delete never happened,
+which is the worst available answer from the one screen whose job is to be
+believed. It now says the log could not be loaded, says explicitly that this is
+not the same as an empty log, and offers a retry. While loading it shows the
+skeleton rows every other page uses, rather than a screen-reader-only paragraph
+and a blank panel.
+
+**A dropped page in the library vanished without trace.** The paging function had
+a `try`/`finally` and no `catch`, and the page counter advanced *before* the
+request. So when page three failed, the rejection was unhandled, the sentinel
+scrolled on and asked for page four, and page three's titles were simply gone —
+with nothing on screen to distinguish an incomplete list from the real end of the
+data. The counter now rolls back on failure, the observer stops re-firing into
+the same error, and the bottom of the list says the list is incomplete and offers
+to load the rest. Titles already on screen stay put: a failed page is not a
+failed list.
+
+**The delete dialog opened with the delete button focused.** A stray Enter or
+Space arriving on an autofocused Confirm approves a removal nobody chose, and
+this dialog stands in front of every irreversible action in the app. Focus now
+lands on Cancel. It is also trapped while the dialog is open — Tab used to walk
+straight out into the page behind, leaving a modal that blocks visually but not
+actually — and returns to whatever opened it on close, so working down a queue by
+keyboard no longer means tabbing from the top of the page after every decision.
+
+The frontend still has no test harness, so these are verified by `tsc` and a
+production build. That remains the largest gap in this project's verification and
+is recorded as such in `ARCHITECTURE.md`.
+
 ## 2607.37.0 — The poll that never stops
 
 `/api/status` is requested every eight seconds for as long as a tab is open. Its
