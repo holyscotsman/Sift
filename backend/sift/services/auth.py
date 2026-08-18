@@ -37,6 +37,16 @@ _AUTH_KEY = "auth"
 _PBKDF2_ROUNDS = 240_000
 _TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
+# Asset tokens live in URLs — an <img> or a download link cannot send a header —
+# and a URL is recorded by every proxy and access log it passes through, kept in
+# browser history, and stored by shared caches. A thirty-day full-API credential
+# has no business being there. These are minutes long and read-only, so a leaked
+# log yields something already expired that could only ever fetch a thumbnail.
+_ASSET_TTL_SECONDS = 15 * 60
+
+SCOPE_SESSION = "session"
+SCOPE_ASSET = "asset"
+
 
 # ---------------------------------------------------------------------- passwords
 
@@ -163,15 +173,37 @@ def _b64d(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
-def issue_token(secret: str, username: str, *, now: float | None = None) -> str:
+def issue_token(
+    secret: str,
+    username: str,
+    *,
+    now: float | None = None,
+    scope: str = SCOPE_SESSION,
+) -> str:
     ts = int(time.time() if now is None else now)
-    payload = _b64e(json.dumps({"u": username, "iat": ts, "exp": ts + _TOKEN_TTL_SECONDS}).encode())
+    ttl = _ASSET_TTL_SECONDS if scope == SCOPE_ASSET else _TOKEN_TTL_SECONDS
+    body = {"u": username, "iat": ts, "exp": ts + ttl, "s": scope}
+    payload = _b64e(json.dumps(body).encode())
     sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 
 
-def verify_token(secret: str, token: str, *, now: float | None = None) -> str | None:
-    """Return the username if the token is well-formed, correctly signed, and unexpired."""
+def verify_token(
+    secret: str,
+    token: str,
+    *,
+    now: float | None = None,
+    scopes: tuple[str, ...] = (SCOPE_SESSION,),
+) -> str | None:
+    """Return the username if the token is well-formed, signed, unexpired and in scope.
+
+    Scope is checked here rather than at the call site so it cannot be forgotten
+    at one. A token minted for asset URLs must never open the rest of the API,
+    which is the entire reason for minting a separate one.
+
+    Tokens issued before scopes existed carry no ``s`` field and are treated as
+    session tokens, so nobody is logged out by this change.
+    """
     try:
         payload_b64, sig = token.split(".", 1)
     except ValueError:
@@ -185,6 +217,8 @@ def verify_token(secret: str, token: str, *, now: float | None = None) -> str | 
         return None
     exp = payload.get("exp", 0)
     if not isinstance(exp, int | float) or exp < (time.time() if now is None else now):
+        return None
+    if str(payload.get("s") or SCOPE_SESSION) not in scopes:
         return None
     username = payload.get("u")
     return username if isinstance(username, str) else None
@@ -212,11 +246,35 @@ def login(
     return issue_token(secret, username, now=now)
 
 
-def token_valid(session: Session, token: str, *, now: float | None = None) -> bool:
+def token_valid(
+    session: Session,
+    token: str,
+    *,
+    now: float | None = None,
+    scopes: tuple[str, ...] = (SCOPE_SESSION,),
+) -> bool:
     auth = get_auth(session)
     if not auth or not token:
         return False
     secret = _signing_secret(auth)
     if not secret:
         return False  # unreadable secret → no token can be trusted
-    return verify_token(secret, token, now=now) is not None
+    return verify_token(secret, token, now=now, scopes=scopes) is not None
+
+
+def issue_asset_token(session: Session, *, now: float | None = None) -> tuple[str, int] | None:
+    """A short-lived, read-only token for URLs that cannot carry a header.
+
+    Returns ``(token, seconds_valid)``, or ``None`` when no account exists.
+    """
+    auth = get_auth(session)
+    if not auth:
+        return None
+    secret = _signing_secret(auth)
+    username = auth.get("username")
+    if not secret or not isinstance(username, str):
+        return None
+    return (
+        issue_token(secret, username, now=now, scope=SCOPE_ASSET),
+        _ASSET_TTL_SECONDS,
+    )

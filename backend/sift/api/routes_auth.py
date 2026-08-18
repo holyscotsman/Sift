@@ -22,6 +22,7 @@ from .deps import (
     token_accepted,
 )
 from .schemas import (
+    AssetTokenResponse,
     AuthStatus,
     ChangePasswordRequest,
     LoginRequest,
@@ -132,3 +133,24 @@ def change_password(
             raise HTTPException(status_code=401, detail="current password is wrong")
         username = str((auth.get_auth(session) or {}).get("username", ""))
     return TokenResponse(token=token, username=username)
+
+
+@router.get("/asset-token", response_model=AssetTokenResponse, dependencies=[AuthDep])
+def asset_token(
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> AssetTokenResponse:
+    """A short-lived, read-only token for URLs that cannot carry a header.
+
+    Posters, CSV downloads and the scan socket all put their credential in the
+    query string, because an ``<img>``, a download link and a WebSocket cannot
+    send one any other way. A query string is recorded by every proxy and access
+    log it passes through and kept in browser history, so what goes there should
+    expire in minutes and open nothing but the asset itself — not the thirty-day
+    credential that opens the whole API.
+    """
+    with factory() as session:
+        issued = auth.issue_asset_token(session)
+    if issued is None:
+        raise HTTPException(status_code=409, detail="no account configured")
+    token, ttl = issued
+    return AssetTokenResponse(token=token, expires_in=ttl)

@@ -361,18 +361,54 @@ export const api = {
   },
 };
 
+// A short-lived, read-only credential for the URLs that cannot carry a header —
+// <img>, download links, the scan socket. Those URLs end up in proxy logs and
+// browser history, so what travels in them expires in minutes and opens nothing
+// but the asset. Held in memory only: writing it to storage would give it the
+// persistence the whole arrangement exists to avoid.
+let assetToken: string | null = null;
+let assetTokenAt = 0;
+let assetRefresh: Promise<void> | null = null;
+
+export async function refreshAssetToken(): Promise<void> {
+  if (assetRefresh) return assetRefresh;
+  assetRefresh = request<{ token: string; expires_in: number }>("/api/auth/asset-token")
+    .then((r) => {
+      assetToken = r.token;
+      // Renew at two thirds of its life, so an image request never races the expiry.
+      assetTokenAt = Date.now() + r.expires_in * 1000 * 0.66;
+    })
+    .catch(() => {
+      // Leave the session token in place as the fallback. A failure here must
+      // never mean a page of broken thumbnails.
+      assetToken = null;
+    })
+    .finally(() => {
+      assetRefresh = null;
+    });
+  return assetRefresh;
+}
+
+export function urlToken(): string | null {
+  if (assetToken && Date.now() < assetTokenAt) return assetToken;
+  // Missing or stale: kick off a renewal and fall back to the session token for
+  // this one request, which is exactly what happened before asset tokens existed.
+  void refreshAssetToken();
+  return assetToken ?? getToken();
+}
+
 // Server-resolved, cached poster for any title (works for Plex-only movies with no
-// Radarr artwork). Carries the token as a query param since <img> can't set headers.
+// Radarr artwork). Carries a token as a query param since <img> can't set headers.
 export function posterUrl(tmdbId: number): string {
-  const token = getToken();
+  const token = urlToken();
   const q = token ? `?token=${encodeURIComponent(token)}` : "";
   return `/api/poster/${tmdbId}${q}`;
 }
 
-// Build the WebSocket URL for live scan progress, carrying the API token.
+// Build the WebSocket URL for live scan progress, carrying the asset token.
 export function scanSocketUrl(scanId: number): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const token = getToken();
+  const token = urlToken();
   const q = token ? `?token=${encodeURIComponent(token)}` : "";
   return `${proto}://${location.host}/ws/scan/${scanId}${q}`;
 }

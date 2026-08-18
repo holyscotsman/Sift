@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PlaneIcon } from "@/components/icons";
 import { SetupWizard } from "@/components/SetupWizard";
-import { ApiError, api, setToken } from "@/lib/api";
+import { ApiError, api, refreshAssetToken, setToken } from "@/lib/api";
 
 type Phase = "checking" | "wizard" | "login" | "authed";
 
@@ -37,6 +37,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       // Signed in already? A valid session goes straight through.
       try {
         await api.status();
+        // Mint the short-lived credential that poster and download URLs carry,
+        // so the session token never has to stand in for it.
+        void refreshAssetToken();
         setPhase("authed");
       } catch (e) {
         setPhase(e instanceof ApiError && e.status === 401 ? "login" : "authed");
@@ -68,6 +71,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.authLogin(username.trim(), password);
       setToken(res.token);
+      void refreshAssetToken();
       localStorage.setItem(USERNAME_KEY, username.trim());
       setPhase("authed");
     } catch (err) {
