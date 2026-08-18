@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import junk
@@ -63,42 +63,67 @@ def _queue_counts(session: Session, settings: Settings) -> tuple[int, int]:
 
 
 def _counts(session: Session, settings: Settings, cache: CountsCache) -> Counts:
+    """Every figure the header and dashboard show, in four statements.
+
+    This is polled every eight seconds for as long as a tab is open, so its cost
+    is not paid once — it is paid for ever. It used to issue eight separate
+    ``COUNT`` statements, four of them over the same ``movies`` table with
+    different filters, which on a hosted database is eight round trips and eight
+    scans to answer one question. Conditional aggregates get the same four
+    numbers from one pass, and the two watch figures from another.
+
+    ``junk_flagged`` stays behind its cache because it re-scores the library;
+    the rest are cheap enough to be live.
+    """
     # junk_flagged re-scores the library; the dashboard polls every few seconds.
     # Cached with explicit invalidation on every write path that changes it.
     junk_flagged, musthave_pending = cache.get(lambda: _queue_counts(session, settings))
+
+    movies, owned, monitored, upgrades = session.execute(
+        select(
+            func.count(),
+            # "Owned" = present in your Plex library (Plex is the source of truth).
+            func.count(case((Movie.in_plex.is_(True), 1))),
+            func.count(case((Movie.monitored.is_(True), 1))),
+            # Library titles Radarr says are below the quality cutoff.
+            func.count(
+                case(
+                    (
+                        and_(
+                            Movie.in_plex.is_(True),
+                            Movie.has_file.is_(True),
+                            Movie.cutoff_unmet.is_(True),
+                        ),
+                        1,
+                    )
+                )
+            ),
+        ).select_from(Movie)
+    ).one()
+
+    # Distinct titles with any watch history is the honest "watched" numerator.
+    watch_records, watched_titles = session.execute(
+        select(func.count(), func.count(func.distinct(WatchHistory.movie_id))).select_from(
+            WatchHistory
+        )
+    ).one()
+
     return Counts(
         junk_flagged=junk_flagged,
         musthave_pending=musthave_pending,
-        movies=session.scalar(select(func.count()).select_from(Movie)) or 0,
-        # "Owned" = present in your Plex library (Plex is the source of truth).
-        owned=session.scalar(
-            select(func.count()).select_from(Movie).where(Movie.in_plex.is_(True))
-        )
-        or 0,
-        monitored=session.scalar(
-            select(func.count()).select_from(Movie).where(Movie.monitored.is_(True))
-        )
-        or 0,
+        movies=int(movies or 0),
+        owned=int(owned or 0),
+        monitored=int(monitored or 0),
         collections=session.scalar(select(func.count()).select_from(Collection)) or 0,
-        watch_records=session.scalar(select(func.count()).select_from(WatchHistory)) or 0,
-        # Distinct titles with any watch history — the honest "watched" numerator.
-        watched_titles=session.scalar(
-            select(func.count(func.distinct(WatchHistory.movie_id)))
-        )
-        or 0,
+        watch_records=int(watch_records or 0),
+        watched_titles=int(watched_titles or 0),
         actions_pending=session.scalar(
             select(func.count())
             .select_from(Action)
             .where(Action.status == ActionStatus.PROPOSED)
         )
         or 0,
-        # Library titles Radarr says are below the quality cutoff (upgrade wanted).
-        upgrades=session.scalar(
-            select(func.count())
-            .select_from(Movie)
-            .where(Movie.in_plex.is_(True), Movie.has_file.is_(True), Movie.cutoff_unmet.is_(True))
-        )
-        or 0,
+        upgrades=int(upgrades or 0),
     )
 
 

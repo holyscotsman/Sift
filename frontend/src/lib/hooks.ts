@@ -74,12 +74,45 @@ function useAsync<T>(fetcher: () => Promise<T>, deps: unknown[], pollMs?: number
   return { data, error, loading, refetch: run };
 }
 
+
+// Two components can want the same polled endpoint at once — TopNav and Dashboard
+// both show status, HealthDots and Dashboard both show health. Each `useAsync`
+// holds its own state and its own interval, so without sharing the server answers
+// the identical question twice every tick, for as long as the tab is open. That is
+// a permanent background cost rather than a one-off, and on a metered database it
+// is charged for ever.
+//
+// Deliberately not a cache library: one map of in-flight promises and one of
+// recent results, both keyed by endpoint. A caller arriving inside the window
+// joins the request already running, or takes the result that just landed.
+const inflight = new Map<string, Promise<unknown>>();
+const recent = new Map<string, { at: number; value: unknown }>();
+
+function shared<T>(key: string, fetcher: () => Promise<T>, ttlMs: number): Promise<T> {
+  const fresh = recent.get(key);
+  if (fresh && Date.now() - fresh.at < ttlMs) return Promise.resolve(fresh.value as T);
+  const running = inflight.get(key) as Promise<T> | undefined;
+  if (running) return running;
+  const started = fetcher()
+    .then((value) => {
+      recent.set(key, { at: Date.now(), value });
+      return value;
+    })
+    .finally(() => {
+      inflight.delete(key);
+    });
+  inflight.set(key, started);
+  return started;
+}
+
+// The window is a fraction of the poll interval, so a second consumer joins the
+// tick rather than doubling it, and successive ticks still fetch for real.
 export function useHealth(pollMs = 20000): AsyncState<HealthResponse> {
-  return useAsync(() => api.health(), [], pollMs);
+  return useAsync(() => shared("health", () => api.health(), pollMs * 0.75), [], pollMs);
 }
 
 export function useStatus(pollMs = 8000): AsyncState<StatusResponse> {
-  return useAsync(() => api.status(), [], pollMs);
+  return useAsync(() => shared("status", () => api.status(), pollMs * 0.75), [], pollMs);
 }
 
 export function useMovies(query: MovieQuery): AsyncState<MovieListResponse> {
