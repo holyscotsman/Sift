@@ -33,6 +33,9 @@ from ..db.models import (
 )
 from . import curated_lists
 
+# Rows per statement, matching the ingest writers and the scoring loop.
+_CHUNK = 500
+
 log = logging.getLogger("sift.canon")
 
 # Bounded sweep: ~300 top-rated + ~200 blockbusters + curated (~100) + gated
@@ -152,20 +155,42 @@ async def refresh(
             )
             entry["sources"].add("curator pick")
 
+        # Both lookups are read once for the whole sweep rather than once per
+        # candidate. `session.get` per entry meant five hundred to a thousand
+        # sequential SELECTs inside the POST the owner is watching a spinner on —
+        # free on SQLite, a network round trip each against a hosted database,
+        # which is the difference between a moment and a minute. Same shape as
+        # `canon_entries.apply_resolution` in the same package.
+        wanted = sorted(candidates)
+        canon_rows: dict[int, CanonMovie] = {}
+        known_movies: dict[int, Movie] = {}
+        for start in range(0, len(wanted), _CHUNK):
+            batch = wanted[start : start + _CHUNK]
+            for existing_canon in session.scalars(
+                select(CanonMovie).where(CanonMovie.tmdb_id.in_(batch))
+            ):
+                canon_rows[existing_canon.tmdb_id] = existing_canon
+            # Only titleless entries need the snapshot, but reading them together
+            # costs one statement rather than one per entry that turns out to need it.
+            for snapshot_movie in session.scalars(
+                select(Movie).where(Movie.tmdb_id.in_(batch))
+            ):
+                known_movies[snapshot_movie.tmdb_id] = snapshot_movie
+
         written = 0
         for tmdb_id, entry in candidates.items():
-            canon_row = session.get(CanonMovie, tmdb_id)
+            canon_row = canon_rows.get(tmdb_id)
             sources = entry.get("sources") or set()
             if canon_row is None:
                 # Curated-only entries may lack a title (id-only); resolve it from
                 # the snapshot when possible, else skip — canon rows must be named.
                 title = entry.get("title")
                 if not title:
-                    movie = session.get(Movie, tmdb_id)
-                    if movie is None:
+                    from_snapshot = known_movies.get(tmdb_id)
+                    if from_snapshot is None:
                         continue
-                    entry["title"] = movie.title
-                    entry.setdefault("year", movie.year)
+                    entry["title"] = from_snapshot.title
+                    entry.setdefault("year", from_snapshot.year)
                 canon_row = CanonMovie(
                     tmdb_id=tmdb_id,
                     title=str(entry["title"]),
@@ -176,6 +201,7 @@ async def refresh(
                     sources=sorted(sources),
                 )
                 session.add(canon_row)
+                canon_rows[tmdb_id] = canon_row
             else:
                 canon_row.sources = sorted(set(canon_row.sources or []) | sources)
                 if entry.get("vote_average") is not None:
