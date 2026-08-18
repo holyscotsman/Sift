@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { EmptyState, Pill } from "@/components/ui";
+import { EmptyState, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useDrawer } from "@/lib/drawer";
 import { useActivity } from "@/lib/hooks";
@@ -27,7 +27,7 @@ export function Activity() {
   // The window grows on demand (80 → 160 → … → 960) instead of fetching a fixed
   // slice of history; the button hides once the server has no more to give.
   const [limit, setLimit] = useState(80);
-  const { data, loading } = useActivity(limit);
+  const { data, error, loading, refetch } = useActivity(limit);
   const [filter, setFilter] = useState<Filter>("all");
   const [scans, setScans] = useState<ScanRun[]>([]);
   const rows = (data ?? []).filter((a) => filter === "all" || a.type === filter);
@@ -77,9 +77,31 @@ export function Activity() {
       </div>
 
       {loading ? (
-        <p className="sr-only" role="status" aria-busy="true">
-          Loading activity…
-        </p>
+        <div className="panel flex flex-col gap-2 p-4" aria-busy="true">
+          <p className="sr-only" role="status">
+            Loading activity…
+          </p>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-12" />
+          ))}
+        </div>
+      ) : error ? (
+        // This page is described in its own header as the trust surface. If a
+        // delete has just been executed and the fetch fails, "No activity yet"
+        // states that it never happened — the worst possible thing for the one
+        // screen whose job is to be believed.
+        <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+          <p className="font-semibold">Couldn&apos;t load the activity log — {error}</p>
+          <p className="mt-1 text-fg2">
+            This is not the same as an empty log. Nothing here has been lost.
+          </p>
+          <button
+            onClick={refetch}
+            className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Try again
+          </button>
+        </div>
       ) : rows.length === 0 ? (
         <div className="panel">
           <EmptyState
