@@ -2,6 +2,25 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.40.0 — Build the catalog without asking four hundred times
+
+"Build the catalog" on the Missing page sweeps several hundred titles out of TMDB
+and merges them into the canon. The merge asked the database about each candidate
+one at a time — once for the existing canon row, and again for the film itself
+whenever a curated entry arrived without a title. Two lookups per candidate,
+sequentially, inside the request the owner is watching a spinner on.
+
+Both are now read once for the whole sweep, chunked at five hundred, the same
+shape the ingest writers and the scoring loop already use.
+
+**406 statements for 200 candidates → 7.** Free on the SQLite the tests run
+against, which is why it survived; a network round trip each against a hosted
+database, which is the difference between a moment and a minute on the one screen
+where the wait is unavoidable and visible.
+
+The pin's negative control asserts two hundred rows were actually written, since
+a merge that wrote nothing would satisfy any statement budget perfectly.
+
 ## 2607.39.0 — Say when it is the database, and keep credentials out of URLs
 
 ### A refusing database is not a bug in this app

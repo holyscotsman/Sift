@@ -149,3 +149,51 @@ async def test_canon_refresh_without_tmdb_still_merges_curated(factory, settings
         session.commit()
     stats = await canon.refresh(factory, settings)
     assert stats["written"] == 1
+
+
+async def test_building_the_catalog_does_not_query_per_candidate(factory, settings):
+    """Regression pin. The owner watches a spinner while this runs.
+
+    Merging the sweep into the canon was written as `session.get` per candidate —
+    plus a second one for any entry needing a title from the snapshot. The sweep
+    is several hundred titles, so that is several hundred sequential SELECTs
+    inside the request. Free on this SQLite; a network round trip each against a
+    hosted database, which is the difference between a moment and a minute.
+    """
+    from sqlalchemy import event
+
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+
+    def wide_handler(request: httpx.Request) -> httpx.Response:
+        # Two hundred candidates, so a per-candidate shape is unmistakable.
+        if request.url.path.endswith("/movie/top_rated") and request.url.params.get("page") == "1":
+            return httpx.Response(200, json={"results": [
+                {"id": 1000 + i, "title": f"Canon {i}", "release_date": "1994-01-01",
+                 "vote_average": 8.9, "vote_count": 20000}
+                for i in range(200)
+            ]})
+        return httpx.Response(200, json={"results": []})
+
+    statements = {"n": 0}
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(*_a, **_kw):
+        statements["n"] += 1
+
+    try:
+        result = await canon.refresh(
+            factory, settings, transport=httpx.MockTransport(wide_handler)
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+
+    # NEGATIVE CONTROL: a merge that wrote nothing would satisfy any statement
+    # budget. The rows have to actually be there.
+    assert result["written"] == 200
+    with factory() as session:
+        assert session.query(CanonMovie).count() == 200
+
+    # Per-candidate lookups would be 200+. Preloaded is a handful either way.
+    assert statements["n"] < 25, f"{statements['n']} statements for 200 candidates"
