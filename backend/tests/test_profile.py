@@ -41,3 +41,66 @@ def test_profile_aggregates_and_weights(client):
     }).json()
     assert updated["weights"]["genre"] == 0.9
     assert c.get("/api/profile").json()["weights"]["genre"] == 0.9  # persisted
+
+
+def test_the_profile_never_reads_the_wide_columns(client):
+    """Egress pin, not a round-trip pin.
+
+    The profile page recounts the library every time it is opened, and it counts
+    exactly three things about a film: genres, keywords, decade. `select(Movie)`
+    ships all thirty-one columns for every film owned — `overview` and
+    `poster_url` chief among them, and together larger than everything the page
+    actually reads. The credits join had the same shape: a job and a name, taken
+    off two fully hydrated rows, a dozen times per film.
+
+    Free on the SQLite these tests run against, which is why it survived. Metered
+    by the byte on the database this app is deployed against.
+    """
+    from sqlalchemy import event
+
+    from sift.db.models import MoviePerson, Person
+
+    c, factory = client
+    with factory() as session:
+        for i in range(50):
+            session.add(
+                Movie(
+                    tmdb_id=7_000 + i,
+                    title=f"Film {i}",
+                    year=1999,
+                    in_plex=True,
+                    genres=["Drama"],
+                    keywords=["one"],
+                    overview="x" * 600,
+                    poster_url="https://image.tmdb.org/t/p/w342/" + "y" * 40,
+                )
+            )
+        session.add(Person(id=1, name="A Director"))
+        session.flush()
+        for i in range(50):
+            session.add(MoviePerson(movie_id=7_000 + i, person_id=1, job="director"))
+        session.commit()
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        body = c.get("/api/profile").json()
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    # NEGATIVE CONTROL: the work must actually have happened. A profile that read
+    # nothing would pass every assertion below.
+    assert body["library_size"] == 50
+    assert body["directors"][0] == {"name": "A Director", "count": 50}
+
+    reads = [s for s in seen if s.upper().startswith("SELECT")]
+    assert any("FROM movies" in s for s in reads), "nothing read movies at all"
+    assert any("FROM movie_people" in s for s in reads), "nothing read the credits at all"
+    for column in ("movies.overview", "movies.poster_url", "movies.title", "movie_people.id"):
+        offenders = [s for s in reads if column in s]
+        assert not offenders, f"the profile read {column} it never uses: {offenders[0][:140]}"

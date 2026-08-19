@@ -2,6 +2,30 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.48.0 — Say what the recommendations are made of
+
+The recommendation shelf still described itself as the taste graph, and still
+printed one fixed sentence about being "grounded in your highest-rated titles via
+TMDB". Since the list became canon-first that is simply untrue, and it was
+untrue in the one place the description mattered: a list that comes back short
+looks broken unless it says what it is made of.
+
+The server has reported its composition since the canon change — *"180 from the
+validated canon, 20 from your taste graph"* — and nothing showed it unless the
+list was empty. It is now printed under the shelf whenever there is a list, and
+the badge reads "Canon + taste" rather than naming only the half that can fail.
+
+**The taste profile read the whole library to count three things about it.**
+Genres, keywords and decade — while `select(Movie)` ships all thirty-one columns
+per film, `overview` and `poster_url` included, and those two are larger than
+everything the page uses. The credits join had the same shape: a job and a name
+taken off two fully hydrated rows, a dozen times per film. Both are column reads
+now. This runs on every view of the profile page, so it was a whole-library read
+per page view.
+
+Three tests, mutation-verified, one of them the negative control that a profile
+reading nothing at all would otherwise pass.
+
 ## 2607.47.0 — Write a season once, not twice
 
 A first TV scan wrote every season to the database twice.
