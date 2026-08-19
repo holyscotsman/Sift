@@ -56,8 +56,12 @@ frozen on whatever it contained the day it was created.
 5. **Get your access token.** In the service's **Environment** tab, reveal
    `SIFT_SERVER__API_TOKEN` and copy it.
 
-6. **Open the app** at your Render URL. You'll see Sift's **unlock screen** — paste
-   the token. (It's stored in that browser, so you only do this once per device.)
+6. **Open the app** at your Render URL and create your login. The first-run wizard
+   asks for a username, a password, **and that access token** — a hosted deploy is
+   reachable by anyone who finds the URL, so the first account has to be created by
+   somebody holding a deploy credential rather than by whoever arrives first. You
+   paste the token once, here; from then on you sign in with the username and
+   password like any other site.
 
 7. **Run a scan.** The connection dots (top-right) should show Radarr green; click
    **Run scan**. The Dashboard and Library fill in when it finishes.
@@ -117,6 +121,22 @@ Sift normalizes the URL for you — `postgres://` is rewritten to `postgresql://
 Trade-off: your **thumbnails still re-download** after each deploy (they're files, not
 rows, so they stay on the ephemeral disk), and the free tier has no point-in-time
 recovery — use Settings › **Export decisions** periodically as your backup.
+
+**Watch the transfer allowance, not just the storage.** Neon's free tier meters the
+*bytes moved* between Sift and the database, and the number that matters is not how
+big your library is but how often it is read. Every scan reads the library and every
+open screen reads a slice of it, so an aggressive autoscan interval is what exhausts
+a monthly allowance — a two-hourly scan moves twelve times what a daily one does.
+
+If you hit it, Sift says so plainly rather than looking broken: every screen shows
+*"the database is not accepting queries right now"* and names the provider dashboard
+as the place to look. It is not a bug in Sift and no amount of rescanning will clear
+it — the allowance resets monthly, or you raise it.
+
+Two settings keep you inside it comfortably: set **Settings › Scan schedule** to
+daily (or manual) rather than every couple of hours, and leave the poster cache on
+so thumbnails are not re-fetched. Route A has no transfer meter at all, which is a
+fair reason to prefer it if you scan often.
 
 ### Either way
 

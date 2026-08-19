@@ -141,6 +141,10 @@ class ScanStartResponse(BaseModel):
 class AuthStatus(BaseModel):
     setup_complete: bool
     username: str | None = None
+    # Whether first-run account creation needs the deploy's access token. The
+    # wizard cannot ask for something it does not know is required, and without
+    # this it simply got a 401 it could not explain.
+    setup_requires_token: bool = False
 
 
 class ConnectionsIn(BaseModel):

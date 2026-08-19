@@ -59,8 +59,16 @@ def _login(client, username="alice", password="hunter2hunter2"):
 
 
 def test_gate_open_before_setup_then_closes(client):
-    # Fresh install: API is open so the wizard is reachable.
-    assert client.get("/api/auth/status").json() == {"setup_complete": False, "username": None}
+    # Fresh install: API is open so the wizard is reachable. Compared whole, so a
+    # new field in this response has to be looked at rather than absorbed — it is
+    # the one payload an anonymous caller can read.
+    assert client.get("/api/auth/status").json() == {
+        "setup_complete": False,
+        "username": None,
+        # No static token configured in this fixture, so the wizard is not asked
+        # for one it could not supply.
+        "setup_requires_token": False,
+    }
     assert client.get("/api/status").status_code == 200
 
     # Create the account.

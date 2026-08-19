@@ -52,7 +52,16 @@ def status(
             get_state(request), presented_token(authorization, x_sift_token)
         )
         username = (auth.get_auth(session) or {}).get("username") if known else None
-    return AuthStatus(setup_complete=configured, username=username)
+    # Setup requires the deploy token where one is configured (see `setup`
+    # below). Saying so is not a leak — that a token exists is already implied by
+    # the deploy, and the alternative is a wizard that 401s with no way for the
+    # owner to know what it wants.
+    requires_token = not configured and get_state(request).settings.server.api_token is not None
+    return AuthStatus(
+        setup_complete=configured,
+        username=username,
+        setup_requires_token=requires_token,
+    )
 
 
 @router.post("/setup", response_model=TokenResponse, status_code=201)
