@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.58.0 — Guard the whole scan's cost, and write down the trap in reading it
+
+No behaviour change. A test, and a piece of knowledge that had cost three
+sessions to rediscover.
+
+The per-phase pins guard the phases that were once wrong. Nothing guarded the
+shape of a whole scan — which is where the failure that started this actually
+lived: a `session.merge()` per film, four statements each, invisible on local
+SQLite and minutes of pure latency against a hosted database.
+
+**The trap.** On SQLite, SQLAlchemy batches ORM inserts into one statement only
+when we supply the primary key; a table with an autoincrement id gets one INSERT
+per row, because the ids have to come back. So `movies` and `plex_copies` (keyed
+on tmdb id and rating key) insert in a single statement while `ratings` and
+`seasons` (autoincrement) insert one at a time — and on Postgres, where this
+actually runs, both batch.
+
+A raw statement count therefore reads as "one per film" against a scan doing
+nothing of the kind. I measured 120 inserts into `ratings` for 120 films, went
+looking for the per-row write, and found the dialect instead. The obvious "fix"
+would have been a rewrite that buys nothing on the database this ships to. It is
+written down in the test now so it does not have to be found a fourth time.
+
+What the test counts instead is what a per-row round trip shows up as in either
+dialect: a SELECT or an UPDATE per film. Measured as a *slope* — two libraries of
+different sizes, compared — because reads legitimately grow a little with the
+number of Plex batches, so any flat threshold is either too loose to prove
+anything or breaks when the page size changes.
+
+**Two mutations I nearly recorded as passing.** The first attempts targeted the
+Radarr phase, which runs *after* Plex — so by then every film already exists, the
+`is None` branch never runs, and both mutations were no-ops the tests could not
+have caught. Aimed at the Plex phase, where the films are actually created, both
+turn the pins red. A mutation that changes nothing proves nothing, and it looks
+exactly like a mutation that was caught.
+
 ## 2607.57.0 — Counting the junk queue stopped fetching the films in it
 
 The header badge is a number. It was produced by building the list.
