@@ -623,6 +623,12 @@ class ScanPipeline:
 
             episode_count = 0
             file_records: list[tuple[Episode, dict[str, Any]]] = []
+            # Episodes are queued while their seasons are still id-less and are
+            # written after one flush, rather than flushing per season to read an
+            # id back. A first scan of a long-running library creates thousands of
+            # seasons, and a flush apiece is a statement apiece — free on local
+            # SQLite, a round trip each against a hosted database.
+            pending: list[tuple[Season, list[dict[str, Any]], dict[Any, dict[str, Any]]]] = []
             for data in series:
                 tvdb_id = data["tvdb_id"]
                 show = shows.get(tvdb_id)
@@ -668,33 +674,37 @@ class ScanPipeline:
                     if season is None:
                         season = Season(show_id=tvdb_id, season_number=number)
                         session.add(season)
-                        session.flush()  # need the id to hang episodes off
                         seasons[(tvdb_id, number)] = season
                     season.size_on_disk = season_data["size_on_disk"]
                     season.episode_count = season_data["episode_count"]
                     season.episode_file_count = season_data["episode_file_count"]
                     season_years = years.get(number)
                     season.air_year = min(season_years) if season_years else season.air_year
+                    pending.append((season, by_season.get(number, []), files_by_id))
 
-                    for episode_data in by_season.get(number, ()):
-                        key = (season.id, episode_data["episode_number"])
-                        episode = episodes.get(key)
-                        if episode is None:
-                            episode = Episode(
-                                season_id=season.id,
-                                episode_number=episode_data["episode_number"],
-                            )
-                            session.add(episode)
-                            episodes[key] = episode
-                        episode.title = episode_data["title"]
-                        episode.air_date = episode_data["air_date"]
-                        episode.sonarr_episode_id = episode_data["sonarr_episode_id"]
-                        episode.sonarr_episode_file_id = episode_data["sonarr_episode_file_id"]
-                        episode.has_file = episode_data["has_file"]
-                        episode_count += 1
-                        record = files_by_id.get(episode_data["sonarr_episode_file_id"])
-                        if record is not None:
-                            file_records.append((episode, record))
+            # One flush for the whole slice: every new season now has its id.
+            session.flush()
+
+            for season, season_episodes, show_files in pending:
+                for episode_data in season_episodes:
+                    key = (season.id, episode_data["episode_number"])
+                    episode = episodes.get(key)
+                    if episode is None:
+                        episode = Episode(
+                            season_id=season.id,
+                            episode_number=episode_data["episode_number"],
+                        )
+                        session.add(episode)
+                        episodes[key] = episode
+                    episode.title = episode_data["title"]
+                    episode.air_date = episode_data["air_date"]
+                    episode.sonarr_episode_id = episode_data["sonarr_episode_id"]
+                    episode.sonarr_episode_file_id = episode_data["sonarr_episode_file_id"]
+                    episode.has_file = episode_data["has_file"]
+                    episode_count += 1
+                    record = show_files.get(episode_data["sonarr_episode_file_id"])
+                    if record is not None:
+                        file_records.append((episode, record))
             session.flush()
             # No sweep here. This is one slice of the catalog, and a delete decided
             # from a slice removes everything the other slices hold — see

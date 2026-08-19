@@ -592,3 +592,99 @@ def test_the_show_write_reads_only_the_shows_it_was_given(factory, settings):
         event.remove(engine, "before_cursor_execute", _record)
 
     assert not unscoped, f"whole-table read in the show write: {unscoped}"
+
+
+def _first_sonarr_write(factory, settings, *, shows: int, seasons_each: int):
+    """Persist a fresh multi-season library and return the statements it issued."""
+    series_raw, episodes_by_id, files_by_id = [], {}, {}
+    for i in range(shows):
+        sonarr_id = i + 1
+        tvdb_id = 90000 + i
+        series_raw.append(
+            _series(
+                tvdb_id,
+                f"Long Runner {i}",
+                seasons=list(range(1, seasons_each + 1)),
+                sonarr_id=sonarr_id,
+            )
+        )
+        episodes_by_id[sonarr_id] = [
+            _episode(n, 1, file_id=sonarr_id * 1000 + n, air="2001-10-02T00:00:00Z")
+            for n in range(1, seasons_each + 1)
+        ]
+        files_by_id[sonarr_id] = [
+            _file(
+                sonarr_id * 1000 + n,
+                size=700_000_000,
+                height=480,
+                path=f"/tv/{tvdb_id}/s{n:02d}e01.mkv",
+            )
+            for n in range(1, seasons_each + 1)
+        ]
+
+    series = [normalize.normalize_sonarr_series(s) for s in series_raw]
+    detail = {
+        s["tvdb_id"]: {
+            "episodes": [
+                normalize.normalize_sonarr_episode(e) for e in episodes_by_id[s["sonarr_id"]]
+            ],
+            "files": [
+                normalize.normalize_sonarr_episode_file(f) for f in files_by_id[s["sonarr_id"]]
+            ],
+        }
+        for s in series
+        if s
+    }
+
+    pipe = ScanPipeline(factory, settings)
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(_c, _cur, statement, *_a, **_k):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        counts = pipe._persist_sonarr([s for s in series if s], detail)
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+    return counts, seen
+
+
+def test_a_season_is_written_once_not_inserted_then_updated(factory, settings):
+    """A first TV scan wrote every season twice.
+
+    The id was needed to hang episodes off, so each new season was flushed the
+    moment it was created — before its statistics were assigned. The insert
+    therefore stored an empty row and the next flush issued an UPDATE to fill it
+    in: two writes per season, and a library of long-running shows creates
+    thousands of them. Queuing the episodes and flushing the slice once means the
+    attributes are set before the insert, so there is nothing left to update.
+
+    Counted rather than timed, because on the SQLite the tests run against the
+    second write costs nothing at all.
+    """
+    counts, seen = _first_sonarr_write(factory, settings, shows=20, seasons_each=5)
+
+    inserts = [s for s in seen if s.startswith("INSERT INTO seasons")]
+    updates = [s for s in seen if s.startswith("UPDATE seasons")]
+    assert len(inserts) == 100, f"{len(inserts)} season inserts for 100 seasons"
+    assert not updates, f"{len(updates)} seasons were filled in by a second write"
+    assert counts["sonarr_shows"] == 20
+
+
+def test_the_seasons_still_carry_what_sonarr_said(factory, settings):
+    """NEGATIVE CONTROL: writing each season once must not mean writing less.
+
+    A season that was inserted empty and never updated would satisfy the pin
+    above perfectly while losing every figure the storage page is built on.
+    """
+    _counts, _seen = _first_sonarr_write(factory, settings, shows=20, seasons_each=5)
+
+    with factory() as session:
+        rows = list(session.scalars(select(Season)))
+    assert len(rows) == 100
+    assert all(r.size_on_disk == 10 * GB for r in rows)
+    assert all(r.episode_count == 2 and r.episode_file_count == 2 for r in rows)
+    # Air year comes from the episodes, so it proves the second pass ran too.
+    assert all(r.air_year == 2001 for r in rows)
