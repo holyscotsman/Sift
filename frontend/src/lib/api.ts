@@ -379,7 +379,13 @@ let assetRefresh: Promise<void> | null = null;
 
 export async function refreshAssetToken(): Promise<void> {
   if (assetRefresh) return assetRefresh;
-  assetRefresh = request<{ token: string; expires_in: number }>("/api/auth/asset-token")
+  // Timed out deliberately: the auth gate waits for this before it renders, so a
+  // request that hangs must fail rather than hold the whole app behind it.
+  assetRefresh = request<{ token: string; expires_in: number }>(
+    "/api/auth/asset-token",
+    {},
+    4000,
+  )
     .then((r) => {
       assetToken = r.token;
       // Renew at two thirds of its life, so an image request never races the expiry.
@@ -400,6 +406,15 @@ export function urlToken(): string | null {
   if (assetToken && Date.now() < assetTokenAt) return assetToken;
   // Missing or stale: kick off a renewal and fall back to the session token for
   // this one request, which is exactly what happened before asset tokens existed.
+  //
+  // This is a genuine last resort, not the ordinary path. It used to be the
+  // ordinary path: the auth gate kicked the refresh off without waiting and
+  // rendered immediately, so the first screenful of posters — sixty of them on
+  // the library page — carried the thirty-day session token in a query string on
+  // every single load. That is the exact leak asset tokens exist to prevent.
+  // The gate now waits, so reaching here means the mint actually failed and the
+  // choice is between a stale credential in a URL and a page of broken
+  // thumbnails.
   void refreshAssetToken();
   return assetToken ?? getToken();
 }

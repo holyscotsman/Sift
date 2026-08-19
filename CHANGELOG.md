@@ -2,6 +2,40 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.60.0 — The session token stopped travelling in poster URLs
+
+Asset tokens exist because an `<img>`, a download link and a WebSocket cannot
+send a header, so their credential rides in the query string — and query strings
+are recorded by every proxy they pass and kept in browser history. The short-lived
+asset token is what should travel there; the thirty-day session token opens the
+entire API.
+
+The gate that mints the asset token kicked the request off **without waiting** and
+rendered immediately. So the first screenful of posters — sixty of them on the
+library page — went out carrying the session token, on every single load and every
+sign-in. The fallback that made that happen is commented as a last resort; it was
+in fact the ordinary path.
+
+The gate now waits for the mint. The fallback stays, because a page of broken
+thumbnails is a worse failure than a stale credential in a URL, but reaching it
+now means the mint actually failed.
+
+**Waiting introduces its own risk**, so the mint carries a four-second timeout: a
+request that hangs must give up and let the app render rather than holding the
+whole UI behind it. That is what the negative control checks — and it replaced a
+first draft that was vacuous. "A *failed* mint still renders" cannot fail: the
+gate already catches rejections, so no plausible mutation breaks it. A *hang* is
+the one that can genuinely strand someone, and removing the timeout turns that
+test red.
+
+Six tests, mutation-verified — including two on the server side that this change
+makes load-bearing. The browser now always sends the asset token to the three
+routes that carry a credential in a URL, so every one of them has to accept that
+scope; the scan socket was covered for session tokens and bad tokens but not for
+the one the browser will actually send. A route that quietly required a session
+token would pass the tests, which call it directly, and fail in the browser, which
+no longer has one to give it.
+
 ## 2607.59.0 — First run on a hosted deploy was impossible
 
 A bug I introduced, found by reading my own deployment docs.
