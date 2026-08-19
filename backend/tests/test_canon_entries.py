@@ -434,3 +434,83 @@ def test_an_empty_canon_is_not_an_error(client, factory):
     c, _ = client
     body = c.post("/api/musthave/canon/request", json={"tier": 1, "limit": 5}).json()
     assert body == {"requested": 0, "failed": 0, "remaining": 0, "dry_run": True}
+
+
+def _seed_unowned(factory, count: int) -> None:
+    """`count` resolved canon entries, none of them owned."""
+    with factory() as session:
+        for n in range(count):
+            session.add(
+                CanonEntry(
+                    imdb_id=f"tt{n:07d}",
+                    title=f"Canon {n}",
+                    year=1970 + (n % 40),
+                    tier=1 + (n % 4),
+                    sources=["criterion"],
+                    votes=100_000 - n,
+                    tmdb_id=500_000 + n,
+                )
+            )
+        session.commit()
+
+
+def test_a_page_of_unowned_canon_does_not_read_the_whole_canon(factory):
+    """The canon is ten thousand rows and a screen shows two hundred.
+
+    This read every unowned entry and then sliced the list in Python, so asking
+    for one page shipped the entire canon across the wire — and since the
+    recommendation shelf is built canon-first, it now paid that on every scan as
+    well as every page view. The count of the remainder is a second statement
+    rather than a second read: what the caller needs from the rest is how big it
+    is, not what is in it.
+    """
+    from sqlalchemy import event
+
+    from sift.analysis import canon_missing
+
+    _seed_unowned(factory, 400)
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(_c, _cur, statement, *_a, **_k):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        with factory() as session:
+            page, total = canon_missing.missing(session, limit=20)
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert len(page) == 20
+    entry_reads = [s for s in seen if s.startswith("SELECT canon_entries")]
+    assert entry_reads, "nothing read the canon at all — is it still answering?"
+    unbounded = [s for s in entry_reads if " LIMIT " not in s.upper()]
+    assert not unbounded, f"whole-table read of canon_entries: {unbounded[0][:140]}"
+    # NEGATIVE CONTROL, inline: the remainder must still be reported in full. A
+    # "fix" that returned the page size would satisfy every assertion above and
+    # quietly tell you the canon holds twenty films.
+    assert total == 400
+
+
+def test_paging_the_canon_neither_skips_nor_repeats(factory):
+    """NEGATIVE CONTROL: moving the paging into SQL must not move the boundary.
+
+    An off-by-one in the offset is invisible in a single page and loses a film
+    between every pair of them.
+    """
+    from sift.analysis import canon_missing
+
+    _seed_unowned(factory, 50)
+
+    with factory() as session:
+        first, total = canon_missing.missing(session, limit=20, offset=0)
+        second, _ = canon_missing.missing(session, limit=20, offset=20)
+        rest, _ = canon_missing.missing(session, limit=20, offset=40)
+        everything, _ = canon_missing.missing(session, limit=50)
+
+    ids = [row.tmdb_id for row in first + second + rest]
+    assert total == 50
+    assert len(ids) == 50 and len(set(ids)) == 50
+    assert ids == [row.tmdb_id for row in everything]
