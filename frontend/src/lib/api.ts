@@ -58,6 +58,12 @@ export function getToken(): string | null {
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+  // The asset token was minted under the old session and dies with it. Changing
+  // the password rotates the server's signing secret, so every token issued
+  // before it — including this one — stops verifying; the cached copy would go
+  // on being sent for the rest of its nominal life, which is up to forty
+  // minutes of 401s on every poster and a scan socket that will not open.
+  invalidateAssetToken();
 }
 
 export class ApiError extends Error {
@@ -183,6 +189,9 @@ export const api = {
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     });
     setToken(result.token);
+    // Mint a replacement now rather than leaving the next poster to discover the
+    // old one is dead.
+    await refreshAssetToken();
     return result;
   },
   // In-app connection config.
@@ -376,6 +385,12 @@ export const api = {
 let assetToken: string | null = null;
 let assetTokenAt = 0;
 let assetRefresh: Promise<void> | null = null;
+
+/** Forget the minted asset token. Called whenever the session it belongs to changes. */
+export function invalidateAssetToken(): void {
+  assetToken = null;
+  assetTokenAt = 0;
+}
 
 export async function refreshAssetToken(): Promise<void> {
   if (assetRefresh) return assetRefresh;

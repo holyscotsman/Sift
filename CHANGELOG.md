@@ -2,6 +2,25 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.61.0 — The asset token now dies with the session it belongs to
+
+Changing your password rotates the server's signing secret. Every token issued
+before it stops verifying — the asset token included.
+
+Nothing told the browser. The minted asset token sat in memory with a clock
+saying it was good for another forty minutes, and went on being sent: **every
+poster 401ing and a scan socket that would not open**, for the rest of its
+nominal life, immediately after a password change.
+
+Storing a new session token now forgets the asset token, and a password change
+mints a replacement straight away rather than leaving the next poster to discover
+the old one is dead.
+
+Two tests, mutation-verified. The control matters here: throwing the token away on
+every read would satisfy "it is not reused after a password change" perfectly and
+re-mint constantly, which is a different waste — so an unchanged session has to
+keep the token it was given.
+
 ## 2607.60.0 — The session token stopped travelling in poster URLs
 
 Asset tokens exist because an `<img>`, a download link and a WebSocket cannot
