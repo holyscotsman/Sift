@@ -2,6 +2,30 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.47.0 — Write a season once, not twice
+
+A first TV scan wrote every season to the database twice.
+
+The id was needed to hang episodes off, so each new season was flushed the moment
+it was created — before any of its statistics had been assigned. The insert
+therefore stored an empty row and the next flush issued an UPDATE to fill it in.
+A library of long-running shows creates thousands of seasons, and each one cost
+two writes rather than one. The per-season flush also stopped the shows in a
+batch from being inserted together, so those went one statement at a time too.
+
+Episodes are now queued while their seasons are still id-less and written after a
+single flush for the whole slice, which means the attributes are set before the
+insert and there is nothing left to update.
+
+Measured on a 20-show, 5-seasons-each fixture: **574 statements to 395**. The
+100 redundant `UPDATE seasons` are gone entirely and the show inserts collapse
+from 30 statements to one. Nothing about what is stored changed.
+
+Two tests, both mutation-verified. The negative control is the one that matters:
+a season inserted empty and never updated would satisfy a "no second write" pin
+perfectly while losing every figure the storage page is built on, so the control
+reads the rows back and requires the sizes, counts and air years to be there.
+
 ## 2607.46.0 — Stop paying per file for work that is one request
 
 Three reads that grew with the library while the request stayed the same size.
