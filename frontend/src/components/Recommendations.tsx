@@ -1,6 +1,7 @@
-// Taste-based suggestions: TMDB's discovery graph seeded by your highest-rated
-// titles, reordered by the Taste Profile's emphasis sliders. Lives on the Taste
-// Profile page — it's a taste surface, not a canon one.
+// Films worth acquiring: the validated canon first, then TMDB's discovery graph
+// seeded by your highest-rated titles. The server says which half each list is
+// made of and this shows it, because a short list is otherwise indistinguishable
+// from a broken one — which is exactly how it was read the first time.
 
 import { useEffect, useState } from "react";
 
@@ -30,7 +31,7 @@ export function RecommendationsSection() {
     <section>
       <div className="mb-2 flex items-center gap-2">
         <span className="eyebrow">Recommended for you</span>
-        <Pill tone="accent">Taste graph</Pill>
+        <Pill tone="accent">Canon + taste</Pill>
       </div>
       {loading ? (
         <div className="panel p-4">
@@ -47,7 +48,7 @@ export function RecommendationsSection() {
             hint={
               <span className="inline-flex items-center gap-1.5">
                 <SparkleIcon size={14} />
-                {note ?? "Run a scan and connect TMDB to surface titles that match your taste."}
+                {note ?? "Run a scan to build the list from the canon, then connect TMDB to extend it with your taste."}
               </span>
             }
           />
@@ -68,8 +69,7 @@ export function RecommendationsSection() {
             ))}
           </div>
           <p className="mt-3 text-xs text-fg3">
-            Grounded in your highest-rated titles via TMDB — Sift ranks and explains, it never
-            invents.
+            {note ? `${note} ` : ""}Sift ranks and explains — it never invents.
           </p>
         </div>
       )}

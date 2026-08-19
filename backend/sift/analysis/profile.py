@@ -23,25 +23,38 @@ def _top(counter: Counter[str], n: int) -> list[dict[str, Any]]:
 
 
 def compute(session: Session) -> dict[str, Any]:
-    movies = list(session.scalars(select(Movie).where(Movie.in_plex.is_(True))))
+    """Recount the library. Called on every view of the profile page.
+
+    Columns, not entities. The profile counts three things about a film — its
+    genres, its keywords and its decade — while ``select(Movie)`` ships all
+    thirty-one columns for every film owned, ``overview`` and ``poster_url``
+    included. Those two alone are larger than everything this function reads, and
+    a hosted database meters bytes moved rather than statements, so the whole-row
+    read cost more than the page it draws. The same applies to the credits join,
+    which needs a job and a name out of two fully hydrated rows per credit — and
+    there are a dozen credits per film.
+    """
+    library = session.execute(
+        select(Movie.genres, Movie.keywords, Movie.year).where(Movie.in_plex.is_(True))
+    ).all()
     genres: Counter[str] = Counter()
     keywords: Counter[str] = Counter()
     eras: Counter[str] = Counter()
-    for m in movies:
-        genres.update(m.genres or [])
-        keywords.update(m.keywords or [])
-        if m.year:
-            eras[f"{(m.year // 10) * 10}s"] += 1
+    for movie_genres, movie_keywords, year in library:
+        genres.update(movie_genres or [])
+        keywords.update(movie_keywords or [])
+        if year:
+            eras[f"{(year // 10) * 10}s"] += 1
 
     directors: Counter[str] = Counter()
     actors: Counter[str] = Counter()
-    for mp, person in session.execute(
-        select(MoviePerson, Person).join(Person, Person.id == MoviePerson.person_id)
+    for job, name in session.execute(
+        select(MoviePerson.job, Person.name).join(Person, Person.id == MoviePerson.person_id)
     ):
-        if mp.job == "director":
-            directors[person.name] += 1
-        elif mp.job == "actor":
-            actors[person.name] += 1
+        if job == "director":
+            directors[name] += 1
+        elif job == "actor":
+            actors[name] += 1
 
     return {
         "genres": _top(genres, 8),
@@ -51,7 +64,7 @@ def compute(session: Session) -> dict[str, Any]:
         "eras": sorted(
             ({"name": k, "count": v} for k, v in eras.items()), key=lambda e: e["name"]
         ),
-        "library_size": len(movies),
+        "library_size": len(library),
     }
 
 
