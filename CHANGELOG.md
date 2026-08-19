@@ -2,6 +2,26 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.49.0 — Page the canon in the database, not in Python
+
+Asking for a page of unowned canon read the whole canon.
+
+The query had no `LIMIT`: every matching entry was loaded and the page was then
+sliced out of the list in memory. Ten thousand rows across the wire to draw a
+screen of two hundred — and since recommendations became canon-first, that read
+now happened on every scan as well as every page view, which made it the largest
+read the recommendation shelf performs.
+
+Paging moved into SQL. The remainder is counted with a separate `COUNT` rather
+than measured by reading it, because what the caller needs from the rest is how
+big it is, not what is in it. The reported total is unchanged, and so is the
+order.
+
+Two tests, both mutation-verified. The paging control matters more than the size
+one: an off-by-one in the offset is invisible within a single page and loses a
+film between every pair of them, so it walks three consecutive pages and requires
+them to reconstruct the unpaged list exactly.
+
 ## 2607.48.0 — Say what the recommendations are made of
 
 The recommendation shelf still described itself as the taste graph, and still

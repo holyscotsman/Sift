@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..db.models import CanonEntry, Movie
 
@@ -46,23 +47,32 @@ def missing(
     swap places between requests and paging silently skips one.
     """
     owned = select(Movie.tmdb_id).where(Movie.in_plex.is_(True))
-    stmt = select(CanonEntry).where(
+    conditions: list[ColumnElement[bool]] = [
         CanonEntry.tmdb_id.is_not(None),
         CanonEntry.tmdb_id.not_in(owned),
-    )
+    ]
     if tier is not None:
-        stmt = stmt.where(CanonEntry.tier == tier)
+        conditions.append(CanonEntry.tier == tier)
 
-    rows = list(
+    # Paged in SQL, not in Python. Reading every unowned entry to hand back two
+    # hundred of them meant ten thousand rows across the wire for one screen, and
+    # the recommendation shelf asks the same question on every scan. The count is
+    # a second statement rather than a second read: what the caller needs from the
+    # remainder is how big it is, not what is in it.
+    total = session.scalar(select(func.count()).select_from(CanonEntry).where(*conditions)) or 0
+    page = list(
         session.scalars(
-            stmt.order_by(
+            select(CanonEntry)
+            .where(*conditions)
+            .order_by(
                 CanonEntry.tier.asc(),
                 CanonEntry.votes.desc().nulls_last(),
                 CanonEntry.tmdb_id.asc(),
             )
+            .limit(max(1, limit))
+            .offset(offset)
         )
     )
-    page = rows[offset : offset + max(1, limit)]
     return (
         [
             CanonMissing(
@@ -78,5 +88,5 @@ def missing(
             )
             for row in page
         ],
-        len(rows),
+        total,
     )
