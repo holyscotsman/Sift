@@ -191,3 +191,142 @@ def test_scoring_never_reads_the_wide_columns(factory, settings):
         offenders = [s for s in reads if column in s]
         assert not offenders, f"scoring read {column} it never uses: {offenders[0][:140]}"
         assert any(table in s for s in reads), f"nothing read {table} at all — is it still running?"
+
+
+def _scored_library(factory, count: int, *, candidates: int) -> None:
+    """`count` scored films, of which only `candidates` are removal candidates."""
+    with factory() as session:
+        for n in range(count):
+            tmdb_id = 5_000 + n
+            session.add(
+                Movie(
+                    tmdb_id=tmdb_id,
+                    title=f"Film {n}",
+                    year=2000,
+                    in_plex=True,
+                    is_kids=False,
+                    keep_override=False,
+                    overview="x" * 600,
+                    poster_url="https://image.tmdb.org/t/p/w342/" + "y" * 40,
+                )
+            )
+            flagged = n < candidates
+            session.add(
+                Score(
+                    movie_id=tmdb_id,
+                    # Deliberately *ascending* with the id, so rank order and id
+                    # order disagree. Seed them in agreement and any test of the
+                    # ranking passes by coincidence — an `IN` query returning its
+                    # own order would look correct.
+                    junk_score=50.0 + n if flagged else 5.0,
+                    signals={
+                        "verdict": "neutral",
+                        "band": "junk" if flagged else "keep",
+                        "signals": [{"name": f"s{i}", "value": i} for i in range(6)],
+                    },
+                )
+            )
+        session.commit()
+
+
+def test_the_junk_page_does_not_hydrate_the_whole_library(factory):
+    """The Junk queue is asked for on every visit to the screen.
+
+    Deciding candidacy needs a score and a verdict; *rendering* a candidate needs
+    the film. Selecting both at once meant every non-kids title arrived fully
+    hydrated — all thirty-one columns of `movies`, `overview` and `poster_url`
+    included — so that a couple of hundred could be shown and the rest thrown
+    away. On a byte-metered database that discard is the whole cost of the page.
+    """
+    thr = JunkThresholds()
+    _scored_library(factory, 300, candidates=40)
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        with factory() as session:
+            rows = junk.candidates(session, thr, limit=20)
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    # NEGATIVE CONTROL, inline: a query that returned nothing reads no wide
+    # columns at all and would satisfy every assertion below.
+    assert len(rows) == 20
+
+    reads = [s for s in seen if s.upper().startswith("SELECT")]
+    wide = [s for s in reads if "movies.overview" in s]
+    assert len(wide) == 1, f"{len(wide)} statements read the wide movie columns"
+    # And the one that does is bounded by the winners rather than the library.
+    assert " IN (" in wide[0], f"the hydration read is unbounded: {wide[0][:160]}"
+
+
+def test_the_same_films_come_back_in_the_same_order(factory):
+    """NEGATIVE CONTROL: reading less must not mean deciding differently.
+
+    Two passes can disagree with one in three ways — a different filter, a
+    different ranking, or an `IN` query quietly returning its own order. Compare
+    against the whole set, computed the slow way.
+    """
+    thr = JunkThresholds()
+    _scored_library(factory, 120, candidates=30)
+
+    with factory() as session:
+        rows = junk.candidates(session, thr, limit=10)
+
+        reference = [
+            (m, s)
+            for m, s in session.execute(
+                select(Movie, Score)
+                .join(Score, Score.movie_id == Movie.tmdb_id)
+                .where(
+                    Movie.in_plex.is_(True),
+                    Movie.is_kids.is_(False),
+                    Movie.keep_override.is_(False),
+                )
+                .order_by(Score.junk_score.desc())
+            )
+            if junk._is_candidate(s, thr)
+        ][:10]
+
+    assert [m.tmdb_id for m, _ in rows] == [m.tmdb_id for m, _ in reference]
+    assert [s.junk_score for _, s in rows] == [s.junk_score for _, s in reference]
+    # Ranked, not merely filtered.
+    assert [s.junk_score for _, s in rows] == sorted(
+        (s.junk_score for _, s in rows), reverse=True
+    )
+
+
+def test_a_protect_verdict_still_keeps_a_low_scorer_out(factory):
+    """NEGATIVE CONTROL: the verdict overlay must survive the split.
+
+    The classifier's verdict lives inside the `signals` JSON and is the one part
+    of the decision that could not move into SQL. A refactor that dropped it
+    would flag protected titles — cult classics and US theatrical releases — for
+    removal, which is the exact failure the overlay exists to prevent.
+    """
+    thr = JunkThresholds()
+    with factory() as session:
+        for n, verdict in enumerate(("protect", "remove", "neutral")):
+            tmdb_id = 8_000 + n
+            session.add(Movie(tmdb_id=tmdb_id, title=verdict, in_plex=True))
+            session.add(
+                Score(
+                    movie_id=tmdb_id,
+                    # Low enough that only the verdict can put it in the queue,
+                    # and high enough that only the verdict can keep it out.
+                    junk_score=95.0 if verdict == "protect" else 1.0,
+                    signals={"verdict": verdict, "band": "junk"},
+                )
+            )
+        session.commit()
+
+        titles = {m.title for m, _ in junk.candidates(session, thr, limit=50)}
+
+    assert "protect" not in titles, "a protected title reached the removal queue"
+    assert "remove" in titles, "a remove verdict was ignored"
+    assert "neutral" not in titles, "a low-scoring neutral title was flagged anyway"
