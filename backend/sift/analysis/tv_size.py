@@ -235,16 +235,29 @@ def seasons(
     return out[: max(1, limit)], total
 
 
-def inconsistencies(session: Session, *, limit: int = 200) -> list[Inconsistency]:
+def inconsistencies(
+    session: Session,
+    *,
+    limit: int = 200,
+    groups: dict[tuple[int, int], SeasonGroup] | None = None,
+    shows: dict[int, Show] | None = None,
+) -> list[Inconsistency]:
     """Seasons whose episodes disagree with one another.
 
     Judged against the season itself rather than the library. A season entirely in
     SD is a decision; one SD episode among twenty in 1080p is an accident, and it
     is the accident that is worth reporting.
+
+    ``groups`` and ``shows`` take the same injected reads as :func:`seasons`, for
+    the same reason: the storage page asks both questions of one set of rows, and
+    the join behind them is the widest in the app.
     """
     out: list[Inconsistency] = []
-    shows = load_shows(session)
-    for (tvdb_id, number), group in load_seasons(session).items():
+    if shows is None:
+        shows = load_shows(session)
+    if groups is None:
+        groups = load_seasons(session)
+    for (tvdb_id, number), group in groups.items():
         files = group.files
         if len(files) < 3:
             # Too few to have a "most of the season" to differ from.

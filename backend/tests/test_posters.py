@@ -195,3 +195,103 @@ async def test_dead_stored_poster_url_heals_via_tmdb(settings, factory, tmp_path
     # The stored corpse was healed to the TMDB URL for next time.
     with factory() as session:
         assert "image.tmdb.org" in session.get(Movie, 603).poster_url
+
+
+def _seed_cache_dir(cache: PosterCache, count: int) -> None:
+    """Pretend the cache already holds `count` posters from earlier sessions."""
+    directory = cache.path_for(0).parent
+    directory.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        (directory / f"seed{i}.img").write_bytes(b"x" * 32)
+
+
+async def _fetch_counting_stats(
+    cache: PosterCache, tmdb_id: int, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    """Number of `stat()` calls a single poster fetch makes."""
+    from pathlib import Path as _Path
+
+    real = _Path.stat
+    calls = 0
+
+    def counting(self: _Path, **kw: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(self, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(_Path, "stat", counting)
+    try:
+        assert await cache.get(tmdb_id) is not None
+    finally:
+        monkeypatch.undo()
+    return calls
+
+
+async def test_caching_a_poster_costs_the_same_however_big_the_cache_is(
+    settings, factory, tmp_path, monkeypatch
+):
+    """A first scroll through a large library fetches hundreds of posters, and
+    every one of them used to stat the entire cache directory to answer "am I
+    over the cap?" — a question that is almost always no. Fifteen thousand
+    cached posters meant fifteen thousand syscalls per thumbnail.
+
+    The property is not "fewer stats" but "the per-fetch cost does not grow with
+    the cache", which is what makes a big library behave like a small one.
+    """
+    counts: dict[int, int] = {}
+    for label, seeded in (("small", 10), ("large", 400)):
+        settings.posters.cache_dir = tmp_path / label
+        with factory() as session:
+            for i in (1, 2):
+                if session.get(Movie, i) is None:
+                    session.add(
+                        Movie(tmdb_id=i, title=f"M{i}", in_plex=True,
+                              poster_url="https://image.tmdb.org/t/p/w342/s.jpg")
+                    )
+            session.commit()
+        cache = PosterCache(settings, factory, transport=_transport())
+        _seed_cache_dir(cache, seeded)
+        await cache.get(1)  # first write of the process measures the directory once
+        counts[seeded] = await _fetch_counting_stats(cache, 2, monkeypatch)
+
+    # Forty times the cache, and the same handful of syscalls.
+    assert counts[400] <= counts[10] + 2, counts
+
+
+async def test_the_running_total_is_re_measured_after_an_eviction(
+    settings, factory, tmp_path, monkeypatch
+):
+    """NEGATIVE CONTROL: a counter that drifts is worse than no counter.
+
+    Eviction is the one moment the directory shrinks behind the count's back. If
+    the running total is not reset to what is actually on disk afterwards, it
+    stays permanently above the cap and every later fetch evicts something —
+    turning the cache into a treadmill that throws away the poster it just read.
+    """
+    from sift.services import posters as posters_mod
+
+    settings.posters.cache_dir = tmp_path / "cache"
+    with factory() as session:
+        for i in (1, 2, 3, 4):
+            session.add(Movie(tmdb_id=i, title=f"M{i}", in_plex=True, poster_url="http://img/x"))
+        session.commit()
+
+    cache = PosterCache(
+        settings,
+        factory,
+        transport=httpx.MockTransport(lambda _r: httpx.Response(200, content=b"x" * 600)),
+    )
+    monkeypatch.setattr(posters_mod, "_MAX_CACHE_BYTES", 1500)  # fits two, not three
+
+    for i in (1, 2, 3):
+        assert await cache.get(i) is not None
+    assert cache.cached(1) is None  # the eviction happened
+
+    # After it, the count must describe the directory as it now is.
+    _count, on_disk = cache.stats()
+    assert cache._bytes_on_disk == on_disk
+
+    # And the next fetch must evict exactly one more, not everything.
+    assert await cache.get(4) is not None
+    assert cache.cached(4) is not None
+    assert cache.stats()[0] == 2
