@@ -403,3 +403,83 @@ async def test_the_taste_graph_extends_the_canon_rather_than_replacing_it(factor
     assert len(ids) == len(set(ids))
     assert ids[-1] == 777, "canon leads, the graph extends"
     assert counts["canon"] == 5 and counts["taste"] == 1
+
+
+def _client(settings, factory):
+    from fastapi.testclient import TestClient
+
+    from sift.main import create_app
+
+    for name in ("plex", "radarr", "tautulli", "tmdb"):
+        getattr(settings, name).enabled = False
+    return TestClient(create_app(settings, session_factory=factory))
+
+
+def _store_some(factory, count: int) -> None:
+    from sift.analysis.recommend import Candidate, Taste, _store, _taste_candidates, rank
+
+    taste = Taste(top_genres=frozenset(), top_eras=frozenset(), genre_weight=0.5, era_weight=0.5)
+    candidates = []
+    for i in range(count):
+        c = Candidate(
+            tmdb_id=600 + i, title=f"Film {i}", year=2000, vote_average=7.0, poster_path=None
+        )
+        c.sources = [("Anchor", 1.0)]
+        c.score = float(i)
+        candidates.append(c)
+    with factory() as session:
+        _store(session, _taste_candidates(rank(candidates, taste), taste, set(), 1000))
+
+
+def _seed_canon_entries(factory, *, resolved: int, unresolved: int) -> None:
+    from sift.db.models import CanonEntry
+
+    with factory() as session:
+        for n in range(resolved):
+            session.add(
+                CanonEntry(
+                    imdb_id=f"tt{n:07d}", title=f"Resolved {n}", tier=1, tmdb_id=800_000 + n
+                )
+            )
+        for n in range(unresolved):
+            session.add(
+                CanonEntry(imdb_id=f"tt9{n:06d}", title=f"Unresolved {n}", tier=1, tmdb_id=None)
+            )
+        session.commit()
+
+
+def test_a_short_list_says_why_it_is_short(factory, settings):
+    """The question this was actually asked in the form of was "why am I only
+    getting five?".
+
+    A canon-first list is thin for one reason far more often than any other: the
+    canon arrives keyed by IMDb id and only entries resolved to a TMDB id can be
+    compared against the library, so an unresolved remainder is a list that has
+    not finished filling in. From the shelf that is indistinguishable from a
+    broken feature, which is exactly how it was read.
+    """
+    _store_some(factory, 5)
+    _seed_canon_entries(factory, resolved=2, unresolved=37)
+
+    body = _client(settings, factory).get("/api/missing/recommendations").json()
+
+    assert len(body["items"]) == 5
+    assert "37 canon titles have no TMDB id yet" in body["note"]
+
+
+def test_a_full_list_does_not_apologise_for_the_canon(factory, settings):
+    """NEGATIVE CONTROL: the explanation must appear only when there is something
+    to explain.
+
+    Printed unconditionally it becomes furniture — read once, ignored after — and
+    the one time it matters it says nothing new.
+    """
+    _store_some(factory, 30)
+    _seed_canon_entries(factory, resolved=2, unresolved=37)
+
+    body = _client(settings, factory).get("/api/missing/recommendations?limit=10").json()
+
+    assert len(body["items"]) == 10
+    assert "no TMDB id yet" not in body["note"]
+    # And it still says what the list is made of.
+    assert "from the validated canon" in body["note"]

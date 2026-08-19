@@ -18,7 +18,7 @@ from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
-from ..services import canon, curated_lists, settings_store
+from ..services import canon, canon_entries, curated_lists, settings_store
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
     CanonMissingResponse,
@@ -253,14 +253,28 @@ async def missing_recommendations(
     capped = max(1, min(limit, recommend_analysis.STORED_LIMIT))
     with factory() as session:
         items, counts = recommend_analysis.stored(session, limit=capped)
+        # Only asked when the list came up short. A canon-first list is thin for
+        # one reason far more often than any other — the canon arrives keyed by
+        # IMDb id and only resolved entries can be compared against a library
+        # keyed by TMDB id — and from the shelf that is invisible. Saying it is
+        # the difference between "this is broken" and "this is still filling in".
+        unresolved = (
+            canon_entries.coverage(session)["unresolved"] if counts["total"] < capped else 0
+        )
     if items:
         total = counts["total"]
         shown = f"Showing {len(items)} of {total}. " if total > len(items) else ""
+        pending = (
+            f" {unresolved} canon titles have no TMDB id yet — they join the list as "
+            "resolution catches up."
+            if unresolved
+            else ""
+        )
         return RecommendationsResponse(
             items=[RecommendedMovie(**m) for m in items],
             note=(
                 f"{shown}{counts['canon']} from the validated canon, "
-                f"{counts['taste']} from your taste graph."
+                f"{counts['taste']} from your taste graph.{pending}"
             ),
         )
     # Nothing stored yet — an instance that has not rescanned since this became a

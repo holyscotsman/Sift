@@ -2,6 +2,27 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.50.0 — A short recommendation list says why it is short
+
+"Why am I only getting five?" was answerable from the database and not from the
+screen, which is the actual defect. The list reports its composition now, but a
+canon half that reads *"2 from the validated canon"* still leaves the obvious
+question hanging.
+
+There is one cause far more often than any other. The canon arrives keyed by IMDb
+id and the library is keyed by TMDB id, so only entries that have been resolved
+can be compared — an unresolved remainder is not a missing feature, it is a list
+that has not finished filling in. Where the queue comes back shorter than asked
+for, the note now names that remainder: *"37 canon titles have no TMDB id yet —
+they join the list as resolution catches up."*
+
+It appears **only** when the list is actually short. Printed unconditionally it
+becomes furniture: read once, ignored afterwards, and silent on the one occasion
+it matters. That is the negative control, and it is mutation-verified alongside
+the pin itself.
+
+The coverage query costs four counts and is asked only on the short path.
+
 ## 2607.49.0 — Page the canon in the database, not in Python
 
 Asking for a page of unowned canon read the whole canon.
