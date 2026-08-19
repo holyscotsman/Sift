@@ -1,7 +1,7 @@
 // Collections — incomplete sets you own part of, with one-click requests for
 // the gaps. Requests go through Overseerr when it's configured, Radarr otherwise.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { CheckIcon } from "@/components/icons";
 import { RequestAllButton, RequestButton } from "@/components/RequestCard";
@@ -12,14 +12,26 @@ import type { CollectionGap } from "@/lib/types";
 export function Collections() {
   const [gaps, setGaps] = useState<CollectionGap[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
+  const load = useCallback(() => {
+    setLoadError(null);
+    return api
       .missingCollections()
       .then((r) => setGaps(r.collections))
-      .catch(() => setGaps([]))
-      .finally(() => setLoading(false));
+      .catch((e: unknown) =>
+        // An empty list here reads as "every set you own part of is complete",
+        // which is the opposite of what a failed read means.
+        setLoadError(
+          (e as { message?: string })?.message ||
+            "Couldn't load your collections. This is not the same as owning every set in full.",
+        ),
+      );
   }, []);
+
+  useEffect(() => {
+    void load().finally(() => setLoading(false));
+  }, [load]);
 
   return (
     <div className="page-enter">
@@ -40,6 +52,16 @@ export function Collections() {
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="mb-2 h-16" />
             ))}
+          </div>
+        ) : loadError ? (
+          <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+            <p className="font-semibold">{loadError}</p>
+            <button
+              onClick={() => void load()}
+              className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+            >
+              Try again
+            </button>
           </div>
         ) : gaps.length === 0 ? (
           <div className="panel">
