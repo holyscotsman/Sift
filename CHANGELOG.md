@@ -2,6 +2,37 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.56.0 — Collections stopped reading every set to show the incomplete ones
+
+The same shape as the Junk page, one screen over.
+
+Which collections qualify is decided by two counts already stored on the
+collection row: you own some of it, and not all of it. Showing one needs its
+members. The order was backwards — every member of every collection was read and
+hydrated as an ORM entity and sorted, and only then was the question asked. Most
+of that belongs to collections that are already complete (nothing to show) or
+wholly unowned (not yours to complete), and it crossed the wire on every load of
+the page.
+
+The counts are filtered in SQL now, and members are read only for the collections
+that survive.
+
+Measured on 200 collections of 20 members each, 20 of them incomplete: **4,200
+rows to 420, and 117 KB to 9.8 KB.** The ratio is not a constant — it is the
+fraction of your collections that are actually interesting, so a library where
+most sets are half-finished saves less, and one where most are complete saves
+more.
+
+Four tests, all mutation-verified. Two of them guard the boundary rather than the
+cost: `owned_count == 0 or owned_count >= total_count` became two SQL
+comparisons, and either is easy to get wrong by one — a `>=` where a `>` belongs
+puts complete sets back on the page. Both off-by-ones were tried, and both go
+red.
+
+The fourth is the one worth having: scoping a member read by collection id can
+drop a collection's members silently, which shows the gap with an empty member
+list — indistinguishable, on screen, from a set you have already completed.
+
 ## 2607.55.0 — The Junk page stopped reading the whole library to show two hundred rows
 
 Deciding whether a title is a removal candidate needs two things: its score and
