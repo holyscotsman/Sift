@@ -5,6 +5,8 @@ export type ServiceName = "plex" | "radarr" | "tautulli" | "tmdb";
 export interface AuthStatus {
   setup_complete: boolean;
   username: string | null;
+  /** First-run account creation needs the deploy's access token. */
+  setup_requires_token?: boolean;
 }
 
 export interface TokenResponse {

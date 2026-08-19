@@ -291,3 +291,57 @@ def test_a_healthy_database_is_not_reported_as_unavailable(factory, settings) ->
     with TestClient(create_app(settings, session_factory=factory)) as c:
         assert c.get("/api/junk").status_code == 200
         assert c.get("/api/status").status_code == 200
+
+
+def test_the_wizard_is_told_the_deploy_token_is_needed(factory, settings) -> None:
+    """Requiring the token without saying so locked the owner out of their own app.
+
+    A hosted Blueprint generates ``SIFT_SERVER__API_TOKEN``, and setup refuses
+    without it — correctly, or whoever finds the hostname first gets the account.
+    But the browser had no way to learn that: the wizard posted a username and a
+    password, got a 401 it could not explain, and there was no field to put the
+    token in. On the deployment path this app is documented for, first run simply
+    did not work.
+    """
+    from pydantic import SecretStr
+
+    settings.server.api_token = SecretStr("deploy-token")
+    client = TestClient(create_app(settings, session_factory=factory))
+
+    body = client.get("/api/auth/status").json()
+    assert body["setup_complete"] is False
+    assert body["setup_requires_token"] is True
+
+
+def test_a_local_install_is_not_asked_for_a_token_it_does_not_have(
+    client: TestClient,
+) -> None:
+    """NEGATIVE CONTROL: a field nobody can fill in is worse than no field.
+
+    With no static token configured, setup is open and the wizard must not
+    demand a credential that does not exist.
+    """
+    body = client.get("/api/auth/status").json()
+    assert body["setup_complete"] is False
+    assert body["setup_requires_token"] is False
+
+
+def test_a_finished_install_stops_advertising_setup(factory, settings) -> None:
+    """NEGATIVE CONTROL: the flag describes first run, not the deploy.
+
+    Once an account exists, setup is closed for good — reporting that it "needs a
+    token" would tell an anonymous caller there is a way in that no longer exists.
+    """
+    from pydantic import SecretStr
+
+    settings.server.api_token = SecretStr("deploy-token")
+    client = TestClient(create_app(settings, session_factory=factory))
+    client.post(
+        "/api/auth/setup",
+        json={"username": "owner", "password": "long-enough-pw"},
+        headers={"X-Sift-Token": "deploy-token"},
+    )
+
+    body = client.get("/api/auth/status").json()
+    assert body["setup_complete"] is True
+    assert body["setup_requires_token"] is False

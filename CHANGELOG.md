@@ -2,6 +2,43 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.59.0 — First run on a hosted deploy was impossible
+
+A bug I introduced, found by reading my own deployment docs.
+
+The security work made first-run account creation require the deploy's access
+token — correctly, because a hosted instance is reachable by anyone who finds the
+URL, and without it whoever arrives first gets the account. But the wizard sent
+only a username and a password. It got a **401**, had nowhere to put a token, and
+no way to learn one was wanted: `/api/auth/status` reported `setup_complete:
+false` and nothing else.
+
+On Render, where the Blueprint generates `SIFT_SERVER__API_TOKEN` for you, that
+means **the app could not be set up at all**. Anyone deploying fresh — or
+re-deploying after the free tier wiped the ephemeral database, which the deploy
+guide warns happens — hit a login screen that refused them.
+
+`/api/auth/status` now reports `setup_requires_token`, and the wizard asks for it
+where it is needed, naming where to find it. Where no static token is configured
+— an ordinary local install — nothing changes and no field appears, because a
+field nobody can fill in is worse than no field.
+
+One related fix: an explicitly supplied credential now wins over the ambient
+session token in the API client. A stale token in browser storage would otherwise
+have been sent in place of the deploy token, which is the same 401 by a different
+route.
+
+Six tests, all mutation-verified, across both halves. Verified end to end as
+well, against a running server with a token configured: the flow that returned
+401 now returns 201, and the flag turns itself off once an account exists.
+
+**The docs that found it are corrected too.** Step 6 of the deploy guide still
+described an "unlock screen" where you paste a token — the flow from before there
+were accounts at all. And the Neon route said nothing about the **transfer
+allowance**, which is the limit that actually takes an instance down: the free
+tier meters bytes moved, so scan frequency is what exhausts it, and a two-hourly
+scan moves twelve times what a daily one does. Both now say so.
+
 ## 2607.58.0 — Guard the whole scan's cost, and write down the trap in reading it
 
 No behaviour change. A test, and a piece of knowledge that had cost three

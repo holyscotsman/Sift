@@ -77,7 +77,10 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs?: numb
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   if (init.body) headers.set("Content-Type", "application/json");
-  if (token) headers.set("X-Sift-Token", token);
+  // An explicitly supplied credential wins over the ambient session one: setup
+  // carries the deploy token, and on a fresh install a stale session token in
+  // storage would otherwise be sent in its place.
+  if (token && !headers.has("X-Sift-Token")) headers.set("X-Sift-Token", token);
 
   let signal = init.signal;
   let timeoutController: AbortController | null = null;
@@ -157,10 +160,14 @@ export const api = {
   version: () => request<{ name: string; version: string }>("/api/version"),
   // Auth (open endpoints — the way in).
   authStatus: () => request<AuthStatus>("/api/auth/status"),
-  authSetup: (username: string, password: string) =>
+  // `deployToken` is the value of SIFT_SERVER__API_TOKEN. Where a deploy sets
+  // one, the server requires it to create the first account — without sending
+  // it the wizard simply got a 401 it could not explain.
+  authSetup: (username: string, password: string, deployToken?: string) =>
     request<TokenResponse>("/api/auth/setup", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+      headers: deployToken ? { "X-Sift-Token": deployToken } : undefined,
     }),
   authLogin: (username: string, password: string) =>
     request<TokenResponse>("/api/auth/login", {

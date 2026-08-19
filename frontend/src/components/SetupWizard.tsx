@@ -1,7 +1,7 @@
 // First-run setup: create the login, connect services, then hand off to the app.
 // Shown by AuthGate when the backend reports setup_complete=false.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ConnectionsForm } from "@/components/ConnectionsForm";
 import { PlaneIcon } from "@/components/icons";
@@ -46,6 +46,22 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A hosted deploy generates SIFT_SERVER__API_TOKEN, and the server requires it
+  // to create the first account — otherwise whoever finds the hostname first
+  // gets the account. The wizard asks for it only where it is actually needed.
+  const [deployToken, setDeployToken] = useState("");
+  const [needsToken, setNeedsToken] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .authStatus()
+      .then((s) => live && setNeedsToken(Boolean(s.setup_requires_token)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   async function createAccount(e: React.FormEvent) {
     e.preventDefault();
@@ -53,9 +69,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     if (username.trim().length < 3) return setError("Username must be at least 3 characters.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
     if (password !== confirm) return setError("Passwords don't match.");
+    if (needsToken && !deployToken.trim()) {
+      return setError("This deploy needs its access token to create the first account.");
+    }
     setBusy(true);
     try {
-      const res = await api.authSetup(username.trim(), password);
+      const res = await api.authSetup(username.trim(), password, deployToken.trim() || undefined);
       setToken(res.token);
       setStep("connect");
     } catch (err) {
@@ -118,6 +137,25 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
                 />
               </label>
+              {needsToken && (
+                <label className="text-xs text-fg3">
+                  Deploy access token
+                  <input
+                    id="deploy-token"
+                    name="deploy-token"
+                    type="password"
+                    value={deployToken}
+                    onChange={(e) => setDeployToken(e.target.value)}
+                    autoComplete="off"
+                    className="mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
+                  />
+                  <span className="mt-1 block text-fg3">
+                    Your host generated this as <code>SIFT_SERVER__API_TOKEN</code> — on Render
+                    it is under your service → Environment. It proves the first account is
+                    being created by whoever owns the deploy.
+                  </span>
+                </label>
+              )}
             </div>
             {error && <p className="mt-2 text-sm" style={{ color: "var(--junk)" }}>{error}</p>}
             <button
