@@ -38,8 +38,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       try {
         await api.status();
         // Mint the short-lived credential that poster and download URLs carry,
-        // so the session token never has to stand in for it.
-        void refreshAssetToken();
+        // *before* rendering. Kicking it off without waiting meant the first
+        // screenful of posters went out carrying the session token instead —
+        // which is what the asset token exists to avoid. The request is timed
+        // out, so a hung mint cannot hold the app behind it.
+        await refreshAssetToken();
         setPhase("authed");
       } catch (e) {
         setPhase(e instanceof ApiError && e.status === 401 ? "login" : "authed");
@@ -71,7 +74,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.authLogin(username.trim(), password);
       setToken(res.token);
-      void refreshAssetToken();
+      // Same reason as above: the first page after signing in is the one most
+      // likely to be a wall of thumbnails.
+      await refreshAssetToken();
       localStorage.setItem(USERNAME_KEY, username.trim());
       setPhase("authed");
     } catch (err) {
