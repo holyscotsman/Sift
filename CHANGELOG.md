@@ -28,7 +28,13 @@ gate already catches rejections, so no plausible mutation breaks it. A *hang* is
 the one that can genuinely strand someone, and removing the timeout turns that
 test red.
 
-Four tests, mutation-verified.
+Six tests, mutation-verified — including two on the server side that this change
+makes load-bearing. The browser now always sends the asset token to the three
+routes that carry a credential in a URL, so every one of them has to accept that
+scope; the scan socket was covered for session tokens and bad tokens but not for
+the one the browser will actually send. A route that quietly required a session
+token would pass the tests, which call it directly, and fail in the browser, which
+no longer has one to give it.
 
 ## 2607.59.0 — First run on a hosted deploy was impossible
 

@@ -345,3 +345,42 @@ def test_a_finished_install_stops_advertising_setup(factory, settings) -> None:
     body = client.get("/api/auth/status").json()
     assert body["setup_complete"] is True
     assert body["setup_requires_token"] is False
+
+
+def test_the_asset_token_opens_every_route_that_carries_it_in_a_url(
+    client: TestClient, factory
+) -> None:
+    """The three places a credential travels in a query string, and the reason
+    the asset scope exists at all.
+
+    An ``<img>``, a download link and a WebSocket cannot send a header, so each
+    carries its token in the URL. The browser now always sends the *asset* token
+    there — it waits for one to be minted before rendering — so every one of these
+    has to accept that scope. A route that quietly required a session token would
+    work in the tests, which call it directly, and break in the browser, which no
+    longer has one to give it.
+    """
+    session_token = _signed_in(client, factory)
+    asset = client.get("/api/auth/asset-token", headers={"X-Sift-Token": session_token}).json()
+    token = asset["token"]
+
+    # Posters.
+    assert client.get(f"/api/poster/603?token={token}").status_code in (200, 404)
+    # Exports — read-only by construction, which is why they take the asset scope.
+    assert client.get(f"/api/movies.csv?token={token}").status_code == 200
+    # The scan socket: it opens, rather than being closed before accept.
+    with client.websocket_connect(f"/ws/scan/1?token={token}"):
+        pass
+
+
+def test_a_bad_token_still_closes_the_socket(client: TestClient, factory) -> None:
+    """NEGATIVE CONTROL: accepting the asset scope must not mean accepting anything.
+
+    A gate that opened for every string would satisfy the test above perfectly.
+    """
+    from starlette.websockets import WebSocketDisconnect
+
+    _signed_in(client, factory)
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/scan/1?token=not-a-real-token"):
+            pass
