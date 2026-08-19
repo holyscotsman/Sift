@@ -454,9 +454,16 @@ a link-local address is not caught.
 ```bash
 ruff check backend
 ./.venv/bin/mypy backend/sift     # strict
-./.venv/bin/pytest -q             # ~440 tests
-npm --prefix frontend run build
+./.venv/bin/pytest -q             # ~530 tests
+npm --prefix frontend test        # Vitest + Testing Library, jsdom
+npm --prefix frontend run build   # tsc --noEmit, then the bundle
 ```
+
+The frontend tests cover component *logic* and nothing else: a catch that
+empties a list, a selection rebuilt from a response, focus landing on a
+destructive button. They do not check appearance, and should not be extended to
+— a snapshot of markup fails on every deliberate change and passes on every
+change that matters, which trains people to update it without reading it.
 
 Two conventions are non-negotiable and explain a lot of the test code:
 
@@ -506,12 +513,13 @@ Honest list, roughly by value.
 
 **Unexamined**
 
-- `frontend/` has **no test harness at all** — `tsc --noEmit` and a production
-  build are the only gates, so component logic (a catch that empties a list, a
-  selection rebuilt from a response) ships compile-verified and no more. This is
-  the largest single gap in the project's verification story. It has had a UI/UX
-  and performance audit; those findings are being worked through in order of how
-  often a real user hits them.
+- `frontend/` now has a test harness — Vitest with Testing Library over jsdom,
+  run by `npm test` and gated in CI. Coverage is deliberately narrow: the
+  component *logic* that regresses quietly (a catch that empties a list, a
+  selection rebuilt from a response, focus landing on a destructive button), not
+  layout or visuals. Every pin there is mutation-verified the same way the
+  backend's are. What it does not cover is appearance, which remains a human
+  judgement.
 - The agent's `claim`/`report` HTTP paths are untested; `tick()` swallows every
   exception, so a persistently failing report would spin silently.
 - `services/` has had a security pass; autoscan, posters, reset and updates have
