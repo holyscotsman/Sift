@@ -2,6 +2,26 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.53.1 — Make the README describe the app that exists
+
+Documentation only; no code changed.
+
+The README still opened with **"Phase 0 — Skeleton + read-only ingestion (in
+progress)"** and listed four API clients and four endpoints. The app has ten
+screens, six clients, TV ingest, a reclaim ledger and a storage planner. A stale
+README is not a cosmetic problem — it is the first thing anyone reads, including
+a future session picking the work up cold, and it was describing a different
+program.
+
+Corrected: what is actually in the app, the architecture diagram (Sonarr and the
+agent-claimed file jobs were missing entirely), the source-of-truth table, the
+project layout, and the fact that it runs on Postgres when `DATABASE_URL` is set.
+The test section now lists all five gates CI runs rather than `pytest` alone, and
+says what a negative control is and that controls are mutation-verified — the
+house rule was written down nowhere a newcomer would look.
+
+Removed the "Phase 4" promises that no longer describe anything.
+
 ## 2607.53.0 — The last two screens that swallowed a failure
 
 Same defect, same sweep, the two remaining pages that had it.
