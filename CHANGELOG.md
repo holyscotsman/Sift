@@ -2,6 +2,49 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.46.0 — Stop paying per file for work that is one request
+
+Three reads that grew with the library while the request stayed the same size.
+None of them was slow enough to notice locally, because local means SQLite on the
+same machine; all three are round trips or bytes across the wire against a hosted
+database, which is what the app actually runs on.
+
+**The poster cache statted the whole cache directory on every fetch.** The
+question it was answering — "am I over the 500 MB cap?" — is almost always no,
+and it was being answered by summing the size of every file on disk. A library
+with fifteen thousand cached posters paid fifteen thousand syscalls per newly
+fetched thumbnail, and the first scroll through a library fetches hundreds. The
+total is now carried in memory: measured once per process, incremented per write,
+and re-measured only when an eviction has actually changed it. The pin is the
+shape rather than a number — forty times the cache, the same handful of syscalls.
+
+**The storage page read its widest join twice.** Season sizes and season
+inconsistencies are two questions about one set of rows: every episode file
+joined to its season and its show. Each was loading that join for itself, so
+opening the page shipped a TV library's entire file metadata across the wire
+twice. The reclaim ledger already loaded it once and passed it to both; the page
+now does the same.
+
+**Approving a set of deletions committed once per file.** Each staged job was
+committed and then read back to pick up its id — two extra round trips per file,
+so approving a show's worth of duplicate episodes cost scores of them for a
+single button press. It is now one flush and one commit. Every file still gets
+its own job row, its own size, and its own individual approval: this changes how
+the rows are written, not what is written or what has to be agreed to.
+
+The commit and the read-back are what the new test counts, not the inserts — the
+inserts collapse into one statement on Postgres and stay one per row on SQLite,
+so counting them would pin the test database's behaviour rather than the app's.
+
+Also removed `useMovies`, a hook with no callers.
+
+Six new tests, each mutation-verified by breaking the implementation and
+confirming the test goes red. Three of them are negative controls: the poster
+counter must be re-measured after an eviction or it evicts forever; the shared
+join must give the same answers as two separate loads; and every approved file
+must still get its own job row, because a cheaper write that quietly dropped
+eleven of twelve deletions would satisfy the count and defeat the per-item gate.
+
 ## 2607.45.0 — Recommendations start from the canon
 
 Three to five results instead of two hundred, varying between visits. The count

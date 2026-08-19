@@ -31,7 +31,9 @@ from __future__ import annotations
 
 import hmac
 import logging
+from collections.abc import Sequence
 from datetime import timedelta
+from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
@@ -283,21 +285,71 @@ def create_job(
     label: str | None = None,
 ) -> FileJob:
     """Record an approved intention. Called from the action layer, not the wire."""
-    job = FileJob(
+    return create_jobs(
+        session,
         action_id=action_id,
         kind=kind,
-        source_path=source_path,
-        source_size=source_size,
-        source_duration_ms=source_duration_ms,
-        target_resolution=target_resolution,
-        target_codec=target_codec,
-        expected_max_bytes=expected_max_bytes,
         label=label,
-    )
-    session.add(job)
+        jobs=[
+            JobSpec(
+                source_path=source_path,
+                source_size=source_size,
+                source_duration_ms=source_duration_ms,
+                target_resolution=target_resolution,
+                target_codec=target_codec,
+                expected_max_bytes=expected_max_bytes,
+            )
+        ],
+    )[0]
+
+
+class JobSpec(NamedTuple):
+    """One file's worth of an approved intention."""
+
+    source_path: str
+    source_size: int | None = None
+    source_duration_ms: int | None = None
+    target_resolution: str | None = None
+    target_codec: str | None = None
+    expected_max_bytes: int | None = None
+
+
+def create_jobs(
+    session: Session,
+    *,
+    action_id: int,
+    kind: str = "transcode",
+    label: str | None = None,
+    jobs: Sequence[JobSpec],
+) -> list[FileJob]:
+    """Record a whole approval's worth of intentions in one round trip.
+
+    Approving a show's duplicate episodes stages one job per file, and staging
+    them one at a time meant a commit and a re-read per file — eighty round trips
+    to record forty deletions. Against a hosted database that is the difference
+    between the approval landing and the approval appearing to hang.
+
+    One flush assigns every id, one commit ends the transaction, and the objects
+    stay usable afterwards because ``expire_on_commit`` is off for these sessions.
+    """
+    records = [
+        FileJob(
+            action_id=action_id,
+            kind=kind,
+            source_path=spec.source_path,
+            source_size=spec.source_size,
+            source_duration_ms=spec.source_duration_ms,
+            target_resolution=spec.target_resolution,
+            target_codec=spec.target_codec,
+            expected_max_bytes=spec.expected_max_bytes,
+            label=label,
+        )
+        for spec in jobs
+    ]
+    session.add_all(records)
+    session.flush()  # assigns every id without a per-row round trip
     session.commit()
-    session.refresh(job)
-    return job
+    return records
 
 
-__all__ = ["router", "agent_router", "create_job"]
+__all__ = ["router", "agent_router", "create_job", "create_jobs", "JobSpec"]

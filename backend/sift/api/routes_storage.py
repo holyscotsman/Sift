@@ -191,8 +191,22 @@ def tv_storage(
     with factory() as session:
         shows, duplicate_bytes = tv_dup_analysis.find(session, limit=capped)
         baselines = outlier_analysis.load_baselines(session)
-        sized, excess = tv_size_analysis.seasons(session, baselines=baselines, limit=capped)
-        odd = tv_size_analysis.inconsistencies(session, limit=capped)
+        # Both size questions are asked of the same rows, and the join behind
+        # them — media_files × episodes × seasons × shows — is the widest read
+        # in the app. Load it once and hand it to both, the way the reclaim
+        # ledger already does.
+        season_groups = tv_size_analysis.load_seasons(session)
+        show_index = tv_size_analysis.load_shows(session)
+        sized, excess = tv_size_analysis.seasons(
+            session,
+            baselines=baselines,
+            limit=capped,
+            groups=season_groups,
+            shows=show_index,
+        )
+        odd = tv_size_analysis.inconsistencies(
+            session, limit=capped, groups=season_groups, shows=show_index
+        )
 
     return TvStorageResponse(
         duplicates=[
@@ -383,7 +397,6 @@ def act_on_finding(
         dry_run=dry_run,
     )
 
-    job_ids: list[int] = []
     with factory() as session:
         sizes = {
             path: size
@@ -391,16 +404,20 @@ def act_on_finding(
                 select(MediaFile.path, MediaFile.size).where(MediaFile.path.in_(body.paths))
             )
         }
-        for path in body.paths:
-            job = agent_routes.create_job(
-                session,
-                action_id=action.id,
-                kind="delete",
-                source_path=path,
-                source_size=sizes.get(path),
-                label=body.label,
-            )
-            job_ids.append(job.id)
+        # One approval, one write. Staging these one at a time cost a commit and
+        # a re-read per file, which a show's worth of duplicate episodes turns
+        # into scores of round trips for a single button press.
+        jobs = agent_routes.create_jobs(
+            session,
+            action_id=action.id,
+            kind="delete",
+            label=body.label,
+            jobs=[
+                agent_routes.JobSpec(source_path=path, source_size=sizes.get(path))
+                for path in body.paths
+            ],
+        )
+        job_ids = [job.id for job in jobs]
 
     return ReclaimActOut(
         action_id=action.id,

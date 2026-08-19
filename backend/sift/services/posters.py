@@ -50,6 +50,10 @@ class PosterCache:
         self._transport = transport  # test seam for both TMDB + image fetches
         base = settings.posters.cache_dir or (settings.database.path.parent / "cache")
         self._dir = Path(base) / "posters"
+        # Running total of the cache directory, so the common write does not have
+        # to stat every file on disk to find out whether it is over cap. None
+        # means "unknown" — the next write measures once and then keeps count.
+        self._bytes_on_disk: int | None = None
 
     # ------------------------------------------------------------------ disk cache
 
@@ -67,6 +71,7 @@ class PosterCache:
             for f in self._dir.glob("*.img"):
                 f.unlink()
                 count += 1
+        self._bytes_on_disk = 0
         return count
 
     def stats(self) -> tuple[int, int]:
@@ -155,12 +160,28 @@ class PosterCache:
 
     def _evict_over_cap(self, *, just_written: Path) -> None:
         """Oldest-first eviction once the cache exceeds the cap. The file just
-        written is never a candidate — evicting it would defeat the fetch."""
+        written is never a candidate — evicting it would defeat the fetch.
+
+        The cap is nowhere near reached in ordinary use, so the check that
+        decides "do I need to evict?" runs on every single poster fetch while
+        the eviction itself almost never does. Statting the whole directory to
+        answer it meant a library of fifteen thousand cached posters paid
+        fifteen thousand syscalls per newly-fetched thumbnail — and a first
+        scroll through the library fetches hundreds. Keep a running total
+        instead and measure the directory only once per process, or after an
+        eviction has actually changed it.
+        """
         try:
+            if self._bytes_on_disk is None:
+                # First write of this process: one full measurement, which
+                # already includes the file just written.
+                self._bytes_on_disk = sum(f.stat().st_size for f in self._dir.glob("*.img"))
+            else:
+                self._bytes_on_disk += just_written.stat().st_size
+            if self._bytes_on_disk <= _MAX_CACHE_BYTES:
+                return
             others = [f for f in self._dir.glob("*.img") if f != just_written]
             total = sum(f.stat().st_size for f in others) + just_written.stat().st_size
-            if total <= _MAX_CACHE_BYTES:
-                return
             others.sort(key=lambda f: f.stat().st_mtime)
             for f in others:
                 if total <= _MAX_CACHE_BYTES:
@@ -168,5 +189,9 @@ class PosterCache:
                 size = f.stat().st_size
                 f.unlink()
                 total -= size
+            self._bytes_on_disk = total
         except OSError as exc:
+            # The count is only trustworthy while nothing surprising happened to
+            # the directory; forget it and re-measure next time.
+            self._bytes_on_disk = None
             log.debug("poster cache eviction hiccup: %s", exc)

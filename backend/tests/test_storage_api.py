@@ -422,3 +422,202 @@ def test_the_strand_check_reads_only_what_the_request_touches(client):
     assert reads, "the guard did not read media_files at all — is it still running?"
     unscoped = [s for s in reads if "WHERE" not in s.upper()]
     assert not unscoped, f"whole-table read of media_files: {unscoped[0][:120]}"
+
+
+def _statements(factory, run) -> list[str]:
+    """Every SQL statement issued while `run()` executes."""
+    from sqlalchemy import event
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        run()
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+    return seen
+
+
+def test_the_tv_page_reads_the_season_join_once(client):
+    """The widest read in the app, and the page was doing it twice.
+
+    Season sizes and season inconsistencies are two questions about one set of
+    rows — every episode file joined to its season and show. Each was loading
+    that join for itself, so opening the page shipped the whole of a TV library's
+    file metadata across the wire twice over. On a hosted database that is billed
+    by bytes moved, not by statements, the duplicate is the entire cost of the
+    page.
+
+    Counting the join rather than timing it is deliberate: tests run on local
+    SQLite, where the second read is free and invisible.
+    """
+    c, factory = client
+    _seed_tv(factory)
+
+    seen = _statements(factory, lambda: c.get("/api/storage/tv"))
+
+    season_joins = [
+        s for s in seen if "FROM media_files" in s and "JOIN seasons" in s and "JOIN shows" in s
+    ]
+    assert season_joins, "the page stopped reading the join — is it still answering?"
+    assert len(season_joins) == 1, f"{len(season_joins)} reads of the season join"
+    show_reads = [s for s in seen if s.startswith("SELECT") and " FROM shows" in s]
+    assert len(show_reads) == 1, f"{len(show_reads)} whole-table reads of shows"
+
+
+def test_sharing_the_load_does_not_change_the_answers(client):
+    """NEGATIVE CONTROL: the cheap way must give the same result as the dear one.
+
+    An injected read that the callee quietly ignored — or one loaded at the wrong
+    grain — would satisfy the statement count above while reporting a different
+    library. Ask both questions both ways and require the answers to match.
+    """
+    from sift.analysis import outliers as outlier_analysis
+    from sift.analysis import tv_size
+
+    c, factory = client
+    _seed_tv(factory)
+
+    with factory() as session:
+        baselines = outlier_analysis.load_baselines(session)
+        alone_sized, alone_excess = tv_size.seasons(session, baselines=baselines)
+        alone_odd = tv_size.inconsistencies(session)
+
+        groups = tv_size.load_seasons(session)
+        shows = tv_size.load_shows(session)
+        shared_sized, shared_excess = tv_size.seasons(
+            session, baselines=baselines, groups=groups, shows=shows
+        )
+        shared_odd = tv_size.inconsistencies(session, groups=groups, shows=shows)
+
+    assert alone_sized == shared_sized and alone_excess == shared_excess
+    assert alone_odd == shared_odd
+    # And the answers are not vacuously empty on both sides.
+    assert shared_sized and shared_odd
+
+
+def _seed_surplus_pairs(factory, *, tvdb_id: int, count: int) -> list[str]:
+    """`count` episodes, each held twice. Returns the surplus paths."""
+    from sift.db.models import Episode, MediaFile, Season, Show
+
+    surplus: list[str] = []
+    with factory() as session:
+        session.add(Show(tvdb_id=tvdb_id, title=f"Show {tvdb_id}", library_section="TV"))
+        season = Season(show_id=tvdb_id, season_number=1, air_year=2010)
+        session.add(season)
+        session.flush()
+        for n in range(1, count + 1):
+            episode = Episode(season_id=season.id, episode_number=n, has_file=True)
+            session.add(episode)
+            session.flush()
+            keep = f"/tv/{tvdb_id}/s01e{n:02d}.1080p.mkv"
+            drop = f"/tv/{tvdb_id}/s01e{n:02d}.sd.mkv"
+            for path, size, res in ((keep, 3 * GB, "1080p"), (drop, 1 * GB, "480p")):
+                session.add(
+                    MediaFile(
+                        episode_id=episode.id,
+                        path=path,
+                        part_group=path,
+                        size=size,
+                        duration_ms=22 * MIN_MS,
+                        resolution=res,
+                        video_codec="h264",
+                        source="plex",
+                    )
+                )
+            surplus.append(drop)
+        session.commit()
+    return surplus
+
+
+def _act(c, tvdb_id: int, paths: list[str]):
+    return c.post(
+        "/api/storage/act",
+        json={
+            "target_kind": "show",
+            "target_id": str(tvdb_id),
+            "paths": paths,
+            "label": "surplus",
+        },
+    )
+
+
+def _round_trips(factory, run) -> tuple[list[str], int]:
+    """Statements issued, and how many transactions were committed."""
+    from sqlalchemy import event
+
+    seen: list[str] = []
+    commits = 0
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    @event.listens_for(engine, "commit")
+    def _committed(_conn):
+        nonlocal commits
+        commits += 1
+
+    try:
+        run()
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+        event.remove(engine, "commit", _committed)
+    return seen, commits
+
+
+def test_staging_an_approval_commits_once_however_many_files_it_covers(client):
+    """One button press, one transaction.
+
+    Each staged job was committed and then read back individually, so approving a
+    show's worth of duplicate episodes cost two extra round trips per file. On
+    local SQLite that is free; against a hosted database it is the difference
+    between the approval landing and the page appearing to hang.
+
+    What is counted here is the commit and the read-back, not the inserts: the
+    inserts themselves collapse into one statement on Postgres and stay one per
+    row on SQLite, so counting them would pin the test database's behaviour
+    rather than the app's.
+    """
+    c, factory = client
+    small = _seed_surplus_pairs(factory, tvdb_id=101, count=3)
+    large = _seed_surplus_pairs(factory, tvdb_id=202, count=12)
+
+    small_stmts, small_commits = _round_trips(factory, lambda: _act(c, 101, small))
+    large_stmts, large_commits = _round_trips(factory, lambda: _act(c, 202, large))
+
+    def read_backs(stmts: list[str]) -> int:
+        return len([s for s in stmts if s.startswith("SELECT") and " FROM file_jobs" in s])
+
+    assert [s for s in large_stmts if "INSERT INTO file_jobs" in s], "nothing was staged"
+    # Four times the files, and the transaction count does not move.
+    assert large_commits == small_commits, f"{large_commits} commits vs {small_commits}"
+    assert read_backs(large_stmts) == read_backs(small_stmts) == 0
+
+
+def test_every_file_still_gets_its_own_job(client):
+    """NEGATIVE CONTROL: cheapness must not become fewer jobs.
+
+    Collapsing twelve deletions into one row would satisfy the count above and
+    quietly drop eleven files from the approval — the opposite of what the
+    per-item gate exists for.
+    """
+    from sift.db.models import FileJob
+
+    c, factory = client
+    paths = _seed_surplus_pairs(factory, tvdb_id=303, count=12)
+
+    body = _act(c, 303, paths).json()
+    assert len(body["job_ids"]) == 12
+
+    with factory() as session:
+        jobs = [session.get(FileJob, jid) for jid in body["job_ids"]]
+    assert all(j is not None for j in jobs)
+    assert {j.source_path for j in jobs if j} == set(paths)
+    # Sizes are carried per job, not shared — the ledger reports what each frees.
+    assert all(j.source_size == 1 * GB for j in jobs if j)

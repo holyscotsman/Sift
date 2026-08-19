@@ -4,13 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
-import type { MovieQuery } from "./api";
-import type {
-  ActionRecord,
-  HealthResponse,
-  MovieListResponse,
-  StatusResponse,
-} from "./types";
+import type { ActionRecord, HealthResponse, StatusResponse } from "./types";
 
 export interface AsyncState<T> {
   data: T | null;
@@ -113,12 +107,6 @@ export function useHealth(pollMs = 20000): AsyncState<HealthResponse> {
 
 export function useStatus(pollMs = 8000): AsyncState<StatusResponse> {
   return useAsync(() => shared("status", () => api.status(), pollMs * 0.75), [], pollMs);
-}
-
-export function useMovies(query: MovieQuery): AsyncState<MovieListResponse> {
-  const key = JSON.stringify(query);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useAsync(() => api.movies(query), [key]);
 }
 
 export function useActivity(limit = 50): AsyncState<ActionRecord[]> {
