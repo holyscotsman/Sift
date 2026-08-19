@@ -2,6 +2,37 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.44.0 — Clear the dependency advisories
+
+`npm audit` reported **zero** after this, against one high and one moderate
+before. Two bumps, deliberately separated from the testing work that surfaced
+them, because bumping a router inside an unrelated change is how routing breaks
+quietly.
+
+**`react-router-dom` 7.18.1 → 7.18.2.** A patch inside the same major, which is
+what the advisory needed. Worth stating plainly: the flaw is a CSRF bypass in
+React Router's **RSC mode**, and Sift is a plain single-page app that does not
+use RSC — so the real exposure here was nil. It is fixed because a known
+advisory sitting in a runtime dependency is a thing you have to re-reason about
+every time you look at it, not because anything was reachable.
+
+**`vite` 5 → 8, with `@vitejs/plugin-react` 4 → 6.** This one is genuinely
+dev-only: the advisory is path traversal in the *dev server's* handling of
+optimized-deps source maps, and production is FastAPI serving a built `dist`
+directory, which never runs Vite at all.
+
+The major bump needed one real change. Vite now bundles Rolldown, which takes
+`manualChunks` **only as a callback** — the object form does not degrade, it
+fails the build. The vendor chunk is now selected by matching module paths, and
+comes out the same size it was. Two happy side effects: the deprecation warnings
+Vitest was printing on every run are gone, now that both sit on the same
+bundler, and the moderate `esbuild` advisory went with it.
+
+Verified past the version numbers: sixteen frontend tests and the full backend
+suite still pass, the bundle still builds, and `dist` still ships **no source
+maps** — which is the thing the earlier security pass turned off, and exactly
+the kind of setting a major build-tool upgrade quietly resets.
+
 ## 2607.43.0 — The frontend gets a test harness
 
 Until now the frontend had **no tests at all**. `tsc --noEmit` and a successful

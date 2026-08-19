@@ -30,8 +30,15 @@ export default defineConfig({
       output: {
         // Framework bytes change only on dependency bumps — a separate vendor
         // chunk stays cached across app deploys.
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom"],
+        //
+        // Written as a function rather than the object form: the bundler now
+        // takes `manualChunks` only as a callback, and the object shape fails
+        // the build rather than being quietly ignored.
+        manualChunks(id: string) {
+          if (/node_modules[\\/](react|react-dom|react-router|react-router-dom)[\\/]/.test(id)) {
+            return "vendor";
+          }
+          return undefined;
         },
       },
     },
