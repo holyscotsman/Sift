@@ -45,7 +45,8 @@ def _queue_counts(session: Session, settings: Settings) -> tuple[int, int]:
     # The two queues users act on. junk_flagged goes through junk.candidates so the
     # number always matches the Junk page (keep-overrides + kids-guard respected).
     thr = effective_junk(session, settings)
-    junk_flagged = len(junk.candidates(session, thr, limit=10_000))
+    # The badge wants a number, not a list: ids only, no films fetched.
+    junk_flagged = len(junk.candidate_ids(session, thr, limit=10_000))
     now_owned = (
         select(Movie.tmdb_id)
         .where(Movie.in_plex.is_(True), Movie.tmdb_id == MustHaveSuggestion.tmdb_id)

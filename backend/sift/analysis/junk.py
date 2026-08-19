@@ -430,6 +430,32 @@ def _decides(verdict: str, junk_score: float, thr: JunkThresholds) -> bool:
     return junk_score >= thr.borderline_cutoff
 
 
+def candidate_ids(session: Session, thr: JunkThresholds, *, limit: int = 200) -> list[int]:
+    """The candidates' ids, ranked, without fetching a single film.
+
+    The header badge wants the *number* of flagged titles, which is what this
+    exists for: counting them by building the list meant hydrating every
+    candidate — poster URL, overview and all — to take its length.
+    """
+    selection = (
+        select(Score.movie_id, Score.junk_score, Score.signals)
+        .join(Movie, Movie.tmdb_id == Score.movie_id)
+        .where(
+            Movie.in_plex.is_(True),
+            Movie.is_kids.is_(False),
+            Movie.keep_override.is_(False),
+        )
+        .order_by(Score.junk_score.desc())
+    )
+    wanted: list[int] = []
+    for movie_id, junk_score, signals in session.execute(selection):
+        if _decides(_verdict_of(signals), junk_score, thr):
+            wanted.append(movie_id)
+            if len(wanted) >= limit:
+                break
+    return wanted
+
+
 def candidates(
     session: Session, thr: JunkThresholds, *, limit: int = 200
 ) -> list[tuple[Movie, Score]]:
@@ -451,23 +477,7 @@ def candidates(
     blind spot that hides this class of bug. So ``signals`` is still read for the
     whole library; the wide ``movies`` half, which is the larger one, is not.
     """
-    selection = (
-        select(Score.movie_id, Score.junk_score, Score.signals)
-        .join(Movie, Movie.tmdb_id == Score.movie_id)
-        .where(
-            Movie.in_plex.is_(True),
-            Movie.is_kids.is_(False),
-            Movie.keep_override.is_(False),
-        )
-        .order_by(Score.junk_score.desc())
-    )
-    wanted: list[int] = []
-    for movie_id, junk_score, signals in session.execute(selection):
-        if _decides(_verdict_of(signals), junk_score, thr):
-            wanted.append(movie_id)
-            if len(wanted) >= limit:
-                break
-
+    wanted = candidate_ids(session, thr, limit=limit)
     if not wanted:
         return []
     hydrated = {

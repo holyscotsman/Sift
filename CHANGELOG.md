@@ -2,6 +2,24 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.57.0 — Counting the junk queue stopped fetching the films in it
+
+The header badge is a number. It was produced by building the list.
+
+`/api/status` is polled for as long as a tab is open, and its flagged-titles
+figure came from `len(candidates(..., limit=10_000))` — so counting them
+hydrated every candidate, poster URL and overview included, to take the length of
+the result. The previous release halved that read; this removes it. The ranking
+pass already knows the ids, so the count now stops there and no film is fetched
+at all.
+
+Two tests. The control that matters is not the one comparing the count to the
+list — both now walk the same selection pass, so a change to the rule moves them
+together and they still agree. It is the `protect`-verdict pin: mutate the shared
+rule and *that* goes red, which is the only reason the divergence would be
+caught. Worth stating plainly, because "the count agrees with the list" reads
+like a stronger guarantee than it is.
+
 ## 2607.56.0 — Collections stopped reading every set to show the incomplete ones
 
 The same shape as the Junk page, one screen over.
