@@ -2,7 +2,7 @@
 // plus editable emphasis weights. The genre and era weights steer the
 // Recommended-for-you ranking (bounded reorder — they never gate a title out).
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RecommendationsSection } from "@/components/Recommendations";
 import { useToast } from "@/components/Toast";
@@ -51,17 +51,31 @@ export function TasteProfile() {
   const [data, setData] = useState<ProfileResponse | null>(null);
   const [weights, setWeights] = useState<ProfileWeights | null>(null);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const toastError = useToast();
 
-  useEffect(() => {
-    api
+  const load = useCallback(() => {
+    setLoadError(null);
+    return api
       .getProfile()
       .then((d) => {
         setData(d);
         setWeights(d.weights);
       })
-      .catch(() => setData(null));
+      .catch((e: unknown) =>
+        // Leaving `data` null rendered the loading skeletons — for ever. A
+        // spinner that never resolves is the least informative failure a screen
+        // can have, and it is what this page did every time the profile read
+        // failed.
+        setLoadError(
+          (e as { message?: string })?.message || "Couldn't load your taste profile.",
+        ),
+      );
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const favors = useMemo(() => {
     if (!weights) return "";
@@ -69,11 +83,31 @@ export function TasteProfile() {
     return top.label.toLowerCase();
   }, [weights]);
 
+  if (loadError) {
+    return (
+      <div className="page-enter">
+        <h1 className="mb-4 font-display text-[28px] font-extrabold tracking-tight">Taste Profile</h1>
+        <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+          <p className="font-semibold">{loadError}</p>
+          <button
+            onClick={() => void load()}
+            className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!data || !weights) {
     return (
       <div className="page-enter">
         <h1 className="mb-4 font-display text-[28px] font-extrabold tracking-tight">Taste Profile</h1>
-        <div className="panel p-6">
+        <div className="panel p-6" aria-busy="true">
+          <span className="sr-only" role="status">
+            Loading your taste profile…
+          </span>
           <Skeleton className="mb-2 h-6 w-40" />
           <Skeleton className="h-40" />
         </div>

@@ -2,6 +2,31 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.53.0 — The last two screens that swallowed a failure
+
+Same defect, same sweep, the two remaining pages that had it.
+
+**Collections reported a complete shelf.** A failed read emptied the list, and an
+empty list on that page means "every set you own part of is complete" — the
+opposite of what had happened.
+
+**The taste profile span for ever.** A failed read left `data` null, and null is
+the loading state, so the skeletons stayed up permanently. A spinner that never
+resolves is the least informative failure a screen can have, and it is the shape
+of "the app is completely broken" from the browser.
+
+Both now name the failure and offer a retry that refetches. The loading branch
+also gained the `aria-busy` / `role="status"` pair the other pages already had,
+so a screen reader is told it is waiting rather than left in silence.
+
+Six tests, each mutation-verified, two of them negative controls: a genuinely
+complete shelf must still read as good news, and a library with nothing in it yet
+must still say to run a scan.
+
+That is every page in the app checked for this. The remaining `.catch` handlers
+are on writes, where a toast already reports the failure and the screen is not
+claiming anything about your library.
+
 ## 2607.52.0 — Two screens that lied when the database stopped answering
 
 Both of these are the screen you were looking at when the app read as completely
