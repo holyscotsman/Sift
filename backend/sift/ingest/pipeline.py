@@ -989,8 +989,12 @@ class ScanPipeline:
         # already waiting on, and an unreasonable thing to make them wait for every
         # time they open the page. A failure leaves the previous list standing.
         try:
-            stored = await recommend_analysis.refresh(self.factory, self.settings)
-            counts["recommendations"] = stored
+            built = await recommend_analysis.refresh(self.factory, self.settings)
+            counts["recommendations"] = built["stored"]
+            # Recorded separately so a thin list can be read off the scan rather
+            # than guessed at: canon needs no API call, taste needs dozens.
+            counts["recommendations_canon"] = built["canon"]
+            counts["recommendations_taste"] = built["taste"]
         except Exception as exc:  # noqa: BLE001 - never fail a scan over suggestions
             log.info("recommendation refresh failed: %s", exc)
         return counts

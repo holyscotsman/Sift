@@ -2,6 +2,41 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.45.0 — Recommendations start from the canon
+
+Three to five results instead of two hundred, varying between visits. The count
+was the symptom; the cause is that the list had one supply line and it was a
+fragile one.
+
+Every recommendation came from the taste graph, which needs **all** of: owned
+films that already carry TMDB ratings (to seed anchors from), sixty live API
+calls to succeed, and the results not to be films you already own. Thin anchors,
+a rate-limited or flaky TMDB, or a well-stocked library that already contains
+most of what gets suggested — any one of those collapses the list, and none of
+them said anything on screen. Worse, each failure was caught per anchor and
+skipped, so partial collapse looked exactly like a short answer.
+
+**The canon runs first now.** Ten thousand vetted titles, already resolved to
+TMDB ids, sitting in the database — no API call, no dependence on ratings, no
+dependence on anything being reachable. Unowned canon entries fill the list in
+tier order: the strongest claims first. The taste graph then *extends* that with
+titles the canon does not mention, and nothing appears twice.
+
+That is the shape the owner asked for — work through the list we already have,
+then reason about what else belongs — and it is also the robust one. The half
+that can fail is now the half that only ever adds.
+
+**The composition is reported rather than left to be guessed at.** The response
+says how many came from each source, and the scan records both figures in its
+counts. A short list can now be read: few from the canon means resolution has
+not caught up; few from the graph means anchors or TMDB.
+
+Three new tests, each mutation-verified: removing the canon half, letting owned
+canon titles through, and allowing a title supplied by both halves to be stored
+twice each turn a pin red. The negative control is the one that matters — filling
+from the canon must never mean recommending films already on the shelf, which
+would be worse than a short list.
+
 ## 2607.44.0 — Clear the dependency advisories
 
 `npm audit` reported **zero** after this, against one high and one moderate

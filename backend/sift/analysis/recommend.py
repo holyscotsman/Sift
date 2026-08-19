@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
 from ..db.models import Movie, Rating, Recommendation
+from . import canon_missing
 
 log = logging.getLogger("sift.analysis.recommend")
 
@@ -285,36 +286,82 @@ def _run(session_factory: sessionmaker[Session], fn: Any) -> Any:
 # Rows per statement, matching the ingest writers.
 _CHUNK = 500
 
+# Where a row came from. Carried inside the existing `sources` JSON rather than a
+# new column: `recommendations` is already a deployed table, and `create_all` adds
+# tables to a live database but never columns.
+CANON_MARK = "canon"
 
-def _store(session: Session, ranked: list[Candidate], taste: Taste) -> int:
-    """Replace the stored queue with this scan's ranking.
+
+def _canon_candidates(session: Session, limit: int) -> list[dict[str, Any]]:
+    """Films the canon says you should own and you do not. No API call involved.
+
+    This runs first, and it is what makes the list dependable. The taste graph
+    below is a good idea with a fragile supply chain — it needs owned titles that
+    already carry TMDB ratings, it needs dozens of live API calls to succeed, and
+    it needs the results not to be films you already have. Any of those going thin
+    used to collapse the whole list to a handful with nothing on screen saying so.
+
+    The canon has none of those dependencies: ten thousand vetted titles, already
+    resolved to TMDB ids, sitting in the database. Ranked by tier, so the
+    strongest claims come first.
+    """
+    rows, _total = canon_missing.missing(session, limit=limit)
+    return [
+        {
+            "tmdb_id": entry.tmdb_id,
+            "title": entry.title,
+            "year": entry.year,
+            "vote_average": round(float(entry.rating or 0.0), 1),
+            "poster_path": None,
+            # Zero anchors is the honest figure: no film of yours recommended it,
+            # the canon did. It is also what tells the reason line which to say.
+            "anchor_count": 0,
+            "score": float(5 - entry.tier),
+            "sources": [CANON_MARK, str(entry.tier)],
+        }
+        for entry in rows
+    ]
+
+
+def _taste_candidates(
+    ranked: list[Candidate], taste: Taste, exclude: set[int], limit: int
+) -> list[dict[str, Any]]:
+    """The discovery-graph half, minus anything the canon already supplied."""
+    out: list[dict[str, Any]] = []
+    for c in ranked:
+        if c.tmdb_id in exclude or len(out) >= limit:
+            continue
+        out.append(
+            {
+                "tmdb_id": c.tmdb_id,
+                "title": c.title,
+                "year": c.year,
+                "vote_average": round(c.vote_average, 1),
+                "poster_path": c.poster_path,
+                "anchor_count": len(c.sources),
+                "score": round(c.score * taste.multiplier(c), 4),
+                "sources": [name for name, _ in sorted(c.sources, key=lambda s: (-s[1], s[0]))[:3]],
+            }
+        )
+    return out
+
+
+def _store(session: Session, rows: list[dict[str, Any]]) -> int:
+    """Replace the stored queue, in the order given.
 
     Replaced wholesale rather than merged: a recommendation is a statement about
     the library as it is now, and a title you have since acquired must leave the
     list rather than linger because nothing thought to remove it. The rank is
     stored alongside so the API can page without re-sorting, and so the order the
     owner sees is the order that was computed rather than whatever the database
-    returns.
+    happens to return.
     """
     session.execute(delete(Recommendation))
-    rows = [
-        {
-            "tmdb_id": c.tmdb_id,
-            "title": c.title,
-            "year": c.year,
-            "vote_average": round(c.vote_average, 1),
-            "poster_path": c.poster_path,
-            "anchor_count": len(c.sources),
-            "score": round(c.score * taste.multiplier(c), 4),
-            "sources": [name for name, _ in sorted(c.sources, key=lambda s: (-s[1], s[0]))[:3]],
-            "rank": position,
-        }
-        for position, c in enumerate(ranked)
-    ]
-    for start in range(0, len(rows), _CHUNK):
-        session.execute(insert(Recommendation), rows[start : start + _CHUNK])
+    numbered = [{**row, "rank": position} for position, row in enumerate(rows)]
+    for start in range(0, len(numbered), _CHUNK):
+        session.execute(insert(Recommendation), numbered[start : start + _CHUNK])
     session.commit()
-    return len(rows)
+    return len(numbered)
 
 
 async def refresh(
@@ -322,37 +369,78 @@ async def refresh(
     settings: Settings,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> int:
-    """Compute the ranked queue and store it. Called once per scan.
+) -> dict[str, int]:
+    """Rebuild the ranked queue and store it. Called once per scan.
 
-    Returns how many were stored; zero when TMDB is not configured or nothing was
-    reachable, which leaves the previous list in place rather than blanking the
-    screen over a transient fault.
+    Canon first, then the taste graph for whatever is left. Returns the
+    composition, so a thin list can be explained rather than guessed at.
     """
-    if not settings.tmdb.enabled or settings.tmdb.api_key is None:
-        return 0
-    anchors, owned = await asyncio.to_thread(_run, session_factory, _read_context)
-    if not anchors:
-        return 0
-    client = TmdbClient(settings.tmdb, transport=transport)
-    try:
-        candidates, reached = await _collect(client, anchors, owned)
-    finally:
-        await client.aclose()
-    if reached == 0 or not candidates:
-        return 0
-    taste = await asyncio.to_thread(_run, session_factory, _read_taste)
-    ranked = rank(list(candidates.values()), taste)[:STORED_LIMIT]
+    canon = await asyncio.to_thread(
+        _run, session_factory, lambda s: _canon_candidates(s, STORED_LIMIT)
+    )
+
+    taste_rows: list[dict[str, Any]] = []
+    reached = 0
+    anchors: list[Anchor] = []
+    if settings.tmdb.enabled and settings.tmdb.api_key is not None:
+        anchors, owned = await asyncio.to_thread(_run, session_factory, _read_context)
+        if anchors:
+            client = TmdbClient(settings.tmdb, transport=transport)
+            try:
+                candidates, reached = await _collect(client, anchors, owned)
+            finally:
+                await client.aclose()
+            if candidates:
+                taste = await asyncio.to_thread(_run, session_factory, _read_taste)
+                ranked = rank(list(candidates.values()), taste)
+                already = {int(row["tmdb_id"]) for row in canon}
+                taste_rows = _taste_candidates(
+                    ranked, taste, already, max(0, STORED_LIMIT - len(canon))
+                )
+
+    rows = canon + taste_rows
+    if not rows:
+        # Nothing to say. Leave the previous list standing rather than blanking
+        # the screen over a transient fault.
+        return {"stored": 0, "canon": 0, "taste": 0, "anchors": len(anchors), "reached": reached}
 
     def _write(session: Session) -> int:
-        return _store(session, ranked, taste)
+        return _store(session, rows)
 
-    return int(await asyncio.to_thread(_run, session_factory, _write))
+    written = int(await asyncio.to_thread(_run, session_factory, _write))
+    log.info(
+        "recommendations: %s stored (%s canon, %s taste from %s/%s anchors reached)",
+        written,
+        len(canon),
+        len(taste_rows),
+        reached,
+        len(anchors),
+    )
+    return {
+        "stored": written,
+        "canon": len(canon),
+        "taste": len(taste_rows),
+        "anchors": len(anchors),
+        "reached": reached,
+    }
 
 
-def stored(session: Session, *, limit: int = 200) -> tuple[list[dict[str, Any]], int]:
-    """The stored queue, in the order it was computed. Returns ``(items, total)``."""
+def stored(session: Session, *, limit: int = 200) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """The stored queue, in the order it was computed.
+
+    Returns ``(items, counts)``, where counts carries the composition — total,
+    and how many came from the canon versus the taste graph. A short list is then
+    explainable on the screen rather than a mystery.
+    """
     total = session.scalar(select(func.count()).select_from(Recommendation)) or 0
+    from_canon = (
+        session.scalar(
+            select(func.count())
+            .select_from(Recommendation)
+            .where(Recommendation.anchor_count == 0)
+        )
+        or 0
+    )
     rows = session.scalars(
         select(Recommendation).order_by(Recommendation.rank.asc()).limit(limit)
     )
@@ -366,10 +454,26 @@ def stored(session: Session, *, limit: int = 200) -> tuple[list[dict[str, Any]],
         }
         for r in rows
     ]
-    return items, int(total)
+    counts = {
+        "total": int(total),
+        "canon": int(from_canon),
+        "taste": int(total) - int(from_canon),
+    }
+    return items, counts
 
 
 def _reason_from(names: list[str], anchor_count: int) -> str:
+    # Canon rows carry the marker and their tier rather than anchor titles: no
+    # film of yours recommended them, the canon did, and saying "because you own"
+    # about them would be untrue.
+    if names and names[0] == CANON_MARK:
+        tier = names[1] if len(names) > 1 else "4"
+        label = {
+            "1": "Essential — the canon's strongest tier",
+            "2": "Award and festival canon",
+            "3": "Critical consensus canon",
+        }.get(tier, "Widely known, worth having")
+        return label
     if not names:
         return "Matches your library"
     if anchor_count > len(names):

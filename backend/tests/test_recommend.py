@@ -246,7 +246,14 @@ async def test_the_pool_is_wide_enough_to_be_worth_browsing(factory, settings):
 
 def test_stored_recommendations_survive_a_page_load(factory):
     """They are computed once per scan and read back, not recomputed per visit."""
-    from sift.analysis.recommend import Candidate, Taste, _store, rank, stored
+    from sift.analysis.recommend import (
+        Candidate,
+        Taste,
+        _store,
+        _taste_candidates,
+        rank,
+        stored,
+    )
 
     taste = Taste(top_genres=frozenset(), top_eras=frozenset(), genre_weight=0.5, era_weight=0.5)
     candidates = [
@@ -259,12 +266,13 @@ def test_stored_recommendations_survive_a_page_load(factory):
         c.sources = [(f"Anchor {n}", 1.0) for n in range(i + 1)]
         c.score = float(i)
 
+    rows = _taste_candidates(rank(candidates, taste), taste, set(), 100)
     with factory() as session:
-        written = _store(session, rank(candidates, taste), taste)
-        assert written == 5
-        items, total = stored(session, limit=3)
+        assert _store(session, rows) == 5
+        items, counts = stored(session, limit=3)
 
-    assert total == 5
+    assert counts["total"] == 5
+    assert counts["taste"] == 5 and counts["canon"] == 0
     assert len(items) == 3
     # Most-recommended first, and the stored order is the computed order.
     assert items[0]["tmdb_id"] == 504
@@ -277,15 +285,121 @@ def test_storing_replaces_rather_than_accumulates(factory):
     Merging instead of replacing would let a film you now own linger for ever,
     because nothing would think to remove it.
     """
-    from sift.analysis.recommend import Candidate, Taste, _store, stored
+    from sift.analysis.recommend import Candidate, Taste, _store, _taste_candidates, stored
 
     taste = Taste(top_genres=frozenset(), top_eras=frozenset(), genre_weight=0.5, era_weight=0.5)
     with factory() as session:
         old = Candidate(tmdb_id=1, title="Old", year=1999, vote_average=7.0, poster_path=None)
         new = Candidate(tmdb_id=2, title="New", year=2001, vote_average=7.0, poster_path=None)
-        _store(session, [old], taste)
-        _store(session, [new], taste)
-        items, total = stored(session)
+        _store(session, _taste_candidates([old], taste, set(), 10))
+        _store(session, _taste_candidates([new], taste, set(), 10))
+        items, counts = stored(session)
 
-    assert total == 1
+    assert counts["total"] == 1
     assert [i["tmdb_id"] for i in items] == [2]
+
+
+def _seed_canon(factory, count: int, *, owned: set[int] | None = None) -> None:
+    """Resolved canon entries, the way a few scans of resolution would leave them."""
+    from sift.db.models import CanonEntry
+
+    owned = owned or set()
+    with factory() as session:
+        for i in range(count):
+            tmdb_id = 90_000 + i
+            session.add(
+                CanonEntry(
+                    imdb_id=f"tt{tmdb_id}",
+                    title=f"Canon {i}",
+                    year=1970 + (i % 50),
+                    tier=1 + (i % 4),
+                    sources=["criterion"],
+                    tmdb_id=tmdb_id,
+                    review_status="resolved",
+                    votes=1000 + i,
+                )
+            )
+            if tmdb_id in owned:
+                session.add(Movie(tmdb_id=tmdb_id, title=f"Canon {i}", in_plex=True))
+        session.commit()
+
+
+async def test_the_canon_carries_the_list_when_the_taste_graph_gives_nothing(factory, settings):
+    """The bug this design exists to prevent.
+
+    The taste graph needs owned titles that already carry ratings, dozens of live
+    API calls to succeed, and results you do not already own. Any of those going
+    thin used to collapse the whole list to a handful, with nothing on screen
+    saying why. The canon has none of those dependencies.
+    """
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    _seed_canon(factory, 250)
+
+    # No owned films at all, so there are no anchors and the graph yields nothing.
+    def dead(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    built = await recommend.refresh(factory, settings, transport=httpx.MockTransport(dead))
+
+    assert built["canon"] == 250
+    assert built["taste"] == 0
+    assert built["stored"] == 250
+
+    with factory() as session:
+        items, counts = recommend.stored(session, limit=200)
+    assert len(items) == 200
+    assert counts["canon"] == 250
+    # Tier 1 leads, and the reason says the canon rather than pretending a film
+    # of theirs recommended it.
+    assert "Essential" in items[0]["reason"]
+
+
+async def test_canon_titles_you_own_are_never_recommended(factory, settings):
+    """NEGATIVE CONTROL: filling from the canon must not mean recommending films
+    already on the shelf, which would be worse than a short list."""
+    settings.tmdb.enabled = False
+    owned = {90_000, 90_001, 90_002}
+    _seed_canon(factory, 20, owned=owned)
+
+    built = await recommend.refresh(factory, settings)
+
+    assert built["canon"] == 17
+    with factory() as session:
+        items, _counts = recommend.stored(session)
+    assert not (owned & {i["tmdb_id"] for i in items})
+
+
+async def test_the_taste_graph_extends_the_canon_rather_than_replacing_it(factory, settings):
+    """Both halves land, canon first, with no title counted twice."""
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+    _seed_canon(factory, 5)
+    _seed(factory, 603, "The Matrix", rating=8.7)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not request.url.path.endswith("/recommendations"):
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    # One the canon already supplied, one it did not.
+                    {"id": 90_000, "title": "Canon 0"},
+                    {"id": 777, "title": "Graph Only"},
+                ]
+            },
+        )
+
+    built = await recommend.refresh(
+        factory, settings, transport=httpx.MockTransport(handler)
+    )
+
+    assert built["canon"] == 5
+    assert built["taste"] == 1, "the duplicate must not be stored twice"
+    with factory() as session:
+        items, counts = recommend.stored(session)
+    ids = [i["tmdb_id"] for i in items]
+    assert len(ids) == len(set(ids))
+    assert ids[-1] == 777, "canon leads, the graph extends"
+    assert counts["canon"] == 5 and counts["taste"] == 1

@@ -1,7 +1,7 @@
 // The library list is paged by an intersection observer, which makes a dropped
 // page invisible unless something says so.
 
-import { act, screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -79,7 +79,13 @@ describe("when a page fails to load", () => {
     renderPage(<Library />);
     await screen.findByText("Alien");
 
-    await act(async () => scrollToBottom());
+    // `loadMore` refuses while the list is still loading, so a single fire races
+    // page one finishing — which is exactly how this test passed locally and on
+    // one CI run before failing on the next. Retry until the sentinel takes.
+    await waitFor(() => {
+      scrollToBottom();
+      expect(movies).toHaveBeenCalledTimes(2);
+    });
     await screen.findByText(/dropped/);
 
     await userEvent.click(screen.getByRole("button", { name: /load the rest/i }));
