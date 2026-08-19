@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.52.0 — Two screens that lied when the database stopped answering
+
+Both of these are the screen you were looking at when the app read as completely
+broken, and both were saying something reassuring at the worst possible moment.
+
+**Missing emptied its list on failure.** A failed read set the list to `[]`, which
+renders as "nothing is missing from your library" — untrue, the most flattering
+possible lie, and indistinguishable from a database that had stopped answering.
+It now names the failure and offers a retry that actually refetches, the way the
+Junk queue already did.
+
+**The Dashboard advised a scan.** A failed status read fell through to "No
+snapshot yet — run a scan to build one": advice that cannot possibly work,
+offered at the exact moment nothing could. It now shows what actually happened.
+Since the server learned to say *"the database is not accepting queries"* rather
+than "Internal Server Error", that sentence now reaches the screen instead of
+being swallowed one layer short of it.
+
+Five tests, each mutation-verified, and two of them negative controls — a
+genuinely empty catalog must still offer to build one, and a genuinely empty
+library must still say to run a scan. Without those, "show an error" and "always
+show an error" are the same test.
+
+`PrefsProvider` joined the test harness: the Dashboard is the first tested page
+that needs it, and a harness missing a provider the real app has is a harness
+that tests something the app never runs.
+
 ## 2607.51.0 — Pin the two screens that can delete a file
 
 Both destructive paths were covered on the server and uncovered in the browser.

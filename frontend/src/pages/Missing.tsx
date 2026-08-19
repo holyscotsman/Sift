@@ -23,12 +23,14 @@ export function Missing() {
   const [total, setTotal] = useState(0);
   const [requestedTotal, setRequestedTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const toastError = useToast();
 
   function load() {
+    setLoadError(null);
     return api
       .canonMissing()
       .then((r) => {
@@ -36,7 +38,15 @@ export function Missing() {
         setTotal(r.total);
         setRequestedTotal(r.requested_total);
       })
-      .catch(() => setItems([]));
+      .catch((e: unknown) =>
+        // Emptying the list on failure said "nothing is missing from your
+        // library", which is both untrue and the most flattering possible lie —
+        // and it read identically to a database that had stopped answering.
+        setLoadError(
+          (e as { message?: string })?.message ||
+            "Couldn't load the missing list. This is not the same as owning everything.",
+        ),
+      );
   }
 
   useEffect(() => {
@@ -169,6 +179,16 @@ export function Missing() {
                 <Skeleton key={i} className="h-[162px] w-[108px]" />
               ))}
             </div>
+          </div>
+        ) : loadError ? (
+          <div className="panel p-4 text-sm" style={{ color: "var(--junk)" }}>
+            <p className="font-semibold">{loadError}</p>
+            <button
+              onClick={() => void load()}
+              className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-fg2 hover:bg-bg2"
+            >
+              Try again
+            </button>
           </div>
         ) : items.length === 0 ? (
           <div className="panel">
