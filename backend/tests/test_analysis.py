@@ -289,3 +289,108 @@ def test_the_collections_page_does_not_query_per_collection(factory):
 
     assert len(gaps) == 12, "the fixture must produce gaps to read"
     assert len(selects) <= 3, f"{len(selects)} reads for 12 collections"
+
+
+def test_only_the_interesting_collections_have_their_members_read(factory):
+    """Deciding which collections qualify needs two counts already stored on the
+    collection row; showing one needs its members.
+
+    Reading every member of every collection first — then asking which collections
+    were even interesting — pulled the whole membership table across the wire on
+    every load of the page, and most of it belonged to collections that are
+    already complete (nothing to show) or wholly unowned (not yours to complete).
+    """
+    from sqlalchemy import event
+
+    from sift.analysis.collections import collection_gaps
+
+    with factory() as session:
+        # One interesting collection, and plenty of noise around it.
+        _collection(session, 500, members=[(1, "Owned", 2000, True), (2, "Gap", 2001, False)])
+        for n in range(20):
+            _collection(  # complete: nothing to show
+                session,
+                600 + n,
+                members=[(n * 100 + 1, "A", 2000, True), (n * 100 + 2, "B", 2001, True)],
+            )
+            _collection(  # owned none: not yours to complete
+                session,
+                700 + n,
+                members=[(n * 100 + 3, "C", 2000, False), (n * 100 + 4, "D", 2001, False)],
+            )
+        session.commit()
+
+    engine = factory.kw["bind"]
+    statements: list[str] = []
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _record(_c, _cur, statement, *_a, **_k):
+        statements.append(" ".join(statement.split()))
+
+    try:
+        with factory() as session:
+            gaps = collection_gaps(session)
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+
+    assert len(gaps) == 1 and gaps[0]["collection_id"] == 500
+
+    member_reads = [
+        s for s in statements if s.upper().startswith("SELECT") and "collection_members" in s
+    ]
+    assert member_reads, "nothing read the members at all — is it still answering?"
+    unscoped = [s for s in member_reads if " IN (" not in s.upper()]
+    assert not unscoped, f"whole-table read of collection_members: {unscoped[0][:140]}"
+
+
+def test_a_complete_or_unowned_collection_is_still_left_out(factory):
+    """NEGATIVE CONTROL: the filter moved from Python into SQL.
+
+    `owned_count == 0 or owned_count >= total_count` became two SQL comparisons,
+    and either boundary is easy to get wrong by one. A collection you own none of
+    is not a gap you can close; a collection you own entirely has nothing to show.
+    Both must stay out, and the one-short collection must stay in.
+    """
+    from sift.analysis.collections import collection_gaps
+
+    with factory() as session:
+        _collection(session, 810, members=[(1, "A", 2000, False), (2, "B", 2001, False)])  # none
+        _collection(session, 820, members=[(3, "C", 2000, True), (4, "D", 2001, True)])  # all
+        _collection(session, 830, members=[(5, "E", 2000, True), (6, "F", 2001, False)])  # one
+        session.commit()
+
+    with factory() as session:
+        gaps = collection_gaps(session)
+
+    assert [g["collection_id"] for g in gaps] == [830]
+
+
+def test_the_members_are_the_same_ones_the_slow_way_would_give(factory):
+    """NEGATIVE CONTROL: reading fewer rows must not mean reporting different ones.
+
+    Scoping the member read by collection id can drop a collection's members
+    silently — the gap still appears, just empty — which looks like a complete
+    set rather than a bug.
+    """
+    from sift.analysis.collections import collection_gaps
+
+    with factory() as session:
+        _collection(
+            session,
+            900,
+            members=[
+                (1, "First", 1999, True),
+                (2, "Second", 2002, False),
+                (3, "Third", 2005, False),
+            ],
+        )
+        _collection(session, 901, members=[(4, "Solo", 2010, True), (5, "Pair", 2011, False)])
+        session.commit()
+
+    with factory() as session:
+        gaps = {g["collection_id"]: g for g in collection_gaps(session)}
+
+    assert set(gaps) == {900, 901}
+    assert [m["title"] for m in gaps[900]["members"]] == ["First", "Second", "Third"]
+    assert [m["owned"] for m in gaps[900]["members"]] == [True, False, False]
+    assert [m["title"] for m in gaps[901]["members"]] == ["Solo", "Pair"]
