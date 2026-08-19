@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import Session, sessionmaker
@@ -408,6 +408,10 @@ def preview(factory: sessionmaker[Session], thr: JunkThresholds) -> dict[str, in
     return counts
 
 
+def _verdict_of(signals: dict[str, Any] | None) -> str:
+    return str((signals or {}).get("verdict", Verdict.NEUTRAL))
+
+
 def _is_candidate(score: Score, thr: JunkThresholds) -> bool:
     """Classification-aware selection:
 
@@ -415,12 +419,15 @@ def _is_candidate(score: Score, thr: JunkThresholds) -> bool:
     * ``protect`` verdict → never (US theatrical / cult classic, even if it scored low);
     * otherwise → the numeric band decides (at/above the borderline cutoff).
     """
-    verdict = (score.signals or {}).get("verdict", Verdict.NEUTRAL)
-    if verdict == Verdict.REMOVE:
+    return _decides(_verdict_of(score.signals), score.junk_score, thr)
+
+
+def _decides(verdict: str, junk_score: float, thr: JunkThresholds) -> bool:
+    if verdict == str(Verdict.REMOVE):
         return True
-    if verdict == Verdict.PROTECT:
+    if verdict == str(Verdict.PROTECT):
         return False
-    return score.junk_score >= thr.borderline_cutoff
+    return junk_score >= thr.borderline_cutoff
 
 
 def candidates(
@@ -428,10 +435,25 @@ def candidates(
 ) -> list[tuple[Movie, Score]]:
     """Removal candidates: library items the classifier + score flag for removal,
     excluding kids-section items (never auto-flagged) and titles the owner has
-    marked Keep (a standing verdict, not a per-session one)."""
-    stmt = (
-        select(Movie, Score)
-        .join(Score, Score.movie_id == Movie.tmdb_id)
+    marked Keep (a standing verdict, not a per-session one).
+
+    Read in two passes, because the Junk page asks this on every visit. Deciding
+    candidacy needs a score and a verdict; *rendering* a candidate needs the film.
+    Selecting both at once meant every non-kids title in the library arrived fully
+    hydrated — all thirty-one columns of ``movies``, ``overview`` and
+    ``poster_url`` included — so that two hundred of them could be shown and the
+    rest discarded. The first pass therefore selects no ``movies`` columns at all
+    beyond the id it joins on, and only the winners are fetched whole.
+
+    The verdict still has to be filtered in Python: it lives inside the
+    ``signals`` JSON, and a JSON predicate would compile differently on SQLite
+    (where the tests run) and Postgres (where this actually runs) — precisely the
+    blind spot that hides this class of bug. So ``signals`` is still read for the
+    whole library; the wide ``movies`` half, which is the larger one, is not.
+    """
+    selection = (
+        select(Score.movie_id, Score.junk_score, Score.signals)
+        .join(Movie, Movie.tmdb_id == Score.movie_id)
         .where(
             Movie.in_plex.is_(True),
             Movie.is_kids.is_(False),
@@ -439,8 +461,25 @@ def candidates(
         )
         .order_by(Score.junk_score.desc())
     )
-    rows = [(m, s) for m, s in session.execute(stmt) if _is_candidate(s, thr)]
-    return rows[:limit]
+    wanted: list[int] = []
+    for movie_id, junk_score, signals in session.execute(selection):
+        if _decides(_verdict_of(signals), junk_score, thr):
+            wanted.append(movie_id)
+            if len(wanted) >= limit:
+                break
+
+    if not wanted:
+        return []
+    hydrated = {
+        m.tmdb_id: (m, s)
+        for m, s in session.execute(
+            select(Movie, Score)
+            .join(Score, Score.movie_id == Movie.tmdb_id)
+            .where(Movie.tmdb_id.in_(wanted))
+        )
+    }
+    # `wanted` carries the ranking; the IN query does not promise an order.
+    return [hydrated[i] for i in wanted if i in hydrated]
 
 
 def _diff_sort_key(row: dict[str, object]) -> tuple[float, int]:

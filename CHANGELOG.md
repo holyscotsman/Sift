@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.55.0 — The Junk page stopped reading the whole library to show two hundred rows
+
+Deciding whether a title is a removal candidate needs two things: its score and
+the classifier's verdict. *Rendering* one needs the film itself. The query asked
+for both at once, so every non-kids title in the library arrived fully
+hydrated — all thirty-one columns of `movies`, `overview` and `poster_url`
+included, plus the `signals` JSON — in order to show a couple of hundred and
+discard the rest. There was no `LIMIT`: the slice happened in Python, after
+everything had crossed the wire.
+
+This is asked on every visit to the screen.
+
+It reads in two passes now. The first selects no `movies` columns at all beyond
+the id it joins on, and stops as soon as it has enough candidates. The second
+fetches those winners whole.
+
+Measured on a 2,000-film library with 300 candidates, showing 200:
+**2.06 MB down to 659 KB, a 3.1× cut.** (Measured as the size of the values
+returned, on SQLite — a proxy for wire bytes, not an exact count of them.)
+
+The verdict still has to be filtered in Python. It lives inside the `signals`
+JSON, and a JSON predicate compiles differently on SQLite, where the tests run,
+and Postgres, where this actually runs — which is precisely the blind spot that
+hides this class of bug in the first place. So `signals` is still read for the
+whole library; the wider `movies` half is not.
+
+Three tests. One of them was **vacuous when first written** and caught by its own
+mutation: the fixture seeded scores in the same order as the ids, so an `IN`
+query returning its own order looked correctly ranked. Seeding the two in
+disagreement makes the ranking assertion mean something, and the mutation now
+fails as it should.
+
+The other two controls: the same films must come back in the same order as the
+slow whole-library computation, and a `protect` verdict must still keep a
+high-scoring title out of the queue — the one part of the decision that could not
+move into SQL, and the one whose loss would put cult classics in the removal
+queue.
+
 ## 2607.54.0 — Check that the browser and the server agree on their routes
 
 The one seam neither suite covered.
