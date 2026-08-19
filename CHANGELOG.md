@@ -2,6 +2,29 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.51.0 — Pin the two screens that can delete a file
+
+Both destructive paths were covered on the server and uncovered in the browser.
+The engine refuses an unapproved delete, and every test of that lives in Python —
+so a screen that proposed first and asked afterwards would have been caught by
+nothing, and the confirmation dialog would have been decoration.
+
+Six tests across Junk and Storage, each mutation-verified:
+
+* Neither screen contacts the server until the dialog is answered, and cancelling
+  contacts it not at all.
+* The Junk row button removes **the row you clicked**, not everything ticked.
+  Titles arrive ticked by default — deliberately — which is exactly what makes a
+  per-row button dangerous if it reads the selection instead of its own row. That
+  mutation was tried and the test caught it.
+* The approval is its own explicit call rather than something `propose` is
+  trusted to imply. Deleting the `approveAction` line turns the test red.
+* Storage sends exactly the paths it showed in the dialog, and reports a
+  *proposal* — "approve it on Activity" — rather than implying the space is back.
+
+No behaviour changed. This is the browser half of a guarantee that was only ever
+enforced on the server.
+
 ## 2607.50.0 — A short recommendation list says why it is short
 
 "Why am I only getting five?" was answerable from the database and not from the

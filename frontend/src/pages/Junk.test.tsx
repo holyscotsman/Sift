@@ -85,3 +85,69 @@ describe("keeping a title", () => {
     expect(await screen.findByText("kept")).toBeInTheDocument();
   });
 });
+
+describe("removing a title", () => {
+  it("proposes nothing until the confirmation is answered", async () => {
+    vi.spyOn(api, "junk").mockResolvedValue({ items: [candidate()], total: 1 } as never);
+    const propose = vi.spyOn(api, "proposeAction");
+
+    renderPage(<Junk />);
+    await userEvent.click(await screen.findByRole("button", { name: "Approve removal" }));
+
+    // The dialog is up and the server has heard nothing. The engine refuses an
+    // unapproved delete anyway, but a screen that fires first and asks second
+    // would mean the dialog was decoration.
+    expect(await screen.findByText(/Approve removal of 1 title/i)).toBeInTheDocument();
+    expect(propose).not.toHaveBeenCalled();
+  });
+
+  it("removes the row you clicked, not everything that happens to be ticked", async () => {
+    // Titles arrive ticked by default — that is deliberate, and it is exactly what
+    // makes a per-row button dangerous if it reads the selection instead of its own
+    // row. Clicking one row must propose one title.
+    vi.spyOn(api, "junk").mockResolvedValue({
+      items: [candidate(), candidate({ tmdb_id: 27205, title: "Inception" })],
+      total: 2,
+    } as never);
+    const propose = vi
+      .spyOn(api, "proposeAction")
+      .mockImplementation(
+        async (body: unknown) =>
+          ({ id: (body as { movie_tmdb_id: number }).movie_tmdb_id }) as never,
+      );
+    const approve = vi.spyOn(api, "approveAction").mockResolvedValue({} as never);
+    const execute = vi
+      .spyOn(api, "executeAction")
+      .mockResolvedValue({ dry_run: true } as never);
+
+    renderPage(<Junk />);
+    // Both rows are ticked, so the bulk control offers two. Click the first row's
+    // own button instead — an exact name, because the bulk one is "Approve removal (2)".
+    const rows = await screen.findAllByRole("button", { name: "Approve removal" });
+    expect(rows).toHaveLength(2);
+    await userEvent.click(rows[0]);
+    await userEvent.click(await screen.findByRole("button", { name: /approve \(staged\)/i }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+    // Propose → approve → execute, per title, with the approval its own explicit
+    // call rather than something propose is trusted to imply.
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(propose.mock.calls[0][0]).toMatchObject({ type: "delete", movie_tmdb_id: 603 });
+    expect(approve).not.toHaveBeenCalledWith(27205);
+  });
+
+  it("NEGATIVE CONTROL: cancelling proposes nothing", async () => {
+    vi.spyOn(api, "junk").mockResolvedValue({ items: [candidate()], total: 1 } as never);
+    const propose = vi.spyOn(api, "proposeAction");
+
+    renderPage(<Junk />);
+    await userEvent.click(await screen.findByRole("button", { name: "Approve removal" }));
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+
+    expect(propose).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByText(/Approve removal of 1 title/i)).not.toBeInTheDocument(),
+    );
+  });
+});
