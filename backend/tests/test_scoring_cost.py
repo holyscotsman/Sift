@@ -330,3 +330,51 @@ def test_a_protect_verdict_still_keeps_a_low_scorer_out(factory):
     assert "protect" not in titles, "a protected title reached the removal queue"
     assert "remove" in titles, "a remove verdict was ignored"
     assert "neutral" not in titles, "a low-scoring neutral title was flagged anyway"
+
+
+def test_counting_the_flagged_titles_fetches_no_films(factory):
+    """The header badge is a number. It was produced by building the list.
+
+    `/api/status` is polled for as long as a tab is open, and its junk figure came
+    from `len(candidates(...))` with a limit of ten thousand — so counting the
+    flagged titles hydrated every one of them, poster URL and overview included,
+    to take the length of the result.
+    """
+    thr = JunkThresholds()
+    _scored_library(factory, 300, candidates=40)
+
+    seen: list[str] = []
+    engine = factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _capture(_conn, _cur, statement, *_a, **_kw):
+        seen.append(" ".join(statement.split()))
+
+    try:
+        with factory() as session:
+            count = len(junk.candidate_ids(session, thr, limit=10_000))
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    assert count == 40  # the work happened
+    wide = [s for s in seen if "movies.overview" in s or "movies.poster_url" in s]
+    assert not wide, f"counting the queue fetched films: {wide[0][:140]}"
+
+
+def test_the_count_and_the_list_agree(factory):
+    """NEGATIVE CONTROL: a cheaper count that counts something else is worse than
+    an expensive one.
+
+    The badge and the page must never disagree — a header promising forty titles
+    over a screen showing thirty-nine is a bug report waiting to happen, and the
+    two now walk different code paths.
+    """
+    thr = JunkThresholds()
+    _scored_library(factory, 200, candidates=25)
+
+    with factory() as session:
+        ids = junk.candidate_ids(session, thr, limit=10_000)
+        rows = junk.candidates(session, thr, limit=10_000)
+
+    assert len(ids) == len(rows) == 25
+    assert ids == [m.tmdb_id for m, _ in rows]
