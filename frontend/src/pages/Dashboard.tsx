@@ -120,7 +120,7 @@ function buildAttention(c: Counts | undefined, s: SettingsResponse | null): Atte
 }
 
 export function Dashboard() {
-  const { data: status, loading } = useStatus();
+  const { data: status, loading, error: statusError } = useStatus();
   const { data: health } = useHealth();
   const { data: activity } = useActivity(6);
   const { start } = useScan();
@@ -171,11 +171,19 @@ export function Dashboard() {
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-fg2">
-            {loading
-              ? "Loading snapshot…"
-              : c && c.movies > 0
-                ? `${c.movies.toLocaleString()} titles in the snapshot · ${online}/${total} sources online`
-                : "No snapshot yet — run a scan to build one."}
+            {loading ? (
+              "Loading snapshot…"
+            ) : statusError ? (
+              // A failed status read used to render as "No snapshot yet — run a
+              // scan to build one", which is advice that cannot work: when the
+              // database is refusing queries a scan is the last thing that will
+              // help. Say what actually happened.
+              <span style={{ color: "var(--junk)" }}>{statusError}</span>
+            ) : c && c.movies > 0 ? (
+              `${c.movies.toLocaleString()} titles in the snapshot · ${online}/${total} sources online`
+            ) : (
+              "No snapshot yet — run a scan to build one."
+            )}
             {!loading && finished && (
               <span className="text-fg3" title={new Date(finished).toLocaleString()}>
                 {" "}

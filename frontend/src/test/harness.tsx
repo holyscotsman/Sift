@@ -11,16 +11,19 @@ import { MemoryRouter } from "react-router-dom";
 
 import { ToastProvider } from "@/components/Toast";
 import { DrawerProvider } from "@/lib/drawer";
+import { PrefsProvider } from "@/lib/prefs";
 import { ScanProvider } from "@/lib/scan";
 
 function Providers({ children }: { children: ReactNode }) {
   return (
     <MemoryRouter>
-      <ToastProvider>
-        <DrawerProvider>
-          <ScanProvider>{children}</ScanProvider>
-        </DrawerProvider>
-      </ToastProvider>
+      <PrefsProvider>
+        <ToastProvider>
+          <DrawerProvider>
+            <ScanProvider>{children}</ScanProvider>
+          </DrawerProvider>
+        </ToastProvider>
+      </PrefsProvider>
     </MemoryRouter>
   );
 }
