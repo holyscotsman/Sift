@@ -2,6 +2,32 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.54.0 — Check that the browser and the server agree on their routes
+
+The one seam neither suite covered.
+
+Frontend tests mock `api` wholesale — that is what makes them fast and what makes
+them blind to the strings inside it — and backend tests never see the client at
+all. So a renamed or removed route was a 404 that appeared only in a real
+browser, on whichever screen nobody happened to open before shipping.
+
+A structural test now pulls every path out of `api.ts`, pulls every route off the
+app, and requires the first to be a subset of the second. All sixty-five client
+paths resolve against seventy-five routes today.
+
+Mutation-verified from **both** sides, because a rename can start on either:
+pointing the client at a route the server does not serve turns it red, and
+renaming the route on the server turns it red too.
+
+Two negative controls, and they earn their place here more than usual. A subset
+assertion passes trivially when one side is empty, so the test refuses to run
+against fewer than fifty paths on either side — a broken matcher now fails loudly
+instead of silently agreeing. And the normaliser has its own control: stripping a
+trailing `${...}` is right for an interpolated query string and wrong for a path
+parameter, and getting that backwards flattens `/api/config/test/{}` into
+`/api/config/test`, which either reads as a false alarm or, worse, matches
+something else and hides a real one.
+
 ## 2607.53.1 — Make the README describe the app that exists
 
 Documentation only; no code changed.
