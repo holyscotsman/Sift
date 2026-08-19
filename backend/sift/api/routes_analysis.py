@@ -244,15 +244,24 @@ async def missing_recommendations(
     factory: sessionmaker[Session] = Depends(get_session_factory),
     settings: Settings = Depends(get_settings),
 ) -> RecommendationsResponse:
-    """Taste-based suggestions grounded in your highest-rated owned titles, via TMDB's
-    discovery graph. Deterministic: TMDB picks the candidates, we rank and explain them."""
+    """Films worth acquiring: the validated canon first, then the taste graph.
+
+    Canon entries need no API call and no ratings, which is what makes the list
+    dependable; the discovery graph extends it with titles the canon does not
+    mention. Deterministic throughout — nothing here is an LLM's opinion.
+    """
     capped = max(1, min(limit, recommend_analysis.STORED_LIMIT))
     with factory() as session:
-        items, total = recommend_analysis.stored(session, limit=capped)
+        items, counts = recommend_analysis.stored(session, limit=capped)
     if items:
+        total = counts["total"]
+        shown = f"Showing {len(items)} of {total}. " if total > len(items) else ""
         return RecommendationsResponse(
             items=[RecommendedMovie(**m) for m in items],
-            note=None if total <= len(items) else f"Showing {len(items)} of {total}.",
+            note=(
+                f"{shown}{counts['canon']} from the validated canon, "
+                f"{counts['taste']} from your taste graph."
+            ),
         )
     # Nothing stored yet — an instance that has not rescanned since this became a
     # scan phase. Compute live this once rather than showing an empty shelf.
