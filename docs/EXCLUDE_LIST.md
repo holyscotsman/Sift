@@ -71,6 +71,11 @@ Do not edit `exclude_list.json`; the next rebuild overwrites it. Corrections go 
 `never_recommend` there is the one place a judgement call belongs, because it is
 yours rather than a dataset's.
 
+It applies on the next scan, to titles already stored as well as to candidates
+arriving from TMDB or an AI. See `RECOMMEND_LIST.md` for the exact matching
+rules — the short version is that an `imdb_id` is exact and a `title` + `year`
+pair also works.
+
 ## Source
 
 IMDb Datasets — <https://datasets.imdbws.com/> (`title.basics`, `title.ratings`).

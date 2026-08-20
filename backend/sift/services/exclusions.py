@@ -146,6 +146,30 @@ def excluded(
     return _matches(idx["excluded_ids"], idx["excluded_titles"], imdb_id, title, year)
 
 
+def always_recommend() -> list[dict[str, Any]]:
+    """Hand-added titles the generated canon missed, as raw rows.
+
+    Returned rather than applied here, because the only sensible place to *use*
+    them is the canon seeder — this module knows what the files say, not what the
+    database should look like.
+    """
+    rows = (_load(_OVERRIDES).get("always_recommend") or {}).get("titles", [])
+    return [dict(row) for row in rows if isinstance(row, dict) and row.get("title")]
+
+
+def never_recommend_keys() -> tuple[set[str], set[tuple[str, int]]]:
+    """``(imdb ids, (normalised title, year) pairs)`` the owner has struck out.
+
+    Exposed as raw keys so the canon seeder can prune rows that are *already*
+    stored. Without that, a hand correction only ever affects candidates arriving
+    from outside and is silently inert against the twenty-five thousand titles
+    that shipped — which is most of the list, and the half someone is most likely
+    to be looking at when they reach for the file.
+    """
+    idx = _index()
+    return set(idx["never_ids"]), set(idx["never_titles"])
+
+
 def counts() -> dict[str, int]:
     """Sizes of the loaded lists, for the health surface and for tests."""
     idx = _index()
