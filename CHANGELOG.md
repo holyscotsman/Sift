@@ -2,6 +2,28 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.85.0 — A README that describes the app that exists
+
+The README still described Sift as reading "Plex + Radarr (plus Tautulli + TMDB)"
+— no Sonarr, no Overseerr — and the Missing screen as "the validated canon minus
+your shelf", which stopped being true three versions ago. It also never explained
+the one thing most worth understanding: **how a recommendation gets chosen and
+ranked**, which is the part that decides what somebody actually sees.
+
+There is now a section for it, written to be read rather than skimmed: the three
+sources that feed one list, the two shipped lists and where they come from, the
+rule that AI supplies candidates and never verdicts, and the ranking that counts
+reasons off your own shelf — with a worked example of a card, because "You own 5
+films by Akira Kurosawa" explains the design faster than a paragraph about it can.
+
+The project layout was stale in three places (`ai/` and `data/` were missing
+entirely, `analysis/` and `services/` listed things that had moved), and the
+list docs were not linked from anywhere.
+
+Every claim in the file is now checked rather than asserted: the doc links all
+resolve, every path in the layout block exists, the counts match the shipped data
+files, and the AI providers named match `registry.MODES`.
+
 ## 2607.84.0 — The top-up was ranking last, which is the same as not existing
 
 The affinity ranking shipped one version ago broke the thing it sat next to, and
