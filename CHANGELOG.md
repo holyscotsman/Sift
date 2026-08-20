@@ -2,6 +2,35 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.63.0 — Thirty thumbnails stopped blocking the whole server
+
+A better answer to "the Missing page times out" than the last one.
+
+Every poster has to read the database to find out where its artwork lives. That
+read ran **on the event loop**. Against the SQLite these tests use it costs
+microseconds and is invisible; against a hosted database it is a network round
+trip, and while one is in flight nothing else in the process moves — including the
+page's own API call.
+
+The Missing page asks for thirty thumbnails at once. Measured, with a 50 ms
+database read: **1.57 s serialised, under 0.5 s overlapped.** And "serialised"
+here does not mean the posters merely wait for each other — it means the server
+is unavailable for the duration.
+
+The database reads and the file writes now run on worker threads, through the
+`in_thread` helper the pipeline and AI modules already use for exactly this.
+
+Two tests. The pin measures *concurrency*, not speed — a slow read is fine,
+thirty slow reads that refuse to overlap are not — and the control checks the
+bytes still arrive, because a cache that stopped serving posters would be
+perfectly concurrent.
+
+**Still outstanding, and worth naming rather than leaving to be rediscovered:**
+twelve other `async` endpoints do synchronous database work on the loop the same
+way. They matter far less — each is one request rather than thirty at once — but
+the pattern is the same and the fix is the same. Listed in
+`docs/ENGINEERING.md`.
+
 ## 2607.62.0 — Two reported bugs: keys that "won't save", and Missing hanging
 
 ### Your keys were saved. Then the key that opens them changed.

@@ -371,3 +371,70 @@ async def test_an_owned_poster_still_wins_over_the_canon_one(settings, factory, 
     cache = PosterCache(settings, factory, transport=httpx.MockTransport(handler))
     assert await cache.get(603) is not None
     assert any("owned.jpg" in url for url in asked), f"fetched the wrong artwork: {asked}"
+
+
+async def test_thirty_posters_do_not_queue_behind_each_other(settings, factory, tmp_path):
+    """The Missing page asks for thirty thumbnails at once, and each one has to
+    read the database to find out where the artwork lives.
+
+    That read ran on the event loop. Against local SQLite it costs microseconds
+    and is invisible; against a hosted database it is a network round trip, and
+    while it is in flight *nothing else in the process moves* — including the
+    page's own API call. Thirty of them in a row is how a page stops loading.
+
+    Measured as concurrency, not speed: a slow read is fine, thirty slow reads
+    that refuse to overlap are not.
+    """
+    import asyncio
+    import time
+
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = False  # the DB read is the whole subject here
+
+    with factory() as session:
+        for n in range(30):
+            session.add(CanonMovie(tmdb_id=9_000 + n, title=f"Canon {n}", poster_path="/p.jpg"))
+        session.commit()
+
+    delay = 0.05
+
+    class SlowFactory:
+        """A database that answers, but not instantly — a hosted one, in other words."""
+
+        kw = factory.kw
+
+        def __call__(self):
+            time.sleep(delay)
+            return factory()
+
+    cache = PosterCache(settings, SlowFactory(), transport=_transport())
+
+    started = time.perf_counter()
+    await asyncio.gather(*(cache.get(9_000 + n) for n in range(30)))
+    elapsed = time.perf_counter() - started
+
+    # Serialised, thirty 50 ms reads take 1.5 s. Overlapped, they take a fraction
+    # of that. The bar is deliberately loose — this is about the shape.
+    assert elapsed < delay * 30 / 3, f"thirty reads took {elapsed:.2f}s — they queued"
+
+
+async def test_the_poster_still_comes_back(settings, factory, tmp_path):
+    """NEGATIVE CONTROL: a fetch that returns nothing is extremely concurrent.
+
+    Everything above is satisfied perfectly by a cache that stopped serving
+    posters, so this pins that the bytes still arrive.
+    """
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = False
+
+    with factory() as session:
+        session.add(CanonMovie(tmdb_id=4242, title="Canon", poster_path="/p.jpg"))
+        session.commit()
+
+    cache = PosterCache(settings, factory, transport=_transport())
+    path = await cache.get(4242)
+    assert path is not None and path.read_bytes() == _JPEG
