@@ -2,6 +2,36 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.84.0 — The top-up was ranking last, which is the same as not existing
+
+The affinity ranking shipped one version ago broke the thing it sat next to, and
+the failure was invisible from anywhere except the surface it ruined.
+
+`canon_affinity` is keyed on `imdb_id`. **Top-up rows have no IMDb id** —
+discovery hands back TMDB ids, so a film found by the TMDB sweep or named by an
+AI provider never gets an affinity row at all. With the sort using
+`nulls_last`, a **tier-1** discovered film landed at position **25,000 of
+25,001**: below every tier-4 title in the shipped canon.
+
+The top-up exists so the list never runs out. It had been reduced to making the
+count go up.
+
+A missing score now means what it should mean — *this row has no reasons from the
+library* — and the row ranks on its tier, which is exactly where a canon row with
+no metadata ranks. The same tier-1 film now lands at position 2,215, among the
+other tier-1 films, ordered by fame within them.
+
+The tier weights now exist in two places: a SQL `CASE` that runs inside the query
+and `affinity.TIER_POINTS` that runs in Python. They are the same statement, so a
+test pins that they agree — nothing else would notice if they drifted.
+
+**A bug in the first version of that test, worth recording.** It read
+`_effective_score()` without the outer join it depends on, and SQLAlchemy quietly
+made its own implicit join, so every row picked up somebody else's score and the
+test read 4 where it expected 2. The helper now says in its docstring that it is
+only valid inside a query that joins `CanonAffinity`.
+
+Three mutations, all red.
 ## 2607.83.0 — Forty-seven films the exclusion list would have eaten
 
 The two shipped lists are disjoint **by IMDb id** — zero overlap, by

@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select, update
 
 from sift.analysis import affinity, canon_missing
-from sift.db.models import CanonEntry, CanonMetadata, Movie
+from sift.db.models import CanonAffinity, CanonEntry, CanonMetadata, Movie
 from sift.db.session import init_db, make_engine, make_session_factory
 from sift.services import canon_affinity, canon_entries
 
@@ -230,3 +230,76 @@ def test_NEGATIVE_CONTROL_one_director_does_not_fill_the_first_page(seeded):
             break
     assert lead <= 7
     assert len({d for r in rows for d in (r.directors or [])}) > 30
+
+
+def test_a_discovered_film_is_not_buried_beneath_the_whole_canon(seeded):
+    """The top-up's whole purpose, and the affinity ranking nearly cost it.
+
+    ``canon_affinity`` is keyed on ``imdb_id`` and top-up rows have none —
+    discovery hands back TMDB ids. Sorting nulls last put a **tier-1** discovered
+    film at position 25,000 of 25,001, below every tier-4 title in the shipped
+    canon. The list still "kept going" in the sense that the count went up, and
+    in no other sense.
+    """
+    with seeded() as session:
+        session.add(
+            CanonEntry(
+                imdb_id=None,
+                title="A Discovered Film",
+                year=2019,
+                tier=1,
+                sources=["tmdb_discovery"],
+                tmdb_id=999_999,
+                review_status="resolved",
+                file_version="topup",
+            )
+        )
+        session.commit()
+        canon_affinity.recompute(session)
+        rows, total = canon_missing.missing(session, limit=100_000, with_total=True)
+
+    position = next(i for i, r in enumerate(rows) if r.title == "A Discovered Film")
+    assert total > 25_000
+    # Among the tier-1 films, not after the tier-4 ones.
+    assert position < total / 4
+    assert {r.tier for r in rows[position - 2 : position + 3]} == {1}
+
+
+def test_the_tier_fallback_says_the_same_thing_as_the_python(seeded):
+    """The tier numbers exist in two places — a SQL ``CASE`` and
+    ``affinity.TIER_POINTS`` — because one of them has to run inside the query.
+    They are the same statement, so they have to agree, and nothing but this
+    would notice if they stopped."""
+    from sift.analysis.canon_missing import _effective_score
+
+    with seeded() as session:
+        canon_affinity.recompute(session)
+        # A row with no affinity record at all: its effective score must equal
+        # what the Python scorer gives an empty library at the same tier.
+        for tier in affinity.TIER_POINTS:
+            session.add(
+                CanonEntry(
+                    title=f"Scoreless {tier}",
+                    year=2000,
+                    tier=tier,
+                    tmdb_id=900_000 + tier,
+                    review_status="resolved",
+                )
+            )
+        session.commit()
+        got = {
+            title: score
+            for title, score in session.execute(
+                # The outer join is not optional: without it the reference to
+                # CanonAffinity.score inside the coalesce makes its own implicit
+                # join and every row picks up somebody else's score. Which is how
+                # the first version of this test read 4 where it expected 2.
+                select(CanonEntry.title, _effective_score())
+                .outerjoin(CanonAffinity, CanonAffinity.imdb_id == CanonEntry.imdb_id)
+                .where(CanonEntry.title.like("Scoreless %"))
+            )
+        }
+
+    for tier, expected in affinity.TIER_POINTS.items():
+        assert got[f"Scoreless {tier}"] == expected
+        assert expected == affinity.score(affinity.Profile(), tier=tier, genres=[], directors=[])

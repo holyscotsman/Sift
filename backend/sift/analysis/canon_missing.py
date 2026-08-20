@@ -60,6 +60,38 @@ class CanonMissing:
     reasons: list[str]
 
 
+def _effective_score() -> ColumnElement[int]:
+    """The affinity score, or what the tier alone is worth when there is none.
+
+    Not ``nulls_last``, which is what this was and which was wrong in a way that
+    only showed up on the surface it broke. ``canon_affinity`` is keyed on
+    ``imdb_id``, and **top-up rows have no IMDb id** — discovery hands back TMDB
+    ids, so a film found by the TMDB sweep or named by an AI provider never gets
+    an affinity row at all. With nulls sorting last, a tier-1 discovered film
+    landed at position 25,000 of 25,001: below every tier-4 title in the shipped
+    canon, which is to say invisible. The whole point of the top-up is that the
+    list keeps going, and it had been reduced to making the count go up.
+
+    A missing score now means exactly what it should mean — *this row has no
+    reasons from the library* — and the row ranks on its tier, which is precisely
+    where a canon row with no metadata ranks. The numbers match
+    ``affinity.TIER_POINTS`` deliberately; they are the same statement in the two
+    places it has to be made.
+
+    **Only valid in a query that outer-joins ``CanonAffinity``.** Referenced
+    without one, the coalesce makes its own implicit join and every row picks up
+    somebody else's score.
+    """
+    return func.coalesce(
+        CanonAffinity.score,
+        case(
+            (CanonEntry.tier == 1, 4),
+            (CanonEntry.tier == 2, 2),
+            (CanonEntry.tier == 3, 1),
+            else_=0,
+        ),
+    )
+
 def _owned() -> ColumnElement[bool]:
     return (
         select(Movie.tmdb_id)
@@ -198,7 +230,7 @@ def missing(
             .outerjoin(CanonAffinity, CanonAffinity.imdb_id == CanonEntry.imdb_id)
             .where(*conditions)
             .order_by(
-                CanonAffinity.score.desc().nulls_last(),
+                _effective_score().desc(),
                 CanonEntry.tier.asc(),
                 CanonEntry.votes.desc().nulls_last(),
                 CanonEntry.tmdb_id.asc(),
