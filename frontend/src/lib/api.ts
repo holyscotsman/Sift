@@ -22,7 +22,7 @@ import type {
   IgnoredItem,
   IgnoredListResponse,
   SuggestionListResponse,
-  CanonRefreshResponse,
+  TopupResult,
   ConnectionsResponse,
   DecisionsImportResult,
   HealthResponse,
@@ -382,6 +382,12 @@ export const api = {
       PAGE_LOAD_TIMEOUT_MS,
     );
   },
+  // Extend the list past the one that ships with Sift: TMDB discovery, then
+  // whichever AI providers are connected. Both write into the same table, so this
+  // makes the one list longer rather than opening a second one. Slow by nature —
+  // several discovery pages plus a provider round trip — so it gets its own bound.
+  topup: () =>
+    request<TopupResult>("/api/missing/topup", { method: "POST" }, PAGE_LOAD_TIMEOUT_MS),
   ignoreTitle: (tmdbId: number, title: string, source = "missing") =>
     request<IgnoredItem>("/api/missing/ignore", {
       method: "POST",
@@ -391,8 +397,6 @@ export const api = {
     request<IgnoredListResponse>(`/api/missing/ignored?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
   unignoreTitle: (tmdbId: number) =>
     request<{ removed: boolean }>(`/api/missing/ignore/${tmdbId}`, { method: "DELETE" }),
-  canonRefresh: () =>
-    request<CanonRefreshResponse>("/api/missing/canon/refresh", { method: "POST" }),
 };
 
 // A short-lived, read-only credential for the URLs that cannot carry a header —

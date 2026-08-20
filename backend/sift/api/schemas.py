@@ -375,6 +375,16 @@ class SuggestionListResponse(BaseModel):
     ignored_total: int = 0
 
 
+class TopupResponse(BaseModel):
+    added: int
+    remaining: int
+    # False when nothing was attempted — no TMDB, or the list is still deep
+    # enough that spending API budget would buy nothing. `note` says which.
+    ran: bool
+    considered: int = 0
+    note: str | None = None
+
+
 class IgnoreIn(BaseModel):
     tmdb_id: int
     title: str = ""

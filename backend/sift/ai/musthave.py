@@ -232,6 +232,57 @@ async def _validate(
     }
 
 
+async def gated_candidates(
+    session_factory: sessionmaker[Session],
+    settings: Settings,
+    client: TmdbClient,
+    seen: set[int],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Films the configured providers named, minus everything that failed a gate.
+
+    The single public seam for "an AI proposed some titles, now check them". Two
+    callers want this — the Must-Have catalog and the Missing list top-up — and
+    one implementation of *an AI said it, so verify it* is easier to keep honest
+    than two that drift apart.
+
+    Returns an empty list when no provider is configured, which is not an error:
+    every other source still works, and that is the point of the arrangement.
+    """
+    local, anthropic = build_providers(settings)
+    if local is None and anthropic is None:
+        return []
+    try:
+        context, owned, _seen = await in_thread(session_factory, _read_library)
+        candidates, _provider = await _propose(context, limit, local, anthropic)
+    finally:
+        # finally: a cancelled request or a raising provider must not leak the
+        # other provider's httpx client.
+        for prov in (local, anthropic):
+            if prov is not None:
+                await prov.aclose()
+    if not candidates:
+        return []
+
+    sem = asyncio.Semaphore(6)
+
+    async def gated(cand: dict[str, Any]) -> dict[str, Any] | None:
+        async with sem:
+            return await _validate(client, cand, owned, seen)
+
+    results = await asyncio.gather(*(gated(c) for c in candidates[:_MAX_CANDIDATES]))
+    accepted: list[dict[str, Any]] = []
+    for ok in results:
+        if ok is None or ok["tmdb_id"] in seen:
+            continue
+        seen.add(ok["tmdb_id"])
+        accepted.append(ok)
+        if len(accepted) >= limit:
+            break
+    return accepted
+
+
 # ------------------------------------------------------------------------- the run
 
 

@@ -274,3 +274,80 @@ describe("setting a title aside", () => {
     expect(screen.queryByRole("button", { name: /undo/i })).not.toBeInTheDocument();
   });
 });
+
+describe("looking for more films", () => {
+  it("extends the list and reloads it from the top", async () => {
+    // Scrolled past the first page before pressing the button, which is the only
+    // state where "reload from the top" and "fetch the next page" differ. With a
+    // single page loaded the offset is zero either way and the assertion below
+    // holds no matter what the code does.
+    const suggestions = vi
+      .spyOn(api, "suggestions")
+      .mockResolvedValueOnce(page(fullPage("Alien"), 500) as never)
+      .mockResolvedValueOnce(page([{ id: 3000, title: "Arrival" }], 500) as never)
+      .mockResolvedValueOnce(page([{ id: 604, title: "Stalker" }], 501) as never);
+    const topup = vi
+      .spyOn(api, "topup")
+      .mockResolvedValue({ added: 1, remaining: 501, ran: true, considered: 1, note: null } as never);
+
+    renderPage(<Missing />);
+    await screen.findByText(/Alien/);
+    await waitFor(() => {
+      scrollToBottom();
+      expect(suggestions).toHaveBeenCalledTimes(2);
+    });
+    await screen.findByText(/Arrival/);
+
+    await userEvent.click(screen.getByRole("button", { name: /find more/i }));
+
+    expect(topup).toHaveBeenCalled();
+    expect(await screen.findByText(/Stalker/)).toBeInTheDocument();
+    // Reloaded from the top rather than appended at the current offset: the new
+    // titles are ranked among the old ones, not stapled to the end. Appending at
+    // offset 120 would also skip the sixty titles the new arrivals displaced.
+    const offsets = suggestions.mock.calls.map((c) => (c[0] as { offset?: number })?.offset);
+    expect(offsets).toEqual([0, PAGE_SIZE, 0]);
+    expect(screen.queryByText(/Alien/)).not.toBeInTheDocument();
+  });
+
+  it("passes on the server's reason when it declined to look", async () => {
+    vi.spyOn(api, "suggestions").mockResolvedValue(
+      page([{ id: 603, title: "The Matrix" }], 1) as never,
+    );
+    vi.spyOn(api, "topup").mockResolvedValue({
+      added: 0,
+      remaining: 0,
+      ran: false,
+      considered: 0,
+      note: "connect TMDB first",
+    } as never);
+
+    renderPage(<Missing />);
+    await screen.findByText(/The Matrix/);
+    await userEvent.click(screen.getByRole("button", { name: /find more/i }));
+
+    // "Found 0 more" would be a true sentence describing the wrong situation.
+    // Nothing was searched, and the fix is a connection, not another click.
+    expect(await screen.findByText(/connect TMDB first/i)).toBeInTheDocument();
+  });
+
+  it("NEGATIVE CONTROL: a real search that found nothing is not reported as a failure", async () => {
+    vi.spyOn(api, "suggestions").mockResolvedValue(
+      page([{ id: 603, title: "The Matrix" }], 1) as never,
+    );
+    vi.spyOn(api, "topup").mockResolvedValue({
+      added: 0,
+      remaining: 1,
+      ran: true,
+      considered: 40,
+      note: null,
+    } as never);
+
+    renderPage(<Missing />);
+    await screen.findByText(/The Matrix/);
+    await userEvent.click(screen.getByRole("button", { name: /find more/i }));
+
+    expect(await screen.findByText(/Nothing new this time/i)).toBeInTheDocument();
+    expect(screen.queryByText(/connect TMDB/i)).not.toBeInTheDocument();
+  });
+});

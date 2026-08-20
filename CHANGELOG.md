@@ -2,6 +2,70 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.68.0 — The list stops running out
+
+The Missing list read one file. Twenty-five thousand titles is a long way from
+endless, and a library that works through it deserved a list that keeps going.
+Two more sources now extend it, in the order asked for: TMDB discovery, then
+whichever AI providers are connected.
+
+**Everything lands in the same table.** A top-up writes a `canon_entries` row
+exactly like the shipped list does, so there is one list, one ranking and one set
+of subtractions — not a second surface to reconcile with the first. A separate
+table would have needed its own paging, its own ignore handling, and its own
+opinion about ordering: three chances to disagree with itself.
+
+**Theatrical is asked of TMDB, not sorted out afterwards.** `with_release_type=3|2`
+means theatrical or limited theatrical, which is the rule stated as a filter
+rather than as a judgement — a film that opened in cinemas is a candidate however
+badly it did, and a direct-to-video release is not. `with_runtime.gte=60` does
+the same for shorts. Both cost nothing; filtering afterwards costs a page of
+results per page of candidates.
+
+**The exclusion list is now wired in** (`services/exclusions.py`), and matching is
+deliberately asymmetric. Both files are keyed on IMDb id, which resolves exactly.
+Where a candidate carries one, that id decides alone — an id absent from the list
+means the list has nothing to say about *that film*, and falling through to a
+title match would let a different film with the same name answer for it.
+Title-and-year matching is only the fallback for candidates that arrive with no
+id, which is what TMDB discovery and every AI provider hand back. Apostrophes are
+deleted rather than turned into a space, because sources disagree about them
+constantly and "Simba's Pride" and "Simbas Pride" are one film.
+
+`list_overrides.json` outranks the generated list in both directions, and is the
+only place a judgement call belongs. A film named in both sections is excluded:
+of the two readings, that is the one that cannot lose a film for ever.
+
+**AI is a source of candidates and nothing else.** Every title a provider names
+still has to resolve on TMDB and clear the same deterministic gates — a
+hallucinated film dies at the search. The must-have gating machinery is reused
+through one new public seam (`musthave.gated_candidates`) rather than growing a
+second prompt and a second parser, because one implementation of "an AI said it,
+so verify it" is easier to keep honest than two that drift apart. The exclusion
+list is applied *after* those shared gates, since an AI is the source most likely
+to name a direct-to-video sequel and call it essential.
+
+**It only runs when the list is actually running low**, or when someone presses
+the button. Below five hundred actionable titles it is worth spending API budget;
+above it, adding to a queue nobody has reached the bottom of buys nothing and
+costs rate limit the canon resolution budget needs. A cursor in `settings` moves
+each run further into each sweep — without it every run re-reads page one, finds
+the same films, discards all of them as known, and produces nothing while burning
+the same rate limit, which looks exactly like a feature that has run out of things
+to find.
+
+The Missing page's "Refresh catalog" button becomes "Find more", pointed at the
+new endpoint. It reloads the list from the top rather than appending, because new
+arrivals rank among the existing titles rather than after them.
+
+Twenty-nine pins, every one mutation-verified. Two were vacuous on the first pass:
+the "known films are never offered" pin was satisfied by a second guard at the
+write, so it now asserts the count of what was *considered* — the gate exists to
+stop a candidate reaching the AI stage, where each one costs a search and a detail
+call; and the "reload from the top" pin was written with a single page loaded,
+where reloading and paging ask for the same offset and the assertion holds
+whatever the code does.
+
 ## 2607.67.0 — One Missing list, and a no that sticks
 
 The Missing page had two lists behind two tabs, drawn from two different tables,
