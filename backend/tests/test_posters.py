@@ -448,3 +448,68 @@ async def test_the_poster_still_comes_back(settings, factory, tmp_path):
     cache = PosterCache(settings, factory, transport=_transport())
     path = await cache.get(4242)
     assert path is not None and path.read_bytes() == _JPEG
+
+
+async def test_a_page_of_thumbnails_opens_one_connection_pool(settings, factory, tmp_path):
+    """A client owns a connection pool, and one was being built per download.
+
+    Thirty thumbnails meant thirty pools and thirty TLS handshakes to the image
+    host, none of them reused. A shared client needs a handful of connections and
+    keeps them warm — which matters most on exactly the page that fetches thirty
+    at once.
+    """
+    import asyncio
+
+    import httpx as _httpx
+
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = False
+
+    with factory() as session:
+        for n in range(30):
+            session.add(CanonMovie(tmdb_id=7_100 + n, title=f"C{n}", poster_path="/p.jpg"))
+        session.commit()
+
+    built = 0
+    real_init = _httpx.AsyncClient.__init__
+
+    def counting_init(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        nonlocal built
+        built += 1
+        real_init(self, *args, **kwargs)
+
+    cache = PosterCache(settings, factory, transport=_transport())
+    _httpx.AsyncClient.__init__ = counting_init  # type: ignore[method-assign]
+    try:
+        await asyncio.gather(*(cache.get(7_100 + n) for n in range(30)))
+    finally:
+        _httpx.AsyncClient.__init__ = real_init  # type: ignore[method-assign]
+        await cache.aclose()
+
+    assert built == 1, f"{built} HTTP clients for thirty posters"
+
+
+async def test_the_cache_still_works_after_it_is_closed(settings, factory, tmp_path):
+    """NEGATIVE CONTROL: a shared client must not become a one-shot.
+
+    Closing it on teardown is required — the pool would otherwise leak on every
+    settings rebuild — but a cache that could never fetch again after a close
+    would break the next scan instead.
+    """
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = False
+
+    with factory() as session:
+        session.add(CanonMovie(tmdb_id=7_200, title="C", poster_path="/p.jpg"))
+        session.add(CanonMovie(tmdb_id=7_201, title="D", poster_path="/p.jpg"))
+        session.commit()
+
+    cache = PosterCache(settings, factory, transport=_transport())
+    assert await cache.get(7_200) is not None
+    await cache.aclose()
+    assert await cache.get(7_201) is not None
+    await cache.aclose()

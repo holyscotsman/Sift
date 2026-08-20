@@ -26,7 +26,15 @@ async def rebuild(state: AppState) -> None:
         actions_cfg = config_store.get_actions(session)
     effective = config_store.apply_to_settings(state.base_settings, conn, actions_cfg)
     state.settings = effective
+    old_posters = state.posters
     state.posters = PosterCache(effective, state.session_factory)
+    if old_posters is not state.posters:
+        # The replaced cache owns a connection pool now; dropping the reference
+        # would leak it for the life of the process.
+        try:
+            await old_posters.aclose()
+        except Exception as exc:  # noqa: BLE001 - closing the old client is best-effort
+            log.debug("old poster cache aclose failed: %s", exc)
     state.engine = ActionEngine(
         state.session_factory, RadarrWriter(effective.radarr), audit=state.engine.audit
     )

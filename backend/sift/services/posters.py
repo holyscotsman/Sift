@@ -51,6 +51,7 @@ class PosterCache:
         self._settings = settings
         self._factory = session_factory
         self._transport = transport  # test seam for both TMDB + image fetches
+        self._client: httpx.AsyncClient | None = None
         base = settings.posters.cache_dir or (settings.database.path.parent / "cache")
         self._dir = Path(base) / "posters"
         # Running total of the cache directory, so the common write does not have
@@ -154,14 +155,33 @@ class PosterCache:
             return stored
         return await self._tmdb_url(tmdb_id, heal=bool(stored))
 
+    def _http(self) -> httpx.AsyncClient:
+        """One client for the life of the cache, not one per poster.
+
+        A client owns a connection pool, so building a new one per download meant
+        a fresh TLS handshake to the image host every time — thirty of them when a
+        page of thumbnails loads, where a shared pool needs a handful and reuses
+        them. Created lazily so a cache that never fetches anything never opens a
+        socket.
+        """
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=15.0, follow_redirects=True, transport=self._transport
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        """Release the pooled connections. Called when the app or a rebuilt
+        service swaps this cache out."""
+        client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
+
     async def _download(self, url: str) -> bytes | None:
         try:
-            async with httpx.AsyncClient(
-                timeout=15.0, follow_redirects=True, transport=self._transport
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                return resp.content or None
+            resp = await self._http().get(url)
+            resp.raise_for_status()
+            return resp.content or None
         except Exception as exc:  # noqa: BLE001 - network hiccup → placeholder
             log.info("poster fetch failed from %s: %s", url, exc)
             return None

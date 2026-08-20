@@ -80,6 +80,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     for task in list(app.state.scan_tasks):
         task.cancel()
     await app.state.sift.llm.aclose()
+    await app.state.sift.posters.aclose()
 
 
 def create_app(
