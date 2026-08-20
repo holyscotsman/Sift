@@ -38,6 +38,7 @@ log = logging.getLogger("sift.exclusions")
 
 _DATA = Path(__file__).resolve().parent.parent / "data"
 _EXCLUDE = _DATA / "exclude_list.json"
+_CANON = _DATA / "canon_25k.json"
 _OVERRIDES = _DATA / "list_overrides.json"
 
 _PUNCT = re.compile(r"[^a-z0-9]+")
@@ -93,9 +94,24 @@ def _index() -> dict[str, Any]:
                 titles.add((normalize(str(title)), year))
         return ids, titles
 
+    # Title-and-year keys the *canon* also claims. Forty-seven of them, measured on
+    # the shipped files: films like *Home Alone 2* and *Anastasia*, where a
+    # theatrical release and a same-named TV movie share a year. The two lists are
+    # disjoint by IMDb id — zero overlap, by construction — so this only ever
+    # matters for a candidate that arrives with no id, which is exactly what TMDB
+    # discovery and every AI provider hand back.
+    contested: set[tuple[str, int]] = set()
+    for row in _load(_CANON).get("titles", []):
+        title, year = row.get("title"), row.get("year")
+        if title and isinstance(year, int):
+            key = (normalize(str(title)), year)
+            if key in excluded_titles:
+                contested.add(key)
+
     always_ids, always_titles = _override("always_recommend")
     never_ids, never_titles = _override("never_recommend")
     return {
+        "contested_titles": contested,
         "excluded_ids": excluded_ids,
         "excluded_titles": excluded_titles,
         "always_ids": always_ids,
@@ -142,6 +158,18 @@ def excluded(
     if _matches(idx["never_ids"], idx["never_titles"], imdb_id, title, year):
         return True
     if _matches(idx["always_ids"], idx["always_titles"], imdb_id, title, year):
+        return False
+    # A candidate with no id whose title and year the canon *also* claims is
+    # ambiguous, and ambiguity resolves toward keeping it. The two errors are not
+    # the same size: a wrong exclusion silently removes a good film from every
+    # surface for ever, and nobody can see that it happened. A wrong inclusion
+    # offers one bad suggestion, which the owner ignores in a second.
+    if (
+        not imdb_id
+        and title
+        and year is not None
+        and (normalize(title), year) in idx["contested_titles"]
+    ):
         return False
     return _matches(idx["excluded_ids"], idx["excluded_titles"], imdb_id, title, year)
 

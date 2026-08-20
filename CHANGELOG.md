@@ -2,6 +2,35 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.83.0 — Forty-seven films the exclusion list would have eaten
+
+The two shipped lists are disjoint **by IMDb id** — zero overlap, by
+construction, since the canon takes IMDb's `movie` and the exclusions take
+`video` and `tvMovie`. Checked, not assumed.
+
+By *title and year* they overlap 47 times, because a theatrical release and a
+same-named TV movie can share a year: *Home Alone 2: Lost in New York*,
+*Anastasia*, *Starship Troopers 2*. And title-and-year is not a hypothetical
+path — it is the only key available for a candidate with no IMDb id, which is
+exactly what TMDB discovery and every AI provider hand back.
+
+So the discovery top-up would have quietly refused *Home Alone 2* on the grounds
+that a different 1992 film of the same name went straight to video.
+
+A contested title now resolves toward **keeping** it. The two errors available
+here are not the same size: a wrong exclusion silently removes a good film from
+every surface for ever and nobody can see that it happened, while a wrong
+inclusion offers one bad suggestion that gets ignored in a second.
+
+An IMDb id still decides on its own, unchanged — an id in the exclusion list is
+an exact statement about that film, and the guard never sees a candidate that
+resolved.
+
+Four mutations, all red, including the one that resolves ambiguity the other way.
+The property the whole design rests on — that the lists never overlap by id — is
+now pinned too, because if a rebuild ever broke it the ambiguity above would stop
+being about same-named films and start being a contradiction.
+
 ## 2607.82.0 — Recommendations that can say why
 
 The Missing list was ranked `(tier, -votes, tmdb_id)` — the canon's judgement,
