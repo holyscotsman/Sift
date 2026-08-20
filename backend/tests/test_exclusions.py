@@ -13,6 +13,7 @@ one's name.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -133,3 +134,51 @@ def test_the_shipped_lists_load_and_are_the_size_they_were_measured_at():
     assert counts["excluded"] == 23_937
     # The real list is loaded and answering, not an empty dict standing in for it.
     assert exclusions.excluded(imdb_id="tt0120131") is True
+
+
+class TestContestedTitles:
+    """A title and year that both lists claim, for a candidate carrying no id.
+
+    The two lists are disjoint by IMDb id — zero overlap on the shipped files, by
+    construction, since the canon takes ``movie`` and the exclusions take
+    ``video`` and ``tvMovie``. But forty-seven title-and-year pairs appear on
+    both, because a theatrical release and a same-named TV movie can share a
+    year: *Home Alone 2*, *Anastasia*, *Starship Troopers 2*.
+
+    That only matters for a candidate with no id, which is exactly what TMDB
+    discovery and every AI provider hand back.
+    """
+
+    def test_a_contested_title_is_kept_rather_than_dropped(self):
+        # Both errors are available here and they are not the same size. A wrong
+        # exclusion silently removes a good film from every surface for ever and
+        # nobody can see that it happened; a wrong inclusion offers one bad
+        # suggestion that the owner ignores in a second.
+        assert not exclusions.excluded(title="Home Alone 2: Lost in New York", year=1992)
+        assert not exclusions.excluded(title="Anastasia", year=1997)
+
+    def test_NEGATIVE_CONTROL_an_uncontested_tv_movie_is_still_excluded(self):
+        """The escape hatch must not become a hole. A title the canon says nothing
+        about is excluded exactly as before."""
+        assert exclusions.excluded(title="High School Musical", year=2006)
+
+    def test_NEGATIVE_CONTROL_an_id_still_decides_on_its_own(self):
+        """Contested titles change nothing for a candidate that resolved. An id in
+        the exclusion list is an exact statement about that film."""
+        assert exclusions.excluded(
+            imdb_id="tt0475293", title="Home Alone 2: Lost in New York", year=1992
+        )
+
+    def test_the_lists_do_not_overlap_by_id_at_all(self):
+        """The property the whole design rests on. If a rebuild ever put one film
+        on both lists by id, the ambiguity above would stop being about
+        same-named films and start being a contradiction."""
+        idx = exclusions._index()
+        canon_ids = {
+            row["imdb_id"]
+            for row in json.loads(
+                (Path(exclusions.__file__).parent.parent / "data" / "canon_25k.json").read_text()
+            )["titles"]
+            if row.get("imdb_id")
+        }
+        assert not (canon_ids & idx["excluded_ids"])
