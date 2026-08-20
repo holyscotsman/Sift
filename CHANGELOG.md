@@ -2,6 +2,36 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.76.0 — The password screen was telling you the opposite of the truth
+
+I had measured backend coverage but never the frontend. It is 51%, against the
+backend's 91%, and the worst file was `pages/Settings.tsx` at **11%** — the screen
+where connection keys are entered, which is to say the screen the original "why
+are my keys not being saved" report was about.
+
+Covering it found a real bug, and not a cosmetic one.
+
+**Changing your password said "Your sessions stay signed in."** Changing your
+password *rotates the signing secret*, which signs every other device out. This
+device survives only because the server hands back a replacement token and the
+client stores it. The message was true of the old behaviour — the backend's own
+docstring records that it used to keep every session alive — and the copy never
+followed the change.
+
+That is the worst possible direction to be wrong in. The reason anyone changes a
+password on a reachable instance is that they think someone else has access, and
+they were being told nothing had been revoked at the exact moment everything had.
+It now says: *"Password changed. Every other device has been signed out; this one
+stays in."*
+
+The panel is pinned properly now: a mismatched confirmation and a short password
+never reach the server, the typed passwords are cleared from the screen after a
+success, and a rejected change reports the rejection — **in the failure colour**,
+which is the only thing distinguishing the two outcomes at a glance and the one
+part a mutation showed was doing no work.
+
+`Settings.tsx` goes from 11% to 38%; the frontend overall from 51% to 55%.
+
 ## 2607.75.0 — The entry point nobody had ever run
 
 `cli.py` was the only user-facing surface in the codebase at **0% coverage** — 70

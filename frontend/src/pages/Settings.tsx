@@ -485,7 +485,13 @@ function RadarrDefaultsSection() {
 }
 
 // Change the password in place — no more factory reset just to rotate it.
-// Existing sessions (including this one) stay signed in.
+//
+// Changing it **rotates the signing secret**, which signs every other session out.
+// This device keeps working because the server hands back a replacement token and
+// `api.changePassword` stores it. That distinction is the whole point of the
+// feature: the reason anyone changes a password on a reachable instance is that
+// they think someone else has access, and what they need to be told is that the
+// other someone is now out.
 function PasswordSection() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -501,7 +507,14 @@ function PasswordSection() {
     setBusy(true);
     try {
       await api.changePassword(current, next);
-      setMsg({ ok: true, text: "Password changed. Your sessions stay signed in." });
+      // This said "Your sessions stay signed in", which was true of the old
+      // behaviour and is now the opposite of what happens to every other device.
+      // Someone changing their password because they suspect an intruder was
+      // being told nothing had been revoked.
+      setMsg({
+        ok: true,
+        text: "Password changed. Every other device has been signed out; this one stays in.",
+      });
       setCurrent("");
       setNext("");
       setConfirm("");
