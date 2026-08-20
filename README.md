@@ -1,9 +1,10 @@
 # Sift
 
 > A lightweight, non-Docker companion to **Butlarr**. Sift runs on a laptop (or any
-> machine) and reaches a self-hosted movie server over the network. It reads
-> **Plex + Radarr** (plus **Tautulli + TMDB**), builds a taste profile, then finds
-> **missing** movies, flags **junk** worth removing, helps **organize**, and answers
+> machine) and reaches a self-hosted media server over the network. It reads
+> **Plex, Radarr and Sonarr** (plus **Tautulli, TMDB and Overseerr**), learns what
+> you actually own and watch, then recommends **films worth adding**, flags
+> **junk worth removing**, shows **where the disk went**, and answers
 > **natural-language questions** about the library.
 
 Butlarr stays the heavy, on-server, file-plane tool. Sift is the portable metadata
@@ -45,12 +46,12 @@ Ten screens, all driven off one resumable scan:
 |---|---|
 | **Dashboard** | What state is the library in, and what needs attention. |
 | **Library** | Everything owned, filtered and sorted, paged as you scroll. |
-| **Missing** | Films worth owning that you don't have — the validated canon minus your shelf. |
+| **Missing** | An endless, ranked list of films worth owning that you don't have — with the reason for each one, and a *Set aside* pile for the ones you've refused. |
 | **Collections** | Sets you own part of, with the gaps requestable in one click. |
 | **Junk** | What deserves removing, scored deterministically, one approval at a time. |
 | **Storage** | Where the disk actually went: duplicates, oversized files, TV seasons that weigh more than their peers, and a target-driven plan to get a given amount back. |
 | **Ask** | Natural-language questions, answered over your own library. |
-| **Taste Profile** | What you actually watch, and the recommendations that follow from it. |
+| **Taste Profile** | What you actually watch, drawn from your own catalog and watch history. |
 | **Activity** | Every proposed and executed action, audited. |
 | **Settings** | Connections, thresholds, scan schedule, backup and restore. |
 
@@ -67,14 +68,68 @@ Underneath:
   write. Enforced by tests, and by there being exactly one chokepoint.
 - Session auth with scoped asset tokens, encrypted credential storage, and no
   anonymous schema.
+- Optional AI — local **Ollama**, **Anthropic** or **OpenAI**, in tandem or pinned
+  to one. Every AI surface degrades to a deterministic answer when nothing is
+  configured, rather than erroring.
 - `sift` CLI: `serve`, `scan`, `init`.
 
 Runs on SQLite locally; set `DATABASE_URL` and it runs on Postgres (see
 [docs/DEPLOY.md](docs/DEPLOY.md)).
 
-See `docs/ENGINEERING.md` for the settled decisions and `CHANGELOG.md` for history.
+See `docs/ENGINEERING.md` for the settled decisions and `CHANGELOG.md` for
+history. The two shipped lists have their own documentation:
+[docs/RECOMMEND_LIST.md](docs/RECOMMEND_LIST.md) and
+[docs/EXCLUDE_LIST.md](docs/EXCLUDE_LIST.md), including how to rebuild them and
+how to correct one by hand.
 
 ---
+
+## How the recommendations work
+
+This is the part most worth understanding, because it is the part that decides
+what you get shown.
+
+**Three sources feed one list.** Everything lands in the same table, so there is
+one ranking and one set of subtractions rather than several surfaces to
+reconcile:
+
+1. A **built-in list of 25,000 films** that ships with Sift. It is derived from
+   evidence, never hand-authored — the Criterion Collection, Wikipedia's cult
+   canon, award and film-registry records, and a weighted-rating sweep of IMDb's
+   official datasets. Every entry traces to a row in a public dataset. Each
+   carries its genres, runtime and up to three directors.
+2. **TMDB discovery**, filtered at the query to theatrical and limited-theatrical
+   releases. A film that opened in cinemas is a candidate however badly it did; a
+   direct-to-video release is not. That is a rule about distribution, not quality.
+3. **Whatever AI you have connected** — a local Ollama, Anthropic, or OpenAI.
+   Optional: with none of them configured everything above still works.
+
+AI is a source of *candidates only*. Every title it names still has to resolve on
+TMDB and pass the same deterministic gates as everything else. Nothing a model
+says is ever taken as fact, and no model ever decides whether something is
+correct.
+
+A second shipped list of ~24,000 titles is subtracted: films IMDb classifies as
+`video` or `tvMovie`. Theatrical flops stay in; direct-to-video sequels come out.
+
+**The ranking counts reasons, from your library.** Cards say why:
+
+> *Seven Samurai* — Essential · Akira Kurosawa · Action, Drama · 207 min
+> **You own 5 films by Akira Kurosawa**
+
+A director already on your shelf is a reason. A genre your shelf is full of is a
+weaker one. Both are arithmetic over stored rows — the same library always
+produces the same list — and both are things you can check. With an empty library
+the personal terms are zero and the order falls back to the canon's own judgement,
+so a new install gets a sensible list rather than a worse one.
+
+One director cannot own the top of the page: each film after the first by the
+same director pays a small toll, so a shelf full of Kurosawa surfaces the best few
+rather than the entire filmography.
+
+**Requests and refusals stick.** Ask for a film and it leaves the list once the
+request actually reaches Radarr. Set one aside and it never comes back, on any
+surface.
 
 ## The two planes
 
@@ -169,12 +224,16 @@ backend/sift/
   db/              SQLAlchemy models, session, Alembic migrations
   clients/         plex / radarr / sonarr / tautulli / tmdb / overseerr on a shared base
   ingest/          normalize (canonical identity) + pipeline (resumable, streamed scan)
-  analysis/        every verdict the app reaches — junk scoring, the validated
-                   canon, duplicates, bitrate baselines, TV size and suitability,
-                   the reclaim ledger, recommendations. Deterministic arithmetic
-                   over stored facts; an LLM never decides correctness.
+  analysis/        every verdict the app reaches — junk scoring, the missing
+                   list and its affinity ranking, duplicates, bitrate baselines,
+                   TV size and suitability, the reclaim ledger. Deterministic
+                   arithmetic over stored facts; an LLM never decides correctness.
+  ai/              provider adapters (ollama / anthropic / openai) behind one
+                   interface, plus a stub so every surface works unconfigured
+  data/            the two shipped lists, and the hand-corrections that outrank them
   actions/         propose/approve/execute engine (delete = approval-gated)
-  services/        auth, health, autoscan, poster cache, secret storage, canon seeding
+  services/        auth, health, autoscan, poster cache, secret storage, canon
+                   seeding, affinity scoring, the missing-list top-up
   api/             routes_* + ws
 backend/tests/     pytest suite (mocked clients, negative controls)
 frontend/src/
