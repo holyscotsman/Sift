@@ -62,6 +62,7 @@ PHASES = (
     "tautulli",
     "tmdb",
     "finalize",
+    "affinity",
     "score",
     "topup",
     "ai",
@@ -1009,6 +1010,31 @@ class ScanPipeline:
         except Exception as exc:  # noqa: BLE001 - never fail a scan over suggestions
             log.info("recommendation refresh failed: %s", exc)
         return counts
+
+    async def _phase_affinity(self) -> dict[str, int]:
+        """Score every canon entry against what the library actually contains.
+
+        Placed after ``finalize`` because it reads the library the earlier phases
+        just wrote, and before nothing in particular — the Missing list reads the
+        scores whenever it next runs, and a stale score is a slightly stale
+        ordering rather than a wrong answer.
+
+        Guarded like the other advisory phases. A ranking that failed to update is
+        the previous ranking, which is a perfectly good list; it is not a reason to
+        tell someone their scan failed.
+        """
+        try:
+            scored = await asyncio.to_thread(self._recompute_affinity)
+        except Exception as exc:  # noqa: BLE001 - advisory; never fails the scan
+            log.warning("affinity scoring failed, keeping the previous ranking: %s", exc)
+            return {"affinity_failed": 1}
+        return {"affinity_scored": scored}
+
+    def _recompute_affinity(self) -> int:
+        from ..services import canon_affinity
+
+        with self.factory() as session:
+            return canon_affinity.recompute(session)
 
     async def _phase_score(self) -> dict[str, int]:
         # Deterministic junk scoring over the Plex library. Data decides the score.

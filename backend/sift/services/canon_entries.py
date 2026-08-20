@@ -28,7 +28,7 @@ from typing import Any
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session
 
-from ..db.models import CanonEntry, Movie, utcnow
+from ..db.models import CanonEntry, CanonMetadata, Movie, utcnow
 from . import exclusions
 
 log = logging.getLogger("sift.canon")
@@ -152,10 +152,50 @@ def seed(session: Session) -> int:
     for start in range(0, added, _CHUNK):
         session.execute(insert(CanonEntry), fresh[start : start + _CHUNK])
     session.commit()
+    seed_metadata(session, titles, version)
     prune_struck_out(session)
     if added:
         log.info("canon: seeded %s new entries from %s", added, version or "(no version)")
     return added
+
+
+def seed_metadata(session: Session, titles: list[dict[str, Any]], version: str) -> int:
+    """Load genres, runtime and directors for the entries that carry them.
+
+    Separate from the entry seed and separately idempotent, because the two move
+    at different speeds. Entries are keyed by ``(file_version, imdb_id)`` and are
+    skipped once seeded; metadata for an *already-seeded* entry still needs
+    writing the first time a file arrives carrying it — which is exactly the
+    upgrade this table was added for, where twenty-five thousand entries already
+    exist and none of them has a director yet.
+
+    Written in bulk for the same reason as the entries: twenty-four thousand rows
+    added one at a time is twenty-four thousand round trips, free on the SQLite
+    the tests run against and close to a minute on the hosted database.
+    """
+    have = {
+        imdb_id
+        for (imdb_id,) in session.execute(select(CanonMetadata.imdb_id))
+    }
+    rows = [
+        {
+            "imdb_id": entry["imdb_id"],
+            "genres": list(entry.get("genres") or []),
+            "runtime": entry.get("runtime") if isinstance(entry.get("runtime"), int) else None,
+            "directors": list(entry.get("directors") or []),
+            "file_version": version or None,
+        }
+        for entry in titles
+        if entry.get("imdb_id")
+        and entry["imdb_id"] not in have
+        and (entry.get("genres") or entry.get("runtime") or entry.get("directors"))
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        session.execute(insert(CanonMetadata), rows[start : start + _CHUNK])
+    if rows:
+        session.commit()
+        log.info("canon: seeded metadata for %s entries", len(rows))
+    return len(rows)
 
 
 def _struck_out(

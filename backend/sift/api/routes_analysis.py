@@ -370,9 +370,12 @@ def missing_suggestions(
                 title=r.title,
                 year=r.year,
                 tier=r.tier,
-                reasons=list(r.sources or []),
+                reasons=list(r.reasons or []),
                 rating=r.rating,
                 votes=r.votes,
+                genres=list(r.genres or []),
+                runtime=r.runtime,
+                directors=list(r.directors or []),
             )
             for r in rows
         ],
