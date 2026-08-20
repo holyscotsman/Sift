@@ -25,6 +25,7 @@ export const SCAN_PHASES: { key: string; label: string }[] = [
   { key: "tmdb", label: "Grabbing TMDB metadata" },
   { key: "finalize", label: "Finalizing snapshot" },
   { key: "score", label: "Scoring library" },
+  { key: "topup", label: "Topping up the Missing list" },
   { key: "ai", label: "AI analysis" },
 ];
 

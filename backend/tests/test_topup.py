@@ -374,3 +374,74 @@ async def test_NEGATIVE_CONTROL_no_ai_connected_is_not_an_error(factory, tmdb, m
     )
 
     assert result["ran"] is True and result["added"] == 1
+
+
+# ------------------------------------------------------------------ the scan phase
+
+
+async def test_the_scan_tops_up_only_when_the_list_is_low(factory, tmdb):
+    """The low-water check exists so this can run on every scan without spending
+    API budget on a queue nobody has reached the bottom of. Until the scan called
+    it, that check had no caller at all — the docstring described a code path
+    nothing exercised."""
+    from sift.ingest.pipeline import ScanPipeline
+
+    calls: list[bool] = []
+
+    async def fake_topup(_factory, _settings, *, force=False, **_kw):
+        calls.append(force)
+        return {"added": 3, "remaining": 12, "ran": True}
+
+    pipe = ScanPipeline(factory, tmdb)
+    import sift.services.topup as topup_module
+
+    original = topup_module.topup
+    topup_module.topup = fake_topup
+    try:
+        counts = await pipe._phase_topup()
+    finally:
+        topup_module.topup = original
+
+    # force=False, so the service's own low-water check decides. A phase that
+    # forced it would sweep TMDB on every single scan.
+    assert calls == [False]
+    assert counts == {"topup_added": 3}
+
+
+async def test_a_skipped_top_up_is_reported_rather_than_left_as_a_silent_zero(factory, tmdb):
+    """ "Added 0" and "did not look" are different answers, and only one of them
+    means something is wrong."""
+    from sift.ingest.pipeline import ScanPipeline
+
+    async def fake_topup(_factory, _settings, *, force=False, **_kw):
+        return {"added": 0, "remaining": 20_000, "ran": False, "note": "the list is still deep"}
+
+    pipe = ScanPipeline(factory, tmdb)
+    import sift.services.topup as topup_module
+
+    original = topup_module.topup
+    topup_module.topup = fake_topup
+    try:
+        assert await pipe._phase_topup() == {"topup_skipped": 1}
+    finally:
+        topup_module.topup = original
+
+
+async def test_NEGATIVE_CONTROL_a_broken_top_up_does_not_fail_the_scan(factory, tmdb):
+    """NEGATIVE CONTROL: a discovery sweep is a convenience. A dead TMDB, a
+    rate limit or a bug in the sweep must never be the reason a scan that read the
+    whole library reports failure."""
+    from sift.ingest.pipeline import ScanPipeline
+
+    async def boom(_factory, _settings, *, force=False, **_kw):
+        raise RuntimeError("TMDB fell over")
+
+    pipe = ScanPipeline(factory, tmdb)
+    import sift.services.topup as topup_module
+
+    original = topup_module.topup
+    topup_module.topup = boom
+    try:
+        assert await pipe._phase_topup() == {"topup_failed": 1}
+    finally:
+        topup_module.topup = original
