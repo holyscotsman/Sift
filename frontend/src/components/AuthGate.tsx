@@ -115,10 +115,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <h1 className="mt-4 font-display text-lg font-bold">Sign in</h1>
         <p className="mt-1 text-sm text-fg2">Enter your Sift username and password.</p>
         {/* id + name matter: password managers key on them — without them most
-            browsers never offer to save the login. */}
+            browsers never offer to save the login.
+
+            aria-label matters too, and was missing: a placeholder is not a label.
+            It is announced inconsistently, and it disappears the moment anyone
+            starts typing — so a screen-reader user on the front door had two
+            unlabelled boxes and no way to tell which was which. */}
         <input
           id="username"
           name="username"
+          aria-label="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="username"
@@ -129,6 +135,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <input
           id="password"
           name="password"
+          aria-label="Password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
