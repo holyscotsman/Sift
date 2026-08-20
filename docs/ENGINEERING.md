@@ -304,6 +304,14 @@ here so they are not re-litigated, not so they can be admired.
 - **Visual sign-off** on all 8 screens across the 3 themes (per DoD).
 - **To enable real deletes:** set `SIFT_ACTIONS__DRY_RUN=false` in Render when ready
   — until then every approved removal is staged (audit-only).
-- Optional/gated features still deferred: real AI answers (needs `ANTHROPIC_API_KEY`),
-  recommendations + Ask compare panes (need the embeddings layer), watch-history
-  signals (need Tautulli).
+- Optional/gated features still deferred: real AI answers (needs an Anthropic or
+  OpenAI key), Ask compare panes (need both a local and a hosted provider), and
+  watch-history signals (need Tautulli). *Recommendations no longer need the
+  embeddings layer — the Missing list replaced them.*
+- **`sift init` cannot work from a `pip install`.** The `*.example` templates live
+  at the repository root, are not shipped inside the distribution, and are not
+  copied into the Docker image — so in the shipped container the command fails
+  (gracefully, naming the directory it searched). Fixing it means either packaging
+  the templates or adding them to the image; both are packaging decisions, and the
+  image is configured through the web UI rather than this command. Flagged rather
+  than worked around.

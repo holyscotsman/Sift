@@ -2,6 +2,40 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.75.0 — The entry point nobody had ever run
+
+`cli.py` was the only user-facing surface in the codebase at **0% coverage** — 70
+statements, three commands, and no test anywhere that so much as imported it. "Does
+`sift --version` work" was an open question.
+
+It is at 92% now, and covering it turned up a real bug.
+
+**`sift init` cannot work from a `pip install`.** It looks for `sift.toml.example`
+three directories above `cli.py`, which resolves to the repository root in a source
+checkout and to the interpreter's library directory in an installed one — and the
+templates are not shipped inside the distribution or copied into the Docker image
+either way. So in the container this project actually ships, the command fails.
+
+It failed *gracefully*, with `sift.toml.example not found next to the package` —
+a message describing a place the code had not looked. It now names the directory
+it searched and says a source checkout is required. The underlying fix is a
+packaging decision (ship the templates in the distribution, or add them to the
+image) rather than a change to this function, and the image is configured through
+the web UI rather than this command, so it is written down in `ENGINEERING.md`
+instead of worked around.
+
+The remaining uncovered lines are `serve`, which hands control to uvicorn and
+blocks for ever, and `__main__`. Both are the right place to stop.
+
+Seven mutations, all red — including "report success when the template is
+missing", which is what the old code's shape invited.
+
+**Also measured, and left alone:** a sweep of sixteen endpoints on a 25,000-title
+canon and a 4,000-film library found nothing to fix. Worst case is 8 statements
+(`/api/status` and the reclaim ledger, both genuinely aggregating from eight
+tables — no N+1 anywhere) and the largest payload is 57 KB. The request path is
+done; saying so is more useful than manufacturing another optimisation.
+
 ## 2607.74.0 — Somewhere to see what you set aside
 
 The last release said the ignored list was readable and a decision could be taken
