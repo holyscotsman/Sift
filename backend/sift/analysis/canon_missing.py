@@ -22,6 +22,7 @@ the title here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, overload
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -75,12 +76,63 @@ def _ignored() -> ColumnElement[bool]:
     return select(IgnoredTitle.tmdb_id).where(IgnoredTitle.tmdb_id == CanonEntry.tmdb_id).exists()
 
 
+# Overloads so a caller that asks for the total is typed as getting one. Without
+# them every call site has to defend against a ``None`` that its own argument
+# already ruled out, and the checks that result read as if the value were
+# genuinely uncertain.
+@overload
 def missing(
-    session: Session, *, tier: int | None = None, limit: int = 200, offset: int = 0
-) -> tuple[list[CanonMissing], int]:
+    session: Session,
+    *,
+    tier: int | None = ...,
+    limit: int = ...,
+    offset: int = ...,
+    with_total: Literal[True] = ...,
+) -> tuple[list[CanonMissing], int]: ...
+
+
+@overload
+def missing(
+    session: Session,
+    *,
+    tier: int | None = ...,
+    limit: int = ...,
+    offset: int = ...,
+    with_total: Literal[False],
+) -> tuple[list[CanonMissing], None]: ...
+
+
+# The runtime-`bool` case: a caller deciding per request (the paged endpoint does)
+# genuinely does not know at type-check time, and gets the honest union back.
+@overload
+def missing(
+    session: Session,
+    *,
+    tier: int | None = ...,
+    limit: int = ...,
+    offset: int = ...,
+    with_total: bool,
+) -> tuple[list[CanonMissing], int | None]: ...
+
+
+def missing(
+    session: Session,
+    *,
+    tier: int | None = None,
+    limit: int = 200,
+    offset: int = 0,
+    with_total: bool = True,
+) -> tuple[list[CanonMissing], int | None]:
     """Unowned, unrequested, un-refused canon — strongest claim first.
 
-    Returns ``(page, total)``.
+    Returns ``(page, total)``, where ``total`` is ``None`` when ``with_total`` is
+    false — *not measured*, which is a different statement from zero.
+
+    **The count is the expensive half.** The page reads sixty rows off an index;
+    the count walks every one of the twenty-odd thousand that match, through three
+    correlated ``EXISTS`` clauses. On an endless list that is paid again on every
+    scroll, for a number that only changes when the owner acts. Callers that are
+    continuing a list they already have a total for should ask for the page alone.
 
     Ranked ``(tier, -votes, tmdb_id)``: the canon's own judgement leads, fame
     breaks ties within a tier, and the id makes the order total so the same query
@@ -105,8 +157,13 @@ def missing(
     # hundred of them meant ten thousand rows across the wire for one screen, and
     # the recommendation shelf asks the same question on every scan. The count is
     # a second statement rather than a second read: what the caller needs from the
-    # remainder is how big it is, not what is in it.
-    total = session.scalar(select(func.count()).select_from(CanonEntry).where(*conditions)) or 0
+    # remainder is how big it is, not what is in it — and when it needs nothing at
+    # all, that statement is skipped rather than issued and discarded.
+    total = (
+        (session.scalar(select(func.count()).select_from(CanonEntry).where(*conditions)) or 0)
+        if with_total
+        else None
+    )
     page = list(
         session.scalars(
             select(CanonEntry)

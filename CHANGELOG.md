@@ -2,6 +2,54 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.72.0 — Three things the new Missing list got wrong
+
+An audit of the surface shipped over the last few versions. All three were
+introduced by that work rather than found lying around.
+
+**A batch request with no ceiling.** `RequestAllButton` sends one request per
+title in a sequential loop, and its bound used to be whatever the caller happened
+to render — thirty behind a fold, or a collection's handful. The Missing list is
+now endless, so after a minute of scrolling "request all shown" meant six hundred
+films: fifty terabytes and an Overseerr queue to unpick by hand. The server's own
+batch endpoint caps at fifty for exactly this reason, and this loop does not go
+through it. The cap now lives in the component, not the caller, because no caller
+should be able to hand it an unbounded set by accident — which is precisely what
+happened. It is announced rather than applied silently: "Request the top 25 of
+600", because a silent truncation is how someone finds out later that a hundred
+films they thought they had asked for were never requested.
+
+**An unbounded string into a fixed-width column.** `IgnoreIn.title` and
+`.source` were written straight into `VARCHAR(512)` and `VARCHAR(32)`. Postgres
+rejects an over-long value with an error that surfaces as a 500; SQLite ignores
+the width entirely. So the bug passed every test and would only ever have
+appeared on the owner's own database. Bounded at the schema, which turns it into
+a 422 naming the field. `tmdb_id` is now `ge=1` as well — a zero or a negative
+one is not a film, and a row nothing can match is a row nothing can explain.
+
+**Three statements per scroll for numbers that do not change.** The page reads
+sixty rows off an index; the total walks every one of the twenty-odd thousand
+that match, through three correlated `EXISTS` clauses, and the requested/ignored
+counts walk them again. Those three figures only move when the owner acts, so
+they are now computed for the first page of a list and skipped for the pages that
+continue it — measured on the real 25,000-row list, the count is 18 ms of the
+page's 32 ms on SQLite, and on hosted Postgres each skipped statement is a whole
+round trip. **The endpoint's own work goes from three statements to one.**
+
+They come back as `null`, not `0`. "Not measured on this request" and "there are
+none" are different statements, and a client that read the second would blank its
+own header the moment anyone scrolled — "0 to go" on a list with twenty thousand
+titles left reads as "you own everything", which is the exact lie this page was
+fixed for two versions ago.
+
+Fourteen pins, all mutation-verified.
+
+**Found while measuring, not fixed here:** every gated API request costs one
+`settings` read for auth — a round trip per request on hosted Postgres, on a row
+that changes only when the account does. Left alone deliberately: a caching bug
+in the auth path is a security bug, and it deserves its own change rather than a
+ride on this one.
+
 ## 2607.71.0 — The list refills itself
 
 The top-up shipped with a low-water check and nothing that used it. Its docstring

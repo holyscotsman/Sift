@@ -152,6 +152,41 @@ describe("the endless list", () => {
     expect(offsets).toEqual([0, PAGE_SIZE]);
   });
 
+  it("keeps the headline count when a later page does not measure it", async () => {
+    // The server counts for the first page of a list and skips it for the pages
+    // that continue it — the count walks twenty thousand rows while the page
+    // reads sixty off an index. `null` means "not measured", so treating it as
+    // zero empties the header the moment anyone scrolls, and "0 to go" on a list
+    // with twenty thousand titles left reads as "you own everything".
+    const suggestions = vi
+      .spyOn(api, "suggestions")
+      .mockResolvedValueOnce({
+        items: fullPage("Alien").map((t) => item(t.id, t.title)),
+        total: 500,
+        requested_total: 7,
+        ignored_total: 3,
+      } as never)
+      .mockResolvedValueOnce({
+        items: [item(3000, "Arrival")],
+        total: null,
+        requested_total: null,
+        ignored_total: null,
+      } as never);
+
+    renderPage(<Missing />);
+    expect(await screen.findByText(/500 to go/)).toBeInTheDocument();
+
+    await waitFor(() => {
+      scrollToBottom();
+      expect(suggestions).toHaveBeenCalledTimes(2);
+    });
+    await screen.findByText(/Arrival/);
+
+    expect(screen.getByText(/500 to go/)).toBeInTheDocument();
+    expect(screen.getByText(/7 already requested/)).toBeInTheDocument();
+    expect(screen.getByText(/3 set aside/)).toBeInTheDocument();
+  });
+
   it("retries the page that failed, not the one after it", async () => {
     const suggestions = vi
       .spyOn(api, "suggestions")

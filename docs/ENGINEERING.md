@@ -272,6 +272,13 @@ here so they are not re-litigated, not so they can be admired.
   Seeding skips struck-out titles and a prune removes ones already there. A
   correction that only filtered incoming candidates would be inert against the
   whole shipped list.
+- **A paged list counts once, not per page.** Totals and hidden-counts are
+  computed for the first page and returned as `null` afterwards — "not measured"
+  is not "zero", and the client keeps what it has.
+- **Request-all affordances carry their own ceiling.** The component caps at 25
+  and says so; callers cannot be trusted to bound an endless list.
+- **Bound any request string that lands in a `VARCHAR`.** Postgres 500s on
+  overflow, SQLite ignores the width — so the test suite cannot see it.
 - **Override matching is *not* the exclusion list's rule.** There an id decides
   alone (generated, id-keyed, complete). Here a title-and-year strike lands even
   on a row that carries an id, because the file is one person naming a film with
