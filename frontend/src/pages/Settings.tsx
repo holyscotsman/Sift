@@ -207,9 +207,11 @@ function Connections() {
       ) : (
         <ConnectionsForm
           initial={config}
-          onSaved={(c) => {
-            setConfig(c);
-            setUnreadable({});
+          onSaved={(res) => {
+            setConfig(res.connections);
+            // From the server's own answer, not cleared wholesale: re-entering
+            // one service must not hide a warning about another.
+            setUnreadable(res.unreadable ?? {});
             refreshStatus();
           }}
         />

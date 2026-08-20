@@ -326,3 +326,30 @@ def test_a_never_entered_key_is_not_reported_as_lost(factory):
     with factory() as session:
         config_store.set_config(session, {"radarr": {"base_url": "http://radarr:7878"}})
         assert config_store.unreadable_secrets(session) == {}
+
+
+def test_re_entering_one_service_does_not_clear_another_s_warning(factory):
+    """NEGATIVE CONTROL: the warning is per service, and it is the server that says so.
+
+    Saving Radarr must not imply that Plex has been fixed too. The client takes
+    the map from the save response rather than clearing it wholesale, so this is
+    the assertion that keeps the two honest.
+    """
+    from sift.services import config_store, secretbox
+
+    secretbox.configure("first-key-material")
+    with factory() as session:
+        config_store.set_config(
+            session,
+            {"radarr": {"api_key": "R-KEY"}, "plex": {"token": "P-TOKEN"}},
+        )
+
+    secretbox.configure("second-key-material")
+    with factory() as session:
+        assert config_store.unreadable_secrets(session) == {
+            "radarr": ["api_key"],
+            "plex": ["token"],
+        }
+        config_store.set_config(session, {"radarr": {"api_key": "R-KEY-AGAIN"}})
+        # Radarr is fixed; Plex is still lost and must still say so.
+        assert config_store.unreadable_secrets(session) == {"plex": ["token"]}
