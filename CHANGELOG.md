@@ -2,6 +2,24 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.65.0 — Thirty thumbnails, one connection pool
+
+The last of the poster-page costs, and the smallest — but on the same page and
+the same load.
+
+An `httpx.AsyncClient` owns a connection pool, and one was being built per
+download. Thirty thumbnails meant **thirty pools and thirty TLS handshakes** to
+the image host, none of them reused. The cache now keeps one client, created
+lazily so an instance that never fetches a poster never opens a socket, and
+closed when the app shuts down or a settings change swaps the cache out.
+
+That last part is why the change is not purely additive: a pooled client that is
+never closed leaks its connections on every settings save. The negative control
+covers the obvious overcorrection — closing it must not make the cache a one-shot,
+or the next scan finds a dead client.
+
+Two tests, both mutation-verified.
+
 ## 2607.64.0 — The three read paths that still blocked, and a guard for the rest
 
 The previous release fixed the acute case and listed twelve others in a document.
