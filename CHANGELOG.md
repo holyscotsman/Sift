@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.80.0 — Which door opens, and an unlabelled front one
+
+`AuthGate` decides four ways and only one of them shows the app. Getting any of
+the others wrong either locks the owner out or lets someone in, and it was at 54%.
+
+The pin that matters most is the **fresh install**. The API is open until an
+account exists — that is how the setup wizard reaches it — so a successful
+`/status` probe there proves nothing, and treating it as proof would drop a
+brand-new, unauthenticated instance straight into the app with every endpoint
+answering. The code already gets this right, with a comment saying why; there is
+now a mutation that inverts it and a test that goes red.
+
+Three more decisions, each pinned with its opposite:
+
+* a **401** on `/status` drops to the login screen;
+* anything else — a booting instance, a proxy hiccup — does **not**, because
+  showing a login form the owner's password cannot get them past is worse than
+  letting them through to a server that will tell them what is wrong;
+* a **mid-session token death** (`sift:unauthorized`, which is exactly what
+  changing the password fires) drops to login, instead of leaving every panel on
+  screen failing with no explanation.
+
+Sign-in failures now have pins too, including that a rejected sign-in **clears the
+stored token**. Keeping a credential the server has just refused means every later
+request carries something that cannot work, and the failures arrive one screen at
+a time instead of at the login form, where the person is actually standing. The
+three failure messages stay three: try a different password, wait, or go and check
+the server are three different next actions.
+
+**A real accessibility fix on the way through.** The username and password inputs
+had placeholders and no labels. A placeholder is not a label: it is announced
+inconsistently and it disappears the moment anyone starts typing, so a
+screen-reader user on the front door had two unlabelled boxes and no way to tell
+them apart. Both now carry an `aria-label`.
+
+`AuthGate.tsx` goes from 54% to **91%**; the frontend overall from 62% to 63%.
+Seven mutations, all red.
+
 ## 2607.79.0 — The bulk button, and the rule it was best placed to break
 
 Per-item approval is the standing rule for anything that deletes a file: one
