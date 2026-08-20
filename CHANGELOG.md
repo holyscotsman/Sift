@@ -2,6 +2,36 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.74.0 — Somewhere to see what you set aside
+
+The last release said the ignored list was readable and a decision could be taken
+back. That was true of the API and false of the app: `GET /api/missing/ignored`
+had no screen, and the only way back was an undo button on the card you had just
+clicked, which vanished on reload. A promise with no way to keep it.
+
+There is now a **Set aside** tab on Missing. It lists what you have passed on,
+most recent first, each with a way back. "Remembered forever" was always a
+promise made to the suggestion engine — nothing in there is ever proposed again,
+by the built-in list, by TMDB or by any AI — and never one made against the
+person using it. A decision that cannot be reviewed is not a decision, and on a
+list of twenty-five thousand films a mis-click is a matter of when.
+
+A failed read says so instead of showing an empty list, which would say every
+decision you made is gone and read as good news. A film whose restore the server
+refused stays where it is, because this is the only screen that could correct the
+impression that it had come back.
+
+**A bug caught by inspection, before it was written down.** Switching tabs does
+not remount this page, so the first version of the restore handler cleared the
+Movies list and left it to reload on its own — which it never would, because the
+only thing that reloads it is a change of filter. The Movies tab would have gone
+permanently, silently empty for anyone who brought a film back. There is a
+reload trigger now, and a pin that switches tabs, restores a film, switches back,
+and requires the list to have refetched — along with a negative control that
+merely visiting the tab does not.
+
+Ten pins across the two files, all mutation-verified.
+
 ## 2607.73.0 — Every request stopped asking the database who you are
 
 Found while measuring the Missing page, and worth its own change because a

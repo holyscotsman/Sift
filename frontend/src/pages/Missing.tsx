@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RequestAllButton, RequestCard } from "@/components/RequestCard";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
+import { SetAsideList } from "@/components/SetAsideList";
 import { ShowSuggestions } from "@/components/ShowSuggestions";
 import { api } from "@/lib/api";
 import type { SuggestionItem } from "@/lib/types";
@@ -45,7 +46,7 @@ function describe(item: SuggestionItem): string {
 }
 
 export function Missing() {
-  const [tab, setTab] = useState<"movies" | "tv">("movies");
+  const [tab, setTab] = useState<"movies" | "tv" | "aside">("movies");
   const [items, setItems] = useState<SuggestionItem[]>([]);
   const [total, setTotal] = useState(0);
   const [requestedTotal, setRequestedTotal] = useState(0);
@@ -59,6 +60,11 @@ export function Missing() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Bumped when something outside this tab changes what belongs on the list —
+  // bringing a film back from Set aside. Switching tabs does not remount this
+  // component, so clearing `items` without a trigger would leave the Movies tab
+  // permanently empty rather than reloading it.
+  const [reloadKey, setReloadKey] = useState(0);
   const offsetRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const toastError = useToast();
@@ -105,7 +111,7 @@ export function Missing() {
     setDone(false);
     setPageError(null);
     void fetchPage(0, true);
-  }, [fetchPage]);
+  }, [fetchPage, reloadKey]);
 
   const loadMore = useCallback(() => {
     // `pageError` stops the observer re-firing into the same failure while the
@@ -170,6 +176,7 @@ export function Missing() {
         [
           ["movies", "Movies"],
           ["tv", "TV Shows"],
+          ["aside", "Set aside"],
         ] as const
       ).map(([value, label]) => (
         <button
@@ -188,6 +195,24 @@ export function Missing() {
       ))}
     </div>
   );
+
+  if (tab === "aside") {
+    return (
+      <div className="page-enter">
+        <h1 className="font-display text-[28px] font-extrabold tracking-tight md:text-[30px]">
+          Missing
+        </h1>
+        <p className="mb-4 mt-1 max-w-2xl text-sm text-fg2">
+          Films you have passed on. They are never suggested again — by the built-in list, by
+          TMDB, or by any AI you have connected — and this is the only place they appear.
+        </p>
+        {tabs}
+        {/* A restored film rejoins the list at its usual rank, so the Movies tab's
+            page and its counts are both one out. Bumping the key reloads it. */}
+        <SetAsideList onRestored={() => setReloadKey((n) => n + 1)} />
+      </div>
+    );
+  }
 
   if (tab === "tv") {
     return (
