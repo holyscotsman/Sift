@@ -359,20 +359,18 @@ def test_continuing_a_list_costs_one_statement_instead_of_three(client):
     finally:
         event.remove(engine, "before_cursor_execute", nxt)
 
-    # The first page pays for its own headline figures. Four statements, not
-    # three: every gated request also reads the ``settings`` row for auth, which
-    # is a cost of the API rather than of this endpoint. Named here so the number
-    # is a fact rather than a mystery someone later rounds off.
+    # Three: the count, the page, and the hidden-counts. The auth read that used
+    # to make this four is gone — the account row is cached between writes, so a
+    # gated request no longer pays a round trip to ask who is calling.
     assert body["total"] == 80 and body["requested_total"] == 0
-    assert counted["first"] == 4
+    assert counted["first"] == 3
 
     # The pages that continue it do not, and say so with null rather than zero —
     # a zero here would read as "nothing is missing" and empty the header.
     assert more["total"] is None
     assert more["requested_total"] is None and more["ignored_total"] is None
-    # One auth read and the page itself. The endpoint's own work goes from three
-    # statements to one, which is what scrolling costs.
-    assert counted["next"] == 2
+    # The page and nothing else. Scrolling costs one statement.
+    assert counted["next"] == 1
     assert len(more["items"]) == 20
 
 

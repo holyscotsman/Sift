@@ -14,8 +14,14 @@ from ..db.models import Base
 
 
 def wipe_data(session_factory: sessionmaker[Session]) -> None:
+    from .auth import invalidate_cache
+
     with session_factory() as session:
         # Reverse topological order = children before parents, so FK constraints hold.
         for table in reversed(Base.metadata.sorted_tables):
             session.execute(table.delete())
         session.commit()
+    # The account went with the settings table, by bulk delete — which the ORM
+    # never sees, so nothing else here would drop the cached auth row. A reset
+    # that left the old login working would be the least funny possible bug.
+    invalidate_cache()

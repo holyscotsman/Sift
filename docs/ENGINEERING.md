@@ -272,6 +272,14 @@ here so they are not re-litigated, not so they can be admired.
   Seeding skips struck-out titles and a prune removes ones already there. A
   correction that only filtered incoming candidates would be inert against the
   whole shipped list.
+- **The auth row is cached in memory; every writer must drop it.** Explicit
+  invalidation is the mechanism, the 30 s TTL is a backstop for out-of-band
+  writes. `test_auth_cache` scans `auth.py` for writers and fails on one that
+  forgets — a rotation the cache did not hear about leaves other sessions live,
+  which is the one thing rotating exists to prevent.
+- **Gate tests create a real account through `auth.create_account`.** A
+  hand-merged `Setting` row skips the module's invariants, so the test closes the
+  gate by a route production never takes.
 - **A paged list counts once, not per page.** Totals and hidden-counts are
   computed for the first page and returned as `null` afterwards — "not measured"
   is not "zero", and the client keeps what it has.

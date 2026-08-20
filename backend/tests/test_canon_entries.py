@@ -356,12 +356,14 @@ def test_the_canon_endpoint_needs_a_session(client):
     is open by design — the setup wizard has to reach it. A test that accepted
     either answer would pass whatever the code did, which is worse than no test.
     """
-    from sift.db.models import Setting
+    from sift.services import auth
 
     c, factory = client
     with factory() as session:
-        session.merge(Setting(key="auth", value={"username": "x", "password_hash": "y"}))
-        session.commit()
+        # A real account, through the real API. A hand-merged row skips the
+        # module's invariants, and a gate test that closes the gate by a route
+        # production never takes is testing the fixture rather than the gate.
+        auth.create_account(session, "owner", "hunter2hunter2")
     assert c.get("/api/musthave/canon").status_code == 401
 
 
