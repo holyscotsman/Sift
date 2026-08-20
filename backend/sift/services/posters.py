@@ -16,6 +16,7 @@ Resolution order per id:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
 from ..db.models import CanonMovie, Movie
+from ..db.session import in_thread
 
 log = logging.getLogger("sift.posters")
 
@@ -86,7 +88,7 @@ class PosterCache:
 
     # -------------------------------------------------------------------- resolve
 
-    def _stored_url(self, tmdb_id: int) -> str | None:
+    async def _stored_url(self, tmdb_id: int) -> str | None:
         """A poster URL we already hold, from either table that can hold one.
 
         The Missing page is entirely titles you do *not* own, so none of them has
@@ -101,7 +103,8 @@ class PosterCache:
         every time the image cache went cold, which on an ephemeral disk is every
         redeploy.
         """
-        with self._factory() as session:
+
+        def _read(session: Session) -> str | None:
             movie = session.get(Movie, tmdb_id)
             if movie is not None and movie.poster_url:
                 return movie.poster_url
@@ -113,6 +116,8 @@ class PosterCache:
                     return path
                 return f"{_TMDB_IMG_BASE}{path}"
             return movie.poster_url if movie else None
+
+        return await in_thread(self._factory, _read)
 
     async def _tmdb_url(self, tmdb_id: int, *, heal: bool = False) -> str | None:
         """Resolve artwork from TMDB by id and persist it. ``heal=True`` also
@@ -132,15 +137,17 @@ class PosterCache:
             return None
         url = f"{_TMDB_IMG_BASE}{poster_path}"
         # Persist so we never look it up twice (and a later scan keeps it).
-        with self._factory() as session:
+        def _write(session: Session) -> None:
             movie = session.get(Movie, tmdb_id)
             if movie is not None and (heal or not movie.poster_url):
                 movie.poster_url = url
                 session.commit()
+
+        await in_thread(self._factory, _write)
         return url
 
     async def _resolve_url(self, tmdb_id: int) -> str | None:
-        stored = self._stored_url(tmdb_id)
+        stored = await self._stored_url(tmdb_id)
         # Stored relative paths (old scans stored Radarr's /MediaCover/…) are
         # unfetchable — ignore them so the TMDB fallback gets its chance.
         if stored and stored.startswith(("http://", "https://")):
@@ -176,10 +183,14 @@ class PosterCache:
                 content = await self._download(retry_url)
         if content is None:
             return None
-        self._dir.mkdir(parents=True, exist_ok=True)
         path = self.path_for(tmdb_id)
-        path.write_bytes(content)
-        self._evict_over_cap(just_written=path)
+
+        def _store() -> None:
+            self._dir.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            self._evict_over_cap(just_written=path)
+
+        await asyncio.to_thread(_store)
         return path
 
     def _evict_over_cap(self, *, just_written: Path) -> None:
