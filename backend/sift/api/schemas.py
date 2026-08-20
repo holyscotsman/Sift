@@ -155,6 +155,10 @@ class ConnectionsIn(BaseModel):
 class ConnectionsOut(BaseModel):
     # Secrets are returned as `<field>_set` booleans, never the values.
     connections: dict[str, dict[str, Any]]
+    # {service: [field, ...]} for secrets that are stored but no longer decrypt.
+    # Without this they are indistinguishable from never having been entered,
+    # which reads as "the app is not saving my keys".
+    unreadable: dict[str, list[str]] = {}
 
 
 class ConnectionTestIn(BaseModel):

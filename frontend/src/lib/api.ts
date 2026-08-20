@@ -76,6 +76,14 @@ export class ApiError extends Error {
 }
 
 // Most calls have no deadline — an AI answer or a scan can legitimately run long.
+// How long a page-level read may hang before it becomes a visible error with a
+// retry, rather than a spinner that never resolves. Generous on purpose: a
+// sleeping free-tier instance takes about thirty seconds to wake, and giving up
+// on that would turn a slow first load into a failure. What this catches is the
+// case with no end — a database that has stopped answering, a query that never
+// returns — which the screen otherwise reports as "still loading", for ever.
+export const PAGE_LOAD_TIMEOUT_MS = 45_000;
+
 // Pass timeoutMs for the ones a user sits watching a spinner on, so a hung
 // connection surfaces as a retryable error instead of an indefinite "…".
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> {
@@ -247,12 +255,17 @@ export const api = {
       body: JSON.stringify({ query, mode }),
       signal,
     }),
-  junk: (limit = 200) => request<JunkResponse>(`/api/junk?limit=${limit}`),
+  junk: (limit = 200) =>
+    request<JunkResponse>(`/api/junk?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
   runReview: (limit = 50) =>
     request<ReviewRunResponse>(`/api/review/run?limit=${limit}`, { method: "POST" }),
   upgrades: (limit = 200) => request<UpgradesResponse>(`/api/upgrades?limit=${limit}`),
   missingCollections: () =>
-    request<MissingCollectionsResponse>("/api/missing/collections"),
+    request<MissingCollectionsResponse>(
+      "/api/missing/collections",
+      {},
+      PAGE_LOAD_TIMEOUT_MS,
+    ),
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
   missingRecommendations: () =>
     request<RecommendationsResponse>("/api/missing/recommendations"),
@@ -271,7 +284,7 @@ export const api = {
       body: JSON.stringify({ ...backup, dry_run: dryRun }),
     }),
   activity: (limit = 50) => request<ActionRecord[]>(`/api/activity?limit=${limit}`),
-  getProfile: () => request<ProfileResponse>("/api/profile"),
+  getProfile: () => request<ProfileResponse>("/api/profile", {}, PAGE_LOAD_TIMEOUT_MS),
   saveWeights: (w: ProfileWeights) =>
     request<ProfileResponse>("/api/profile/weights", { method: "PUT", body: JSON.stringify(w) }),
   getSettings: () => request<SettingsResponse>("/api/settings"),
@@ -325,12 +338,14 @@ export const api = {
       30_000,
     ),
   duplicates: (limit = 200) =>
-    request<DuplicatesResponse>(`/api/duplicates?limit=${limit}`),
+    request<DuplicatesResponse>(`/api/duplicates?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
 
   movieSizes: (limit = 200) =>
-    request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`),
-  baselines: () => request<BaselinesResponse>("/api/storage/baselines"),
-  tvStorage: (limit = 200) => request<TvStorageResponse>(`/api/storage/tv?limit=${limit}`),
+    request<MovieSizeResponse>(`/api/storage/movies?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
+  baselines: () =>
+    request<BaselinesResponse>("/api/storage/baselines", {}, PAGE_LOAD_TIMEOUT_MS),
+  tvStorage: (limit = 200) =>
+    request<TvStorageResponse>(`/api/storage/tv?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
   actOnFinding: (body: {
     target_kind: string;
     target_id: string;
@@ -341,7 +356,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  ledger: (limit = 500) => request<LedgerResponse>(`/api/storage/ledger?limit=${limit}`),
+  ledger: (limit = 500) =>
+    request<LedgerResponse>(`/api/storage/ledger?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
   reclaimPlan: (targetBytes: number) =>
     request<PlanResponse>("/api/storage/plan", {
       method: "POST",
@@ -353,7 +369,11 @@ export const api = {
   restart: () => request<RestartResponse>("/api/system/restart", { method: "POST" }, 20_000),
   update: () => request<UpdateResponse>("/api/system/update", { method: "POST" }, 40_000),
   canonMissing: (limit = 500) =>
-    request<CanonMissingResponse>(`/api/missing/canon?limit=${limit}`),
+    request<CanonMissingResponse>(
+      `/api/missing/canon?limit=${limit}`,
+      {},
+      PAGE_LOAD_TIMEOUT_MS,
+    ),
   requestCanonBatch: (tier: number, limit: number) =>
     request<{
       requested: number;

@@ -19,6 +19,8 @@ export type Connections = Record<string, Record<string, unknown>>;
 
 export interface ConnectionsResponse {
   connections: Connections;
+  /** {service: [field]} for secrets stored under a key that has since changed. */
+  unreadable?: Record<string, string[]>;
 }
 
 export interface ResetResponse {

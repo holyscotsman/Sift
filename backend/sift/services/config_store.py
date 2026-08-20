@@ -148,6 +148,36 @@ def set_actions(session: Session, dry_run: bool) -> None:
     session.commit()
 
 
+def unreadable_secrets(session: Session) -> dict[str, list[str]]:
+    """Secrets that are stored but will not open with the key material we have.
+
+    ``get_config`` turns these into ``None`` and every consumer reads that as
+    "not configured" — which is the honest thing for the consumer to do and a
+    silent lie to the owner, who typed the value and can see the field showing as
+    empty. It looks exactly like the app failing to save what they entered.
+
+    It happens for one reason: the key changed. ``SIFT_SECRET_KEY`` was rotated,
+    or — where no ``SIFT_SECRET_KEY`` is set and the access token is doing that
+    job as a fallback — ``SIFT_SERVER__API_TOKEN`` was rotated. The values are
+    not recoverable; they have to be entered again, once.
+    """
+    stale: dict[str, list[str]] = {}
+    for service, fields in _raw_config(session).items():
+        if not isinstance(fields, dict):
+            continue
+        lost = [
+            key
+            for key, value in fields.items()
+            if key in _SECRET_FIELDS
+            and isinstance(value, str)
+            and value
+            and secretbox.decrypt(value) is None
+        ]
+        if lost:
+            stale[service] = lost
+    return stale
+
+
 def masked(config: dict[str, Any]) -> dict[str, Any]:
     """Config safe to send to the client: secrets replaced with ``<field>_set`` flags."""
     out: dict[str, Any] = {}

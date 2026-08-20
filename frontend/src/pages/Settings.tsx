@@ -129,6 +129,7 @@ function Appearance() {
 function Connections() {
   const [rows, setRows] = useState<ServiceHealth[]>([]);
   const [config, setConfig] = useState<ConnConfig | null>(null);
+  const [unreadable, setUnreadable] = useState<Record<string, string[]>>({});
 
   const refreshStatus = useCallback(() => {
     api.getSettings().then((s) => setRows(s.connections)).catch(() => setRows([]));
@@ -136,7 +137,13 @@ function Connections() {
 
   useEffect(() => {
     refreshStatus();
-    api.getConfig().then((c) => setConfig(c.connections)).catch(() => setConfig({}));
+    api
+      .getConfig()
+      .then((c) => {
+        setConfig(c.connections);
+        setUnreadable(c.unreadable ?? {});
+      })
+      .catch(() => setConfig({}));
   }, [refreshStatus]);
 
   return (
@@ -175,6 +182,26 @@ function Connections() {
       <p className="mb-3 mt-1 text-xs text-fg3">
         Entered here and stored on your server — no need to touch Render. Test each one, then save.
       </p>
+      {Object.keys(unreadable).length > 0 && (
+        <div
+          className="mb-3 rounded-md border border-line bg-bg2 p-3 text-xs"
+          style={{ color: "var(--junk)" }}
+        >
+          <p className="font-semibold">
+            {Object.values(unreadable).flat().length} saved credential(s) can no longer be read.
+          </p>
+          <p className="mt-1 text-fg2">
+            They were encrypted with a key that has since changed — rotating{" "}
+            <code>SIFT_SECRET_KEY</code>, or <code>SIFT_SERVER__API_TOKEN</code> where no separate
+            secret key is set, makes anything saved before it unreadable. The values cannot be
+            recovered; enter them once more below and they will stay. Affected:{" "}
+            {Object.entries(unreadable)
+              .map(([service, fields]) => `${service} (${fields.join(", ")})`)
+              .join(" · ")}
+            .
+          </p>
+        </div>
+      )}
       {config === null ? (
         <div className="panel p-5 text-sm text-fg3">Loading…</div>
       ) : (
@@ -182,6 +209,7 @@ function Connections() {
           initial={config}
           onSaved={(c) => {
             setConfig(c);
+            setUnreadable({});
             refreshStatus();
           }}
         />

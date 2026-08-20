@@ -267,3 +267,62 @@ def test_a_nonsense_section_kind_is_dropped_on_the_way_in(factory, settings):
         stored = config_store.get_config(session)
     effective = config_store.apply_to_settings(settings, stored)
     assert "Movies" not in effective.plex.section_kinds
+
+
+def test_a_key_that_no_longer_decrypts_is_reported_rather_than_hidden(factory, monkeypatch):
+    """"Why are my keys not being saved?" — because they were, and then the key
+    that opens them changed.
+
+    `get_config` turns an unopenable secret into `None`, and every consumer reads
+    that as "not configured". That is right for the consumer and a silent lie to
+    the owner: the field shows empty, exactly as if the save had failed. Rotating
+    `SIFT_SECRET_KEY` does it, and so does rotating `SIFT_SERVER__API_TOKEN` on an
+    instance where no separate secret key is set and the token is doing that job.
+    """
+    from sift.services import config_store, secretbox
+
+    secretbox.configure("first-key-material")
+    with factory() as session:
+        config_store.set_config(session, {"radarr": {"api_key": "RADARR-KEY"}})
+        assert config_store.masked(config_store.get_config(session))["radarr"]["api_key_set"]
+        assert config_store.unreadable_secrets(session) == {}
+
+    # The key is rotated. The stored value is now ciphertext nobody can open.
+    secretbox.configure("second-key-material")
+    with factory() as session:
+        assert config_store.get_config(session)["radarr"]["api_key"] is None
+        assert config_store.unreadable_secrets(session) == {"radarr": ["api_key"]}
+
+
+def test_re_entering_the_key_clears_the_warning(factory, monkeypatch):
+    """NEGATIVE CONTROL: the report has to go away when the problem does.
+
+    A warning that stays up after the owner has done the one thing that fixes it
+    is worse than no warning — it teaches them to ignore the banner.
+    """
+    from sift.services import config_store, secretbox
+
+    secretbox.configure("first-key-material")
+    with factory() as session:
+        config_store.set_config(session, {"radarr": {"api_key": "RADARR-KEY"}})
+
+    secretbox.configure("second-key-material")
+    with factory() as session:
+        assert config_store.unreadable_secrets(session)
+        config_store.set_config(session, {"radarr": {"api_key": "RADARR-KEY-AGAIN"}})
+        assert config_store.unreadable_secrets(session) == {}
+        assert config_store.get_config(session)["radarr"]["api_key"] == "RADARR-KEY-AGAIN"
+
+
+def test_a_never_entered_key_is_not_reported_as_lost(factory):
+    """NEGATIVE CONTROL: nothing stored means nothing to warn about.
+
+    Reporting every empty field as unreadable would put a permanent banner on a
+    fresh install.
+    """
+    from sift.services import config_store, secretbox
+
+    secretbox.configure("some-key-material")
+    with factory() as session:
+        config_store.set_config(session, {"radarr": {"base_url": "http://radarr:7878"}})
+        assert config_store.unreadable_secrets(session) == {}

@@ -42,7 +42,8 @@ def read_config(
 ) -> ConnectionsOut:
     with factory() as session:
         cfg = config_store.get_config(session)
-    return ConnectionsOut(connections=config_store.masked(cfg))
+        stale = config_store.unreadable_secrets(session)
+    return ConnectionsOut(connections=config_store.masked(cfg), unreadable=stale)
 
 
 @router.put("", response_model=ConnectionsOut)
@@ -50,9 +51,10 @@ async def save_config(body: ConnectionsIn, request: Request) -> ConnectionsOut:
     state = get_state(request)
     with state.session_factory() as session:
         merged = config_store.set_config(session, body.connections)
+        stale = config_store.unreadable_secrets(session)
     # Re-overlay + swap the live services (health, scan, posters, writer, LLM).
     await runtime.rebuild(state)
-    return ConnectionsOut(connections=config_store.masked(merged))
+    return ConnectionsOut(connections=config_store.masked(merged), unreadable=stale)
 
 
 @router.get("/actions", response_model=ActionsConfigOut)

@@ -2,6 +2,54 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.62.0 — Two reported bugs: keys that "won't save", and Missing hanging
+
+### Your keys were saved. Then the key that opens them changed.
+
+Service credentials are encrypted before they go in the database, under
+`SIFT_SECRET_KEY` — or, where no separate secret key is set, under
+`SIFT_SERVER__API_TOKEN` as a fallback. Rotate either one and everything saved
+beforehand becomes ciphertext nobody can open.
+
+The app said nothing. An unopenable secret decrypts to `None`, every consumer
+reads that as "not configured", and the field shows empty — **identical to never
+having entered it**. That is what "my keys aren't being saved" looks like from the
+inside, and it is a fair reading of what the screen was showing.
+
+Reproduced against a running server: save a Radarr key, restart with a rotated
+token, and `api_key_set` flips from `true` to `false` with nothing explaining
+why. (Re-entering it does work, and does stick.)
+
+Settings now names them: how many, which services, which fields, and why —
+rotating the key makes anything saved before it unreadable, the values cannot be
+recovered, enter them once more and they stay. The banner clears when you do.
+
+**If this is you, the fix is one pass through Settings.** Check whether
+`SIFT_SECRET_KEY` is set in Render first — if it is not, the access token is
+doing that job, and rotating the token will do this again.
+
+### The Missing page had a poster problem, and no way to give up
+
+Every title on that page is one you do *not* own, so none of them has a `movies`
+row — and poster resolution only ever looked there. Each thumbnail fell through to
+a live TMDB lookup: one network round trip per poster, on a page that shows thirty
+at once. Worse, the resolved URL could not be cached back, because there is no row
+to write it to, so it repeated whenever the image cache went cold — every redeploy
+on an ephemeral disk.
+
+The path was in the database the whole time. The canon refresh stores
+`canon_movies.poster_path` for exactly these titles and nothing read it. It is
+read now, and a film you own still wins with its own artwork.
+
+Separately, no page-level read had a time limit, so a request that never came back
+left the screen loading for ever — indistinguishable from slow. Every read a user
+watches a spinner on is now bounded at 45 seconds and lands in the error-with-retry
+state those pages gained earlier today. Generous on purpose: a sleeping free-tier
+instance takes about thirty seconds to wake, and giving up on that would turn a
+slow first load into a failure.
+
+Nine tests, all mutation-verified.
+
 ## 2607.61.0 — The asset token now dies with the session it belongs to
 
 Changing your password rotates the server's signing secret. Every token issued
