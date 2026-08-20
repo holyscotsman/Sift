@@ -2,6 +2,43 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.67.0 — One Missing list, and a no that sticks
+
+The Missing page had two lists behind two tabs, drawn from two different tables,
+answering the same question twice. Neither of them remembered anything: a title
+you had already requested came back, and a title you had explicitly passed on
+came back too, at the same rank, on the next page load. That is not a queue you
+can work through — it is a queue that resets.
+
+There is now one list. It reads the 25,000-entry canon and subtracts three
+things: what is in Plex, what you have already asked for, and what you have said
+no to. The first two existed before in different places; the third is new.
+
+**A refusal is stored against the film, not against the list row that suggested
+it** (`ignored_titles`, keyed on `tmdb_id`). Keying it on the canon row would
+have meant every list refresh resurrected everything already dismissed, because a
+reseed writes new row ids for the same films. There is a pin for exactly that:
+delete the canon, reseed it, and the answer has to hold.
+
+"Remembered forever" applies to the suggestion engine, not to the owner. Nothing
+ignored is ever proposed again by any source, but the ignored list is readable
+and a single row can be taken back — a decision that cannot be reviewed is not a
+decision, it is a black hole, and a mis-click on a 25,000-item list is a matter
+of when rather than whether.
+
+**Source count is not the ranking, and that is a measurement rather than a
+choice.** 24,417 of the 25,000 entries carry exactly one source; tiers 3 and 4
+carry one universally. Ranking by "how many lists vouch for this" would have been
+a near-universal tie broken by whatever happened to come next. Tier already
+encodes the same judgement with usable resolution, so the order stays
+`(tier, -votes, tmdb_id)`. Multi-source counting becomes meaningful once the AI
+sources are attached and can actually disagree with each other.
+
+A page costs two statements at any page size, pinned exactly rather than
+loosely — all three subtractions are `EXISTS` clauses inside those two, and
+pulling any one of them into Python costs precisely one more round trip, which a
+bound of "a handful" would have let through.
+
 ## 2607.66.0 — A 25,000-film canon, and an exclusion list built from evidence
 
 Two lists, both derived from public data, neither hand-authored.

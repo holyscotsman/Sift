@@ -349,6 +349,50 @@ class CanonMissingResponse(BaseModel):
     requested_total: int = 0
 
 
+class SuggestionOut(BaseModel):
+    """One film on the unified Missing list."""
+
+    tmdb_id: int
+    title: str
+    year: int | None = None
+    # 1 is the strongest claim, 4 the weakest. Kept as the ranking key rather
+    # than a source count: see ``analysis/canon_missing.missing``.
+    tier: int = 4
+    # Which pillars vouch for it. Local-list provenance is deliberately not
+    # spelled out to the client — the owner asked for the built-in list to stay
+    # invisible — so this carries reasons, not the name of the file they came from.
+    reasons: list[str] = []
+    rating: float | None = None
+    votes: int | None = None
+
+
+class SuggestionListResponse(BaseModel):
+    items: list[SuggestionOut]
+    total: int
+    # Titles subtracted from the list rather than absent from it, so a list that
+    # just got shorter can say why.
+    requested_total: int = 0
+    ignored_total: int = 0
+
+
+class IgnoreIn(BaseModel):
+    tmdb_id: int
+    title: str = ""
+    # Which surface the refusal came from. Audit trail only; no decision reads it.
+    source: str = "missing"
+
+
+class IgnoredOut(BaseModel):
+    tmdb_id: int
+    title: str
+    source: str
+
+
+class IgnoredListResponse(BaseModel):
+    items: list[IgnoredOut]
+    total: int
+
+
 class CanonRefreshResponse(BaseModel):
     canon_written: int
     curator_added: int
