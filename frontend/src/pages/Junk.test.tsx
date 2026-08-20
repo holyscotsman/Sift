@@ -151,3 +151,94 @@ describe("removing a title", () => {
     );
   });
 });
+
+describe("approving the whole queue at once", () => {
+  function stubActions() {
+    const propose = vi
+      .spyOn(api, "proposeAction")
+      .mockImplementation(
+        async (body: unknown) =>
+          ({ id: (body as { movie_tmdb_id: number }).movie_tmdb_id }) as never,
+      );
+    const approve = vi.spyOn(api, "approveAction").mockResolvedValue({} as never);
+    const execute = vi
+      .spyOn(api, "executeAction")
+      .mockResolvedValue({ dry_run: true } as never);
+    return { propose, approve, execute };
+  }
+
+  it("still approves every title individually", async () => {
+    // The standing rule is per-item approval, and a bulk button is the obvious
+    // place for that to quietly become one approval covering many files. Three
+    // titles must be three proposals and three approvals — a convenience for the
+    // person clicking, not a different kind of write.
+    vi.spyOn(api, "junk").mockResolvedValue({
+      items: [
+        candidate(),
+        candidate({ tmdb_id: 27205, title: "Inception" }),
+        candidate({ tmdb_id: 78, title: "Blade Runner" }),
+      ],
+      total: 3,
+    } as never);
+    const { propose, approve, execute } = stubActions();
+
+    renderPage(<Junk />);
+    await userEvent.click(await screen.findByRole("button", { name: /select all and approve \(3\)/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /approve \(staged\)/i }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
+    expect(propose).toHaveBeenCalledTimes(3);
+    expect(approve).toHaveBeenCalledTimes(3);
+    expect(
+      propose.mock.calls
+        .map((c) => (c[0] as { movie_tmdb_id: number }).movie_tmdb_id)
+        // Numeric compare: a bare .sort() is lexicographic and puts 27205 first.
+        .sort((a, b) => a - b),
+    ).toEqual([78, 603, 27205]);
+  });
+
+  it("NEGATIVE CONTROL: the bulk button asks first, like every other removal", async () => {
+    vi.spyOn(api, "junk").mockResolvedValue({
+      items: [candidate(), candidate({ tmdb_id: 27205, title: "Inception" })],
+      total: 2,
+    } as never);
+    const { propose } = stubActions();
+
+    renderPage(<Junk />);
+    await userEvent.click(await screen.findByRole("button", { name: /select all and approve \(2\)/i }));
+
+    expect(await screen.findByText(/Approve removal of 2 titles\?/i)).toBeInTheDocument();
+    expect(propose).not.toHaveBeenCalled();
+  });
+
+  it("stops at the first failure and says the rest are untouched", async () => {
+    // A removal failing usually means the server or Radarr has gone away. Walking
+    // on through two hundred more is not persistence, it is two hundred more ways
+    // to be wrong — and the person needs to know where the walk stopped.
+    vi.spyOn(api, "junk").mockResolvedValue({
+      items: [
+        candidate(),
+        candidate({ tmdb_id: 27205, title: "Inception" }),
+        candidate({ tmdb_id: 78, title: "Blade Runner" }),
+      ],
+      total: 3,
+    } as never);
+    const propose = vi
+      .spyOn(api, "proposeAction")
+      .mockResolvedValueOnce({ id: 1 } as never)
+      .mockRejectedValue(new Error("Radarr refused"));
+    vi.spyOn(api, "approveAction").mockResolvedValue({} as never);
+    const execute = vi
+      .spyOn(api, "executeAction")
+      .mockResolvedValue({ dry_run: true } as never);
+
+    renderPage(<Junk />);
+    await userEvent.click(await screen.findByRole("button", { name: /select all and approve \(3\)/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /approve \(staged\)/i }));
+
+    expect(await screen.findByText(/remaining titles are untouched/i)).toBeInTheDocument();
+    // One succeeded, the second threw, the third was never attempted.
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(propose).toHaveBeenCalledTimes(2);
+  });
+});

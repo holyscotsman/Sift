@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.79.0 — The bulk button, and the rule it was best placed to break
+
+Per-item approval is the standing rule for anything that deletes a file: one
+`Action` row per title, each individually approved and audited. A **"Select all
+and approve (N)"** button is the single most obvious place for that to quietly
+become one approval covering many files, and it had no test.
+
+It does not break the rule — three titles are three proposals and three
+approvals — and there is now a pin that says so, plus a mutation that approves
+once for the whole batch and turns it red. A convenience for the person clicking,
+not a different kind of write.
+
+Two more, both about the moment it goes wrong. The bulk button **asks first**,
+like every other removal on that screen. And a failure **stops the walk**: one
+removal failing usually means the server or Radarr has gone away, and walking on
+through two hundred more is not persistence, it is two hundred more ways to be
+wrong. The toast names what happened; a mutation that swallows it turns the pin
+red.
+
+**And the dialog now says the number.** It read *"Approve removal of 3 title(s)?"*
+— on the one dialog in the app that deletes files, where the count is the most
+important word in the sentence and "(s)" reads as unfinished.
+
+`Junk.tsx` moves 60% → 61%, which is the honest figure: what is left uncovered
+there is rendering variants, and this change was about the destructive path
+rather than the percentage. Six mutations, all red.
+
 ## 2607.78.0 — The fallback that carries a blocked scan
 
 `lib/scan.tsx` carried a comment explaining its own design:
