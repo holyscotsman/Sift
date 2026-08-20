@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import anthropic as anthropic_ai
-from ..ai.registry import anthropic_key
+from ..ai import openai as openai_ai
+from ..ai.registry import anthropic_key, openai_key
 from ..clients.base import ClientError, reject_unsafe_base_url
 from ..ingest import sections as section_plan
 from ..services import config_store, reset, runtime
@@ -150,6 +151,34 @@ async def test_config(service: str, body: ConnectionTestIn, request: Request) ->
             )
         return ServiceHealth(
             service="anthropic",
+            ok=True,
+            detail=f"key verified ({len(models)} model(s) available)",
+            latency_ms=None,
+            models=models,
+        )
+
+    if service == "openai":
+        key = openai_key(trial)
+        if not key:
+            return ServiceHealth(service="openai", ok=False, detail="no key", latency_ms=None)
+        try:
+            models = await openai_ai.list_models(key)
+        except httpx.HTTPStatusError as exc:
+            detail = (
+                "key rejected (401) — check it and try again."
+                if exc.response.status_code == 401
+                else f"OpenAI returned HTTP {exc.response.status_code}."
+            )
+            return ServiceHealth(service="openai", ok=False, detail=detail, latency_ms=None)
+        except Exception:  # noqa: BLE001 - a raw exception could echo request details
+            return ServiceHealth(
+                service="openai",
+                ok=False,
+                detail="couldn't reach OpenAI — network problem on the Sift server.",
+                latency_ms=None,
+            )
+        return ServiceHealth(
+            service="openai",
             ok=True,
             detail=f"key verified ({len(models)} model(s) available)",
             latency_ms=None,
