@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..analysis import tv_recommend, tv_size
 from ..db.models import Episode, MediaFile, Season, Show
+from ..db.session import in_thread
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
     ShowListResponse,
@@ -193,8 +194,9 @@ async def show_suggestions(
     items = await tv_recommend.suggest(factory, settings, limit=limit)
     detail = ""
     if not items:
-        with factory() as session:
-            seeds, _owned = tv_recommend.anchors(session)
+        # Off the loop: an `async` handler holding the process while a session
+        # call goes to a hosted database blocks every other request with it.
+        seeds, _owned = await in_thread(factory, tv_recommend.anchors)
         if not settings.tmdb.enabled or not settings.tmdb.api_key:
             detail = "Connect TMDB in Settings to get suggestions."
         elif not seeds:

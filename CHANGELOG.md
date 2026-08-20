@@ -2,6 +2,32 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.64.0 — The three read paths that still blocked, and a guard for the rest
+
+The previous release fixed the acute case and listed twelve others in a document.
+A list in a document is not a guard, so this fixes the three on pages you open and
+replaces the list with a test.
+
+Off the event loop now: the **Settings page** load, the **TV suggestions** on
+Missing, and the **recommendations** shelf. Each was one round trip rather than
+thirty, which is why none was urgent — but Settings is the page you are sent to
+when credentials need re-entering, and blocking the process while that page loads
+is a poor place to do it.
+
+The remaining nine are named in a test rather than prose. It reads the route
+modules, finds every `async` handler that opens a database session, and compares
+that set against an explicit list. **A new one fails it. Fixing one without
+removing its name also fails it** — a list that is allowed to drift stops
+describing anything.
+
+Structural rather than timed: it catches the next handler somebody writes, and it
+does not depend on how fast the machine is.
+
+The negative control is the one that earns its keep. A scanner that finds nothing
+passes the pin above perfectly, so it is fed the exact shape it exists to catch,
+a plain `def` it must ignore (FastAPI runs those in a threadpool), and a handler
+already using `in_thread`.
+
 ## 2607.63.0 — Thirty thumbnails stopped blocking the whole server
 
 A better answer to "the Missing page times out" than the last one.
