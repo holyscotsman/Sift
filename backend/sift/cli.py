@@ -48,22 +48,45 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _example_dir() -> Path:
+    """Where the ``*.example`` templates live: the repository root.
+
+    **This only resolves in a source checkout.** Installed as a wheel the package
+    sits in ``site-packages``, three levels up is the interpreter's library
+    directory, and the templates are not shipped inside the distribution — so
+    ``sift init`` cannot work from a ``pip install``, including in this project's
+    own Docker image, which installs the package and never copies the templates.
+
+    Left as it is rather than papered over: fixing it properly means either
+    shipping the templates inside the package or adding them to the image, and
+    both are decisions about packaging rather than about this function. What has
+    changed is that the failure now says *where it looked*, so the next person
+    can see the problem instead of guessing at it.
+
+    A function, not a module constant, so tests can point it somewhere real.
+    """
+    return Path(__file__).resolve().parents[2]
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     target = Path(args.config)
-    repo_root = Path(__file__).resolve().parents[2]
+    templates = _example_dir()
     if target.exists() and not args.force:
         print(f"{target} already exists (use --force to overwrite)")
         return 1
-    example = repo_root / "sift.toml.example"
+    example = templates / "sift.toml.example"
     if not example.is_file():
-        print("sift.toml.example not found next to the package")
+        print(f"no sift.toml.example in {templates}")
+        print("`sift init` needs a source checkout; a pip-installed Sift has no templates.")
         return 1
     shutil.copyfile(example, target)
     print(f"wrote {target} — edit connection URLs here")
 
-    # Scaffold the secrets file next to the config if it isn't there yet.
+    # Scaffold the secrets file next to the config if it isn't there yet. Never
+    # overwritten, even with --force: this is the file with the real keys in it,
+    # and --force is about the config the user asked to replace.
     env_target = target.parent / ".env"
-    env_example = repo_root / ".env.example"
+    env_example = templates / ".env.example"
     if env_example.is_file() and not env_target.exists():
         shutil.copyfile(env_example, env_target)
         print(f"wrote {env_target} — put your tokens/keys here (never commit it)")
