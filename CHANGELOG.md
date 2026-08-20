@@ -39,6 +39,26 @@ loosely — all three subtractions are `EXISTS` clauses inside those two, and
 pulling any one of them into Python costs precisely one more round trip, which a
 bound of "a handful" would have let through.
 
+**On screen, three surfaces became one.** Missing had a Movies tab and a Canon
+tab drawing from two different tables, and Taste Profile carried a third
+recommendation shelf underneath the weights. None of them agreed with each other
+and none of them remembered anything. The Canon tab and the Taste Profile shelf
+are gone, along with the components and client methods behind them; the Taste
+Profile weights still reorder what is left.
+
+The list itself now scrolls rather than ending at thirty with a "show all"
+button — sixty at a time behind a sentinel, with the same dropped-page handling
+the Library uses: a failed page rolls the offset back so a retry asks for the
+titles that were lost rather than the ones after them, says the list is
+incomplete rather than borrowing "that's everything", and stops asking until the
+retry is clicked. That last guard was untested until a mutation showed it: in
+jsdom the observer only fires when a test tells it to, so an unbounded retry
+loop against a struggling server was invisible. There is a pin for it now.
+
+Acting on a card leaves it in place, dimmed, instead of removing it. On an
+endless list a card that vanishes under the cursor hands its position to the next
+one, and the click already on its way lands on a film nobody decided about.
+
 ## 2607.66.0 — A 25,000-film canon, and an exclusion list built from evidence
 
 Two lists, both derived from public data, neither hand-authored.

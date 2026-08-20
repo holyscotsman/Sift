@@ -1,10 +1,11 @@
 // Taste Profile — aggregated breakdown of the library (genres/keywords/people/eras)
 // plus editable emphasis weights. The genre and era weights steer the
-// Recommended-for-you ranking (bounded reorder — they never gate a title out).
+// The weights here reorder the Missing list; there is no second recommendation
+// surface on this page. Two shelves answering the same question with different
+// answers is worse than one, and only one of them could remember a decision.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { RecommendationsSection } from "@/components/Recommendations";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -173,7 +174,7 @@ export function TasteProfile() {
           <Card title="Emphasis">
             <p className="mb-3 text-sm text-fg2">
               You favor <span className="font-semibold text-accent">{favors}</span>. Genre and
-              era emphasis reorder the Missing page&rsquo;s recommendations.
+              era emphasis reorder the Missing list.
             </p>
             <div className="flex flex-col gap-3">
               {WEIGHT_LABELS.map((w) => (
@@ -213,10 +214,6 @@ export function TasteProfile() {
             </button>
           </Card>
         </div>
-      </div>
-
-      <div className="mt-5">
-        <RecommendationsSection />
       </div>
     </div>
   );
