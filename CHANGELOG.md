@@ -2,6 +2,21 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.65.1 — Test the banner I shipped without one
+
+Tests only; no behaviour change.
+
+The "these credentials can no longer be read" banner went out with backend tests
+proving the server reports the right thing, and **nothing at all** covering the
+part an owner actually looks at. The server could have been perfectly correct
+while the banner never rendered, and the first person to find out would have been
+someone staring at an empty field again.
+
+Two tests, both mutation-verified: hiding the banner turns one red, showing it
+unconditionally turns the other red. They click through to the Connections tab
+first, because that is not the tab the page opens on and a test that skipped the
+click would be testing a screen nobody arrives at.
+
 ## 2607.65.0 — Thirty thumbnails, one connection pool
 
 The last of the poster-page costs, and the smallest — but on the same page and
