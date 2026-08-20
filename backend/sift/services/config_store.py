@@ -39,7 +39,8 @@ _ALLOWED: dict[str, set[str]] = {
     "tmdb": {"api_key", "language"},
     "ollama": {"base_url", "model"},
     "anthropic": {"api_key", "model"},
-    # The AI engine mode: tandem (both), anthropic, or ollama.
+    "openai": {"api_key", "model"},
+    # The AI engine mode: tandem (local + one hosted), anthropic, openai, or ollama.
     "ai": {"mode"},
     # Host deploy hook for the in-app Update button. A secret URL — anyone with
     # it can trigger a deploy — so it is stored encrypted like an API key.
@@ -279,6 +280,12 @@ def apply_to_settings(
         eff.ai.anthropic_api_key = SecretStr(anthropic["api_key"])
     if _s(anthropic.get("model")):
         eff.ai.anthropic_model = anthropic["model"]
+
+    openai = config.get("openai") or {}
+    if _s(openai.get("api_key")):
+        eff.ai.openai_api_key = SecretStr(openai["api_key"])
+    if _s(openai.get("model")):
+        eff.ai.openai_model = openai["model"]
 
     ollama = config.get("ollama") or {}
     if _url(ollama.get("base_url")):

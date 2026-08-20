@@ -2,6 +2,47 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.69.0 — OpenAI, as an alternative rather than an addition
+
+GPT can now do the work Claude does: the hard-reasoning pass, Ask, and the AI
+half of the Missing list's top-up. Key it in Settings › Connections, or set a
+bare `OPENAI_API_KEY` the way `ANTHROPIC_API_KEY` already worked.
+
+**There is one hosted slot, not two.** Both providers answer the same question in
+the same shape, so keeping both live would double the cost to get two opinions
+nothing here is equipped to choose between — and nothing in Sift decides
+correctness from an AI answer in the first place. Under tandem, Anthropic takes
+the slot when it is keyed and OpenAI takes it otherwise. That order is deliberate:
+an instance that has always used Claude keeps using it after an OpenAI key is
+added, rather than silently switching which account gets billed.
+
+Pinning the mode overrides the keys, and does so in both directions. `openai`
+mode with only an Anthropic key configured resolves to **nothing** — not quietly
+to Anthropic. A mode that can be overruled by a key is not a mode.
+
+**The provider handles OpenAI's parameter rename rather than assuming it away.**
+The output cap moved from `max_tokens` to `max_completion_tokens`; newer models
+reject the old name and older ones predate the new one, and the model here is
+typed in by hand. A request goes out with the new name and is retried once with
+the old one — but only on that specific complaint. A blanket retry would double
+every genuine failure, including a rate limit, which is the worst possible moment
+to send a second request.
+
+The Test button lists the models a key can actually reach, filtered to chat-capable
+families: a key can see well over a hundred ids — embeddings, audio, moderation,
+images — and a dropdown of those is worse than no dropdown. If the filter matches
+nothing the full list is returned instead, because a key whose models are all
+unfamiliar is still a valid key and "0 models available" reads as "your key is
+broken". The model picker itself is no longer Anthropic-specific.
+
+**A fix found on the way:** the health line said "Anthropic" whenever *anything*
+was configured. That was already wrong for a local-only instance and would now be
+wrong for an OpenAI one. Naming the wrong provider is worse than naming none — it
+sends someone to check a key that was never in play. It now names what is actually
+live, including both halves under tandem.
+
+Thirty-four pins, every one mutation-verified.
+
 ## 2607.68.0 — The list stops running out
 
 The Missing list read one file. Twenty-five thousand titles is a long way from

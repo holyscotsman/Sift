@@ -7,13 +7,26 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import type { Connections, ConnectionsResponse, ServiceHealth } from "@/lib/types";
 
-// AI engine modes: tandem uses both providers (local drafts, Claude refines);
-// the other two pin all AI work to a single provider.
+// AI engine modes. Tandem pairs a local model with a hosted one (local drafts,
+// hosted refines); the rest pin every AI task to a single provider.
+//
+// There is one hosted slot, not two: under Tandem, Claude takes it when keyed and
+// GPT takes it otherwise. Running both would double the cost to get two opinions
+// nothing here is equipped to choose between.
 const AI_MODES: { value: string; label: string; hint: string }[] = [
-  { value: "tandem", label: "Tandem", hint: "Local drafts, Claude refines — best of both." },
+  {
+    value: "tandem",
+    label: "Tandem",
+    hint: "Local drafts, a hosted model refines — Claude if keyed, otherwise GPT.",
+  },
   { value: "anthropic", label: "Claude only", hint: "Every AI task goes to Anthropic." },
+  { value: "openai", label: "GPT only", hint: "Every AI task goes to OpenAI." },
   { value: "ollama", label: "Local only", hint: "Every AI task stays on your Ollama." },
 ];
+
+// Services whose Test call returns the model ids the key can reach.
+const MODEL_PICKER_SERVICES = ["anthropic", "openai"];
+const AI_SERVICES = ["ollama", "anthropic", "openai"];
 
 interface FieldSpec {
   name: string;
@@ -110,6 +123,15 @@ export const SERVICE_SPECS: ServiceSpec[] = [
       { name: "model", label: "Model", placeholder: "claude-sonnet-5" },
     ],
   },
+  {
+    key: "openai",
+    label: "OpenAI (GPT)",
+    hint: "Optional — an alternative to Claude for the same work. Only one hosted model is used at a time; under Tandem, Claude wins when both are keyed.",
+    fields: [
+      { name: "api_key", label: "API key", secret: true },
+      { name: "model", label: "Model", placeholder: "gpt-4o-mini" },
+    ],
+  },
 ];
 
 export function ConnectionsForm({
@@ -138,7 +160,9 @@ export function ConnectionsForm({
   const [aiMode, setAiMode] = useState<string>(
     typeof initial.ai?.mode === "string" ? (initial.ai.mode as string) : "tandem",
   );
-  const [anthropicModels, setAnthropicModels] = useState<string[]>([]);
+  // Model ids a verified key can actually reach, per service. Keyed rather
+  // than one list, so testing OpenAI cannot overwrite what Anthropic reported.
+  const [modelChoices, setModelChoices] = useState<Record<string, string[]>>({});
   const essentialsFired = useRef(false);
   // Which service's Clear button is in its "Really clear?" confirm step.
   const [confirmClear, setConfirmClear] = useState<string | null>(null);
@@ -212,13 +236,15 @@ export function ConnectionsForm({
       res = { service: spec.key, ok: false, detail: "test failed", latency_ms: null };
     }
     setTests((t) => ({ ...t, [spec.key]: res }));
-    if (spec.key === "anthropic" && res.ok && res.models?.length) {
-      setAnthropicModels(res.models);
+    if (MODEL_PICKER_SERVICES.includes(spec.key) && res.ok && res.models?.length) {
+      const models = res.models;
+      setModelChoices((m) => ({ ...m, [spec.key]: models }));
       // Materialise the picker's value so Save persists what the dropdown shows —
       // including when a previously saved model isn't in the fetched list anymore.
-      const current = vals["anthropic.model"] || (initial.anthropic?.model as string) || "";
-      if (!current || !res.models.includes(current)) {
-        set("anthropic", "model", res.models[0]);
+      const current =
+        vals[`${spec.key}.model`] || (initial[spec.key]?.model as string) || "";
+      if (!current || !models.includes(current)) {
+        set(spec.key, "model", models[0]);
       }
     }
   }
@@ -264,7 +290,7 @@ export function ConnectionsForm({
     }
   }
 
-  const hasAi = specs.some((s) => s.key === "ollama" || s.key === "anthropic");
+  const hasAi = specs.some((s) => AI_SERVICES.includes(s.key));
   // Readiness at a glance, from the tests already run in this form — no
   // auto-probing. Core sources only (the AI engine is optional by design).
   const coreKeys = specs
@@ -354,24 +380,25 @@ export function ConnectionsForm({
               {spec.fields.map((f) => {
                 const savedFlag = Boolean(initial[spec.key]?.[`${f.name}_set`]);
                 const warn = localhostWarning(spec.key, f.name);
-                // Once the Anthropic key is verified, the model becomes a picker
-                // over the models that key can actually use.
-                const modelPicker =
-                  spec.key === "anthropic" && f.name === "model" && anthropicModels.length > 0;
+                // Once a hosted key is verified, its model field becomes a picker
+                // over the models that key can actually use. A typed model name is
+                // the single most common way to get a working key rejected.
+                const choices = modelChoices[spec.key] ?? [];
+                const modelPicker = f.name === "model" && choices.length > 0;
                 return (
                   <label key={f.name} className="text-xs text-fg3">
                     {f.label}
                     {modelPicker ? (
                       <select
                         value={
-                          vals["anthropic.model"] ||
-                          (initial.anthropic?.model as string) ||
-                          anthropicModels[0]
+                          vals[`${spec.key}.model`] ||
+                          (initial[spec.key]?.model as string) ||
+                          choices[0]
                         }
-                        onChange={(e) => set("anthropic", "model", e.target.value)}
+                        onChange={(e) => set(spec.key, "model", e.target.value)}
                         className="mt-1 w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
                       >
-                        {anthropicModels.map((m) => (
+                        {choices.map((m) => (
                           <option key={m} value={m}>
                             {m}
                           </option>

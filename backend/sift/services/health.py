@@ -56,11 +56,31 @@ async def _probe(settings: Settings, service: str) -> HealthStatus:
         await client.aclose()
 
 
-def _ai_health(settings: Settings) -> HealthStatus:
-    from ..ai.registry import ai_configured
+_HOSTED_LABEL = {"anthropic": "Anthropic", "openai": "OpenAI"}
 
-    ok = ai_configured(settings)
-    return HealthStatus("model", ok, "Anthropic" if ok else "not configured")
+
+def _ai_health(settings: Settings) -> HealthStatus:
+    """Which engine is actually live, named.
+
+    This used to say "Anthropic" whenever anything was configured, which was
+    already wrong for a local-only instance and would now be wrong for an OpenAI
+    one. A health line that names the wrong provider is worse than one that names
+    none: it sends someone to check a key that was never in play.
+    """
+    from ..ai.registry import ai_configured, hosted_choice
+
+    if not ai_configured(settings):
+        return HealthStatus("model", False, "not configured")
+    parts: list[str] = []
+    hosted = hosted_choice(settings)
+    if hosted:
+        parts.append(_HOSTED_LABEL.get(hosted, hosted))
+    if settings.ai.local_enabled and (settings.ai.mode or "tandem").lower() in (
+        "tandem",
+        "ollama",
+    ):
+        parts.append("Ollama")
+    return HealthStatus("model", True, " + ".join(parts) or "configured")
 
 
 async def gather_health(settings: Settings) -> list[HealthStatus]:

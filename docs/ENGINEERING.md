@@ -53,12 +53,14 @@ audited); deletes may not. Never weaken this without a louder test.
   score; the LLM only *explains* it and is forbidden from overriding it.
 - **Kids guardrail:** items in children's libraries are never auto-flagged for
   removal on adult-rating grounds; they carry a visible guard chip.
-- **LLM:** provider abstraction (Local Ollama + Anthropic) with three engine modes
-  — **tandem** (local drafts, Anthropic refines — default), **anthropic**, or
-  **ollama** — chosen in Settings › Connections. *(Owner revision of the original
-  route-by-task / compare / race-fallback trio; the unused embedding slot was
-  dropped with it.)* AI is **never** used to decide correctness of a delete or a
-  key fact.
+- **LLM:** provider abstraction (local Ollama + **one** hosted model — Anthropic
+  or OpenAI) with four engine modes — **tandem** (local drafts, the hosted model
+  refines — default), **anthropic**, **openai**, or **ollama** — chosen in
+  Settings › Connections. There is one hosted slot, not two: under tandem,
+  Anthropic takes it when keyed and OpenAI takes it otherwise. *(Owner revision of
+  the original route-by-task / compare / race-fallback trio; the unused embedding
+  slot was dropped with it.)* AI is **never** used to decide correctness of a
+  delete or a key fact.
 - **Version scheme:** `YYMM.major.patch`.
 
 ---
@@ -260,6 +262,12 @@ here so they are not re-litigated, not so they can be admired.
   one. Falling through would let a different film answer for this one.
 - **AI proposes, TMDB and the gates decide.** `musthave.gated_candidates` is the
   single seam for "an AI named some films, now verify them". Do not add a second.
+- **One hosted AI slot, never two.** Anthropic and OpenAI answer the same
+  question in the same shape; running both doubles the cost for two opinions
+  nothing here can choose between. Anthropic wins a tie under tandem so an
+  existing instance does not silently switch which account is billed.
+- **A pinned mode is not overridable by a key.** `openai` mode with only an
+  Anthropic key configured resolves to *nothing*, not to Anthropic.
 - **A Missing page costs two statements, pinned exactly.** All three subtractions
   are `EXISTS` clauses inside the count and the page. Moving one into Python
   costs exactly one more round trip, so a loose bound would not catch it.

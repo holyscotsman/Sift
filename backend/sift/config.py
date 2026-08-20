@@ -181,17 +181,26 @@ class PostersConfig(BaseModel):
 class AIConfig(BaseModel):
     """Provider layer. Never used to decide correctness — AI advises, data decides.
 
-    ``mode`` picks the engine: ``tandem`` uses both providers when configured (the
-    local model drafts, Anthropic refines); ``anthropic`` / ``ollama`` pin to one.
+    ``mode`` picks the engine: ``tandem`` uses a local model and a hosted one
+    together (local drafts, hosted refines); ``anthropic``, ``openai`` and
+    ``ollama`` pin every task to one provider.
+
+    There is one hosted slot, not two. Anthropic and OpenAI answer the same
+    question in the same shape, so running both would double the cost to get two
+    opinions nothing here is equipped to choose between — and nothing in Sift
+    decides correctness from an AI answer anyway.
     """
 
-    mode: str = "tandem"  # tandem | anthropic | ollama
+    mode: str = "tandem"  # tandem | anthropic | openai | ollama
     local_enabled: bool = False  # is a local Ollama endpoint configured to use?
     local_base_url: str = "http://127.0.0.1:11434"
     local_model: str = "llama3.1"
     anthropic_model: str = "claude-sonnet-5"
     # Entered in the wizard/Settings; falls back to the ANTHROPIC_API_KEY env var.
     anthropic_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4o-mini"
+    # Entered in the wizard/Settings; falls back to the OPENAI_API_KEY env var.
+    openai_api_key: SecretStr | None = None
 
 
 class Settings(BaseSettings):
