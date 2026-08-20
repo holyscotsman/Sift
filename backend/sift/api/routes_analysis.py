@@ -7,6 +7,8 @@ highest-rated owned titles (see ``analysis/recommend.py``).
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -18,6 +20,7 @@ from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
+from ..db.session import in_thread
 from ..services import canon, canon_entries, curated_lists, settings_store
 from .deps import AuthDep, get_session_factory, get_settings
 from .schemas import (
@@ -251,7 +254,8 @@ async def missing_recommendations(
     mention. Deterministic throughout — nothing here is an LLM's opinion.
     """
     capped = max(1, min(limit, recommend_analysis.STORED_LIMIT))
-    with factory() as session:
+
+    def _read(session: Session) -> tuple[list[dict[str, Any]], dict[str, int], int]:
         items, counts = recommend_analysis.stored(session, limit=capped)
         # Only asked when the list came up short. A canon-first list is thin for
         # one reason far more often than any other — the canon arrives keyed by
@@ -261,6 +265,11 @@ async def missing_recommendations(
         unresolved = (
             canon_entries.coverage(session)["unresolved"] if counts["total"] < capped else 0
         )
+        return items, counts, unresolved
+
+    # Off the loop: an `async` handler holding the process while a session call
+    # goes to a hosted database blocks every other request with it.
+    items, counts, unresolved = await in_thread(factory, _read)
     if items:
         total = counts["total"]
         shown = f"Showing {len(items)} of {total}. " if total > len(items) else ""

@@ -4,6 +4,7 @@ and the automatic-rescan schedule."""
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..ai.registry import ai_configured, compare_available
 from ..analysis import junk
 from ..config import JunkThresholds, Settings
+from ..db.session import in_thread
 from ..services import curated_lists, secretbox, settings_store
 from ..services.counts_cache import CountsCache
 from ..services.health import HealthCache, check_service
@@ -50,9 +52,17 @@ async def get_all(
     health_cache: HealthCache = Depends(get_health_cache),
 ) -> SettingsResponse:
     health = await health_cache.get(settings)
-    with factory() as session:
-        thr = settings_store.effective_junk(session, settings)
-        interval = settings_store.get_scan_interval(session)
+
+    def _read(session: Session) -> tuple[Any, Any]:
+        return (
+            settings_store.effective_junk(session, settings),
+            settings_store.get_scan_interval(session),
+        )
+
+    # Off the loop: this is an `async` handler, so a session call here blocks the
+    # whole process for the duration — microseconds on SQLite, a network round
+    # trip against a hosted database.
+    thr, interval = await in_thread(factory, _read)
     db_kind = "postgres" if settings.database.target().startswith("postgres") else "sqlite"
     return SettingsResponse(
         connections=[
