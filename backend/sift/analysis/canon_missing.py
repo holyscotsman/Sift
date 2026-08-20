@@ -22,9 +22,9 @@ the title here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import Any, Literal, overload
 
-from sqlalchemy import case, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -59,6 +59,33 @@ class CanonMissing:
     # nobody trusts.
     reasons: list[str]
 
+
+def _page_query(conditions: list[ColumnElement[bool]] | None = None) -> Select[Any]:
+    """The page read, without its limit and offset.
+
+    Split out so the ordering can be *inspected* rather than only observed. The
+    last term has to be a unique column or paging can skip a title on a page
+    boundary, and no behavioural test can see that on SQLite — its scan order
+    happens to be stable, so equal-ranked rows do not swap places even when
+    nothing guarantees they will not.
+
+    One statement, three tables. The metadata join is what puts genres and a
+    director on the card; the affinity join is what decides the order. Both are
+    outer joins because both are allowed to be missing — an entry IMDb records
+    nothing about still belongs on the list, ranked on its tier alone.
+    """
+    return (
+        select(CanonEntry, CanonMetadata, CanonAffinity.reasons)
+        .outerjoin(CanonMetadata, CanonMetadata.imdb_id == CanonEntry.imdb_id)
+        .outerjoin(CanonAffinity, CanonAffinity.imdb_id == CanonEntry.imdb_id)
+        .where(*(conditions or []))
+        .order_by(
+            _effective_score().desc(),
+            CanonEntry.tier.asc(),
+            CanonEntry.votes.desc().nulls_last(),
+            CanonEntry.tmdb_id.asc(),
+        )
+    )
 
 def _effective_score() -> ColumnElement[int]:
     """The affinity score, or what the tier alone is worth when there is none.
@@ -223,22 +250,7 @@ def missing(
     # director on the card; the affinity join is what decides the order. Both are
     # outer joins because both are allowed to be missing — an entry IMDb records
     # nothing about still belongs on the list, ranked on its tier alone.
-    page = list(
-        session.execute(
-            select(CanonEntry, CanonMetadata, CanonAffinity.reasons)
-            .outerjoin(CanonMetadata, CanonMetadata.imdb_id == CanonEntry.imdb_id)
-            .outerjoin(CanonAffinity, CanonAffinity.imdb_id == CanonEntry.imdb_id)
-            .where(*conditions)
-            .order_by(
-                _effective_score().desc(),
-                CanonEntry.tier.asc(),
-                CanonEntry.votes.desc().nulls_last(),
-                CanonEntry.tmdb_id.asc(),
-            )
-            .limit(max(1, limit))
-            .offset(offset)
-        )
-    )
+    page = list(session.execute(_page_query(conditions).limit(max(1, limit)).offset(offset)))
     return (
         [
             CanonMissing(

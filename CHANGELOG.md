@@ -2,6 +2,34 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.87.0 — Walking the whole thing once, as a person would
+
+Every part of the Missing feature was tested. The lists have their own pins, the
+affinity arithmetic has its own file, the ignore endpoint has its own suite. What
+none of them proved is that the parts fit *together* — and **both bugs this
+feature shipped with were integration bugs**, invisible from inside any single
+piece:
+
+* the API sent raw pillar tags as a film's reasons, because the route and the
+  analysis disagreed about what `reasons` meant;
+* the top-up ranked dead last, because the ranking and the top-up disagreed about
+  what a *missing* score meant.
+
+So there is now a walkthrough that goes through the HTTP API rather than the
+services, and asserts what a person would actually notice: the list arrives
+ranked by the shelf with a reason on the top card and metadata on nine rows in
+ten; the reasons never name the built-in list; one director does not fill the
+page; a refusal survives a re-read and can still be taken back.
+
+**One of its tests could not fail, and now can.** The paging pin walks four pages
+and asserts no title appears twice — and removing the id from the `ORDER BY`
+leaves it green, because SQLite returns rows in a stable scan order whether or not
+anything guarantees it. A test that cannot fail is worse than no test: it is a
+claim nobody will re-examine. The property is now pinned *structurally* — the
+compiled query's last ordering term has to be a unique column — and the
+behavioural test says plainly, in its own docstring, what it does not prove.
+
+Six mutations, all red.
 ## 2607.86.0 — The lists rebuild themselves, and ask before changing anything
 
 The two shipped lists are derived from evidence, and **the evidence moves**. IMDb
