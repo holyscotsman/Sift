@@ -1,0 +1,12 @@
+{
+  "name": "list_overrides",
+  "note": "Hand corrections. tools/canon/build_lists_from_imdb.py NEVER writes this file, so nothing here is lost when the generated lists are rebuilt.",
+  "always_recommend": {
+    "why": "Films that must be recommended even if the generated canon missed them, or the exclusion rule caught them. Give an imdb_id where you can — it resolves exactly. Title and year also work.",
+    "titles": []
+  },
+  "never_recommend": {
+    "why": "Films that must never be recommended even though they had a theatrical release. This is the only place a judgement call belongs; the generated lists are evidence-only.",
+    "titles": []
+  }
+}

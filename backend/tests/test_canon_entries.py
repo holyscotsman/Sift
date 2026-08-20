@@ -169,13 +169,14 @@ def test_coverage_reports_what_it_does_not_yet_know(factory, canon_file):
 
 
 def test_the_shipped_canon_file_is_the_one_that_was_validated(factory):
-    """The data file itself, not a fixture. Ten thousand entries, every one tiered,
-    no duplicate ids — the properties the validation pass established, checked
-    here so a corrupted or truncated file fails loudly rather than seeding a
-    quietly smaller canon."""
+    """The data file itself, not a fixture. Twenty-five thousand entries, every one
+    tiered, no duplicate ids — the properties the build establishes, checked here so
+    a corrupted or truncated file fails loudly rather than seeding a quietly smaller
+    canon. It is also what caught the 10k → 25k swap, which is the point: the size is
+    a fact about the shipped data, not a detail to be updated silently."""
     data = canon_entries.load_file()
     titles = data["titles"]
-    assert len(titles) == 10_000
+    assert len(titles) == 25_000
     assert data["version"]
     assert all(t.get("tier") in (1, 2, 3, 4) for t in titles)
     assert all(t.get("title") for t in titles)

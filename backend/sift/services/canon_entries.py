@@ -32,7 +32,7 @@ from ..db.models import CanonEntry, Movie, utcnow
 
 log = logging.getLogger("sift.canon")
 
-_DATA = Path(__file__).resolve().parent.parent / "data" / "canon_10k.json"
+_DATA = Path(__file__).resolve().parent.parent / "data" / "canon_25k.json"
 
 # Rows written per statement batch, matching the ingest writers.
 _CHUNK = 500

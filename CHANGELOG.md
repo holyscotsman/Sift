@@ -2,6 +2,48 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.66.0 — A 25,000-film canon, and an exclusion list built from evidence
+
+Two lists, both derived from public data, neither hand-authored.
+
+**The canon goes from 10,000 to 25,000.** Every original entry is carried over
+untouched — those came from Criterion, the cult canon, award records and the film
+registry, and no ranking of votes improves on them. The 15,000 new entries are
+IMDb features with at least 1,000 votes, ranked by weighted rating and tiered 2–4
+by fill rank, so they sit below the curated pillars rather than displacing them.
+
+The vote floor is a floor on **reach**, not quality. A poorly received theatrical
+release is in the list; it just ranks last. People watch bad films on purpose, and
+a recommender that silently deletes them is deciding something it was not asked to
+decide.
+
+**The exclusion list is 23,937 direct-to-video and made-for-TV releases** — the
+B-picture and C-picture end of the catalogue. Membership is a fact about how the
+film was released, recorded by IMDb at publication, not a judgement anyone made
+about whether it is any good. That distinction is the entire design: a
+hand-written list of "bad films" would have been one person's opinion wearing a
+data costume, and the one file in this repo that nothing could check.
+
+Two refinements came out of looking at what the first build actually caught,
+rather than from reasoning about it:
+
+- A **60-minute floor** on the canon. IMDb files hour-long documentaries and TV
+  specials as `movie`; the first build put a 57-minute documentary in the canon.
+- An **escape hatch** on the exclusions: rated 7.0+ with 25,000+ votes and it stays
+  recommendable. Without it the rule deleted 52 films people genuinely want —
+  Spielberg's *Duel*, *The Animatrix*, the DC animated features, the 1966 *Grinch*.
+
+`list_overrides.json` is the one place a judgement call belongs. The generator
+never writes it, so hand corrections survive a rebuild by construction.
+
+The size assertion in `test_canon_entries.py` caught the swap, which is what it is
+for — the shipped row count is a fact about the data, not a detail to update
+quietly.
+
+Documented in `docs/RECOMMEND_LIST.md` and `docs/EXCLUDE_LIST.md`. Rebuilt by
+`tools/canon/build_lists_from_imdb.py`, which needs only the standard library and
+two public downloads. Nothing is wired to the exclusion list yet.
+
 ## 2607.65.1 — Test the banner I shipped without one
 
 Tests only; no behaviour change.
