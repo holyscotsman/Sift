@@ -2,6 +2,39 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.78.0 — The fallback that carries a blocked scan
+
+`lib/scan.tsx` carried a comment explaining its own design:
+
+> A socket error/close is NOT the end — the poller below is the source of truth,
+> so progress still completes even if the WS is blocked.
+
+Nothing tested it. The file was at **22%**, and a websocket is the first thing a
+corporate proxy, a tunnel, or a hosted platform's edge will drop. If the fallback
+did not carry a scan on its own, the bar would sit still — which reads as a crash
+and gets reported as one.
+
+It does carry it, and there is now a pin that proves it: the socket opens, stays
+completely silent, and the scan still reaches 100% off the poller alone. The pin
+deliberately waits past the 1.5-second interval, because a shorter wait would be
+satisfied by the single immediate poll and prove nothing about the loop.
+
+Five more behaviours pinned, each one a way the panel could lie:
+
+* a transient poll failure does **not** end the scan — a free-tier instance waking
+  up returns errors for a few seconds, and treating one as terminal abandons a
+  scan that is running perfectly well;
+* the dial never goes backwards, because two sources write to the same number and
+  they do not agree moment to moment;
+* a terminal event ends the scan and names the error;
+* a phase goes active when its event arrives;
+* starting a scan while one is running joins it rather than racing a second one
+  against the same library — which matters because the wizard auto-starts one
+  silently and the dashboard button is right there.
+
+`scan.tsx` goes from 22% to **91%**; the frontend overall from 57% to **62%**.
+Six mutations, all red.
+
 ## 2607.77.0 — Proving it wasn't the form
 
 The original report was "why are my keys not being saved?". That turned out to be
