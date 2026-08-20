@@ -237,6 +237,38 @@ export interface CanonMissingResponse {
   requested_total: number;
 }
 
+// One film on the unified Missing list. `reasons` says why it is worth owning
+// — award, cult, criterion — and deliberately never says which list it came
+// from: the built-in list is meant to be invisible.
+export interface SuggestionItem {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  tier: number;
+  reasons: string[];
+  rating: number | null;
+  votes: number | null;
+}
+
+export interface SuggestionListResponse {
+  items: SuggestionItem[];
+  total: number;
+  // Subtracted from the list rather than absent from it.
+  requested_total: number;
+  ignored_total: number;
+}
+
+export interface IgnoredItem {
+  tmdb_id: number;
+  title: string;
+  source: string;
+}
+
+export interface IgnoredListResponse {
+  items: IgnoredItem[];
+  total: number;
+}
+
 export interface CanonRefreshResponse {
   canon_written: number;
   curator_added: number;

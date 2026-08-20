@@ -238,6 +238,19 @@ here so they are not re-litigated, not so they can be admired.
   SpongeBob is enormously famous and still does not need HD. Pinned by a test.
 - **Downgrades need the Sonarr write-back.** Without it the next search undoes
   them, which costs the picture and keeps the disk.
+- **Missing is one list, not one list per source.** It reads `canon_entries` and
+  subtracts what is owned, what has already been requested, and what has been
+  ignored. AI sources top the same list up rather than opening a second one.
+- **An ignore is stored against the film (`ignored_titles.tmdb_id`), never
+  against the canon row.** A reseed writes new row ids for the same films, so
+  row-keyed refusals would be resurrected by every list refresh. Pinned.
+- **Source count cannot rank the canon.** Measured: 24,417 of 25,000 entries
+  carry exactly one source, and tiers 3–4 carry one universally. Ranking by it
+  is a near-universal tie. Order stays `(tier, -votes, tmdb_id)`; source count
+  only becomes meaningful once AI sources can disagree with the local list.
+- **A Missing page costs two statements, pinned exactly.** All three subtractions
+  are `EXISTS` clauses inside the count and the page. Moving one into Python
+  costs exactly one more round trip, so a loose bound would not catch it.
 
 ---
 

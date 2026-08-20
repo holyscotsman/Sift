@@ -343,6 +343,31 @@ class MustHaveSuggestion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class IgnoredTitle(Base):
+    """A film the owner has said no to. Never suggested again, on any surface.
+
+    A *new table* rather than a column on ``canon_entries``, for the reason
+    recorded throughout this schema: ``create_all`` adds tables to a live database
+    and never adds columns. It is keyed on ``tmdb_id`` rather than on a canon row
+    because the same decision has to hold for a title that arrives later from a
+    different source — the owner said no to the *film*, not to one list's opinion
+    of it.
+
+    "Remembered forever" is a promise made to the *suggestion engine*: nothing in
+    here is ever proposed again, on any surface, by any source. It is not a
+    promise made against the owner — the ignored list is readable and a row can be
+    deleted — because a decision that cannot be reviewed is not a decision.
+    """
+
+    __tablename__ = "ignored_titles"
+
+    tmdb_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    title: Mapped[str] = mapped_column(String(512), default="")
+    # Where the refusal happened, for the audit trail — not used in any decision.
+    source: Mapped[str] = mapped_column(String(32), default="missing")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CanonMovie(Base):
     """The backend's internal canon of theatrical-scale films worth owning.
 

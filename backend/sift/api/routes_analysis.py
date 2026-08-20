@@ -10,9 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..ai import musthave
+from ..analysis import canon_missing as canon_missing_analysis
 from ..analysis import collections as coll_analysis
 from ..analysis import duplicates as dup_analysis
 from ..analysis import junk as junk_analysis
@@ -20,6 +22,7 @@ from ..analysis import recommend as recommend_analysis
 from ..analysis import scoring
 from ..analysis import upgrades as upgrade_analysis
 from ..config import Settings
+from ..db.models import IgnoredTitle
 from ..db.session import in_thread
 from ..services import canon, canon_entries, curated_lists, settings_store
 from .deps import AuthDep, get_session_factory, get_settings
@@ -32,6 +35,9 @@ from .schemas import (
     DuplicateCopyOut,
     DuplicateGroupOut,
     DuplicatesResponse,
+    IgnoredListResponse,
+    IgnoredOut,
+    IgnoreIn,
     JunkCandidate,
     JunkResponse,
     ListMovie,
@@ -43,6 +49,8 @@ from .schemas import (
     ShadowDiffResponse,
     ShadowDiffRow,
     SignalOut,
+    SuggestionListResponse,
+    SuggestionOut,
     UpgradeCandidateOut,
     UpgradesResponse,
 )
@@ -323,3 +331,106 @@ def list_duplicates(
         ],
         total_surplus=total_surplus,
     )
+
+
+@router.get("/missing/suggestions", response_model=SuggestionListResponse)
+def missing_suggestions(
+    tier: int | None = None,
+    limit: int = 60,
+    offset: int = 0,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> SuggestionListResponse:
+    """The one Missing list: films worth owning that you neither have, have asked
+    for, nor have said no to.
+
+    Deliberately paged rather than capped. The list behind it is tens of thousands
+    of titles deep, so the honest shape is "keep scrolling", not "here are the top
+    two hundred and that's all there is".
+
+    Provenance is reported as *reasons* — award, cult, criterion — and never as
+    "from the built-in list". The local list is meant to be invisible; naming it
+    would turn a recommendation into a citation.
+    """
+    with factory() as session:
+        rows, total = canon_missing_analysis.missing(
+            session, tier=tier, limit=max(1, min(limit, 200)), offset=max(0, offset)
+        )
+        counts = canon_missing_analysis.hidden(session)
+    return SuggestionListResponse(
+        items=[
+            SuggestionOut(
+                tmdb_id=r.tmdb_id,
+                title=r.title,
+                year=r.year,
+                tier=r.tier,
+                reasons=list(r.sources or []),
+                rating=r.rating,
+                votes=r.votes,
+            )
+            for r in rows
+        ],
+        total=total,
+        requested_total=counts["requested"],
+        ignored_total=counts["ignored"],
+    )
+
+
+@router.post("/missing/ignore", response_model=IgnoredOut)
+def ignore_title(
+    body: IgnoreIn,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> IgnoredOut:
+    """Say no to a film, permanently, on every surface.
+
+    Idempotent: saying no twice is not an error, and the second call must not
+    disturb the first one's timestamp — a double-click is not a new decision.
+    """
+    with factory() as session:
+        row = session.get(IgnoredTitle, body.tmdb_id)
+        if row is None:
+            row = IgnoredTitle(tmdb_id=body.tmdb_id, title=body.title, source=body.source)
+            session.add(row)
+            session.commit()
+        return IgnoredOut(tmdb_id=row.tmdb_id, title=row.title, source=row.source)
+
+
+@router.get("/missing/ignored", response_model=IgnoredListResponse)
+def list_ignored(
+    limit: int = 200,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> IgnoredListResponse:
+    """Everything you have said no to, most recent first.
+
+    "Remembered forever" is about the suggestion engine, not about the owner: a
+    decision that cannot be reviewed is not a decision, it is a black hole. The
+    list never resurfaces these titles on its own — this is the only place they
+    appear, and the only place they can be taken back.
+    """
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(IgnoredTitle)
+                .order_by(IgnoredTitle.created_at.desc(), IgnoredTitle.tmdb_id.asc())
+                .limit(max(1, min(limit, 1000)))
+            )
+        )
+        total = session.scalar(select(func.count()).select_from(IgnoredTitle)) or 0
+    return IgnoredListResponse(
+        items=[IgnoredOut(tmdb_id=r.tmdb_id, title=r.title, source=r.source) for r in rows],
+        total=total,
+    )
+
+
+@router.delete("/missing/ignore/{tmdb_id}")
+def unignore_title(
+    tmdb_id: int,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> dict[str, bool]:
+    """Take back a refusal. The title rejoins the list at its usual rank."""
+    with factory() as session:
+        row = session.get(IgnoredTitle, tmdb_id)
+        if row is None:
+            return {"removed": False}
+        session.delete(row)
+        session.commit()
+        return {"removed": True}

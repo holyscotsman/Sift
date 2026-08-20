@@ -22,7 +22,6 @@ const PROFILE = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(api, "missingRecommendations").mockResolvedValue({ items: [], note: null } as never);
 });
 
 describe("when the profile cannot be loaded", () => {

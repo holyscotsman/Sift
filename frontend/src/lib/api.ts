@@ -19,8 +19,9 @@ import type {
   ActionType,
   AskResponse,
   AuthStatus,
-  CanonMissingResponse,
-  ValidatedCanonResponse,
+  IgnoredItem,
+  IgnoredListResponse,
+  SuggestionListResponse,
   CanonRefreshResponse,
   ConnectionsResponse,
   DecisionsImportResult,
@@ -36,7 +37,6 @@ import type {
   ProfileResponse,
   ProfileWeights,
   RadarrOptions,
-  RecommendationsResponse,
   ResetResponse,
   ReviewRunResponse,
   ScanRun,
@@ -267,8 +267,6 @@ export const api = {
       PAGE_LOAD_TIMEOUT_MS,
     ),
   missingLists: () => request<MissingListsResponse>("/api/missing/lists"),
-  missingRecommendations: () =>
-    request<RecommendationsResponse>("/api/missing/recommendations"),
   mustHaveList: (status: "suggested" | "dismissed" = "suggested") =>
     request<MustHaveListResponse>(`/api/musthave?status=${status}`),
   mustHaveRun: (limit = 20) =>
@@ -368,33 +366,33 @@ export const api = {
   versionStatus: () => request<VersionStatus>("/api/system/version"),
   restart: () => request<RestartResponse>("/api/system/restart", { method: "POST" }, 20_000),
   update: () => request<UpdateResponse>("/api/system/update", { method: "POST" }, 40_000),
-  canonMissing: (limit = 500) =>
-    request<CanonMissingResponse>(
-      `/api/missing/canon?limit=${limit}`,
+  // The one Missing list: canon minus what you own, minus what you have asked
+  // for, minus what you have said no to. Paged rather than capped — the list
+  // behind it is tens of thousands deep, so "keep scrolling" is the honest shape.
+  suggestions: ({
+    tier,
+    limit = 60,
+    offset = 0,
+  }: { tier?: number | null; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (tier) params.set("tier", String(tier));
+    return request<SuggestionListResponse>(
+      `/api/missing/suggestions?${params.toString()}`,
       {},
       PAGE_LOAD_TIMEOUT_MS,
-    ),
-  requestCanonBatch: (tier: number, limit: number) =>
-    request<{
-      requested: number;
-      failed: number;
-      remaining: number;
-      dry_run: boolean;
-    }>("/api/musthave/canon/request", {
+    );
+  },
+  ignoreTitle: (tmdbId: number, title: string, source = "missing") =>
+    request<IgnoredItem>("/api/missing/ignore", {
       method: "POST",
-      body: JSON.stringify({ tier, limit }),
+      body: JSON.stringify({ tmdb_id: tmdbId, title, source }),
     }),
+  ignoredTitles: (limit = 200) =>
+    request<IgnoredListResponse>(`/api/missing/ignored?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
+  unignoreTitle: (tmdbId: number) =>
+    request<{ removed: boolean }>(`/api/missing/ignore/${tmdbId}`, { method: "DELETE" }),
   canonRefresh: () =>
     request<CanonRefreshResponse>("/api/missing/canon/refresh", { method: "POST" }),
-  // The validated ten-thousand-title canon, distinct from canonMissing above,
-  // which serves the smaller list Sift assembles for itself from TMDB charts.
-  validatedCanon: ({ tier, limit }: { tier?: number | null; limit?: number } = {}) => {
-    const params = new URLSearchParams();
-    if (tier) params.set("tier", String(tier));
-    if (limit) params.set("limit", String(limit));
-    const query = params.toString();
-    return request<ValidatedCanonResponse>(`/api/musthave/canon${query ? `?${query}` : ""}`);
-  },
 };
 
 // A short-lived, read-only credential for the URLs that cannot carry a header —

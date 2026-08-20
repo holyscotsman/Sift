@@ -113,6 +113,12 @@ export function RequestAllButton({
 
 // Poster card for a title you don't own: artwork links out to TMDB (the drawer
 // would 404 — the title isn't in the snapshot), with a Request button below.
+//
+// `onIgnore` adds the other half of the decision. A card that has been acted on
+// stays on screen, dimmed, rather than vanishing: on an endless list a card that
+// disappears under the cursor takes the next one's place, and the click that was
+// already on its way lands on something else entirely. It is gone from the next
+// load, which is where "remembered forever" actually lives.
 export function RequestCard({
   tmdbId,
   title,
@@ -120,6 +126,8 @@ export function RequestCard({
   subtitle,
   voteAverage,
   width = 108,
+  onIgnore,
+  onUndoIgnore,
 }: {
   tmdbId: number;
   title: string;
@@ -127,9 +135,41 @@ export function RequestCard({
   subtitle?: string;
   voteAverage?: number | null;
   width?: number;
+  onIgnore?: (tmdbId: number, title: string) => Promise<void>;
+  onUndoIgnore?: (tmdbId: number) => Promise<void>;
 }) {
+  const [ignored, setIgnored] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toastError = useToast();
+
+  async function ignore() {
+    if (!onIgnore) return;
+    setBusy(true);
+    try {
+      await onIgnore(tmdbId, title);
+      setIgnored(true);
+    } catch {
+      toastError(`Couldn't set “${title}” aside — it will still be suggested.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undo() {
+    if (!onUndoIgnore) return;
+    setBusy(true);
+    try {
+      await onUndoIgnore(tmdbId);
+      setIgnored(false);
+    } catch {
+      toastError(`Couldn't bring “${title}” back.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div style={{ width }}>
+    <div style={{ width }} className={ignored ? "opacity-40" : undefined}>
       <a
         href={tmdbMovieUrl(tmdbId)}
         target="_blank"
@@ -150,7 +190,29 @@ export function RequestCard({
         </p>
         {subtitle && <p className="truncate text-[10px] text-fg3/80">{subtitle}</p>}
       </a>
-      <RequestButton tmdbId={tmdbId} title={title} />
+      {ignored ? (
+        <button
+          onClick={() => void undo()}
+          disabled={busy || !onUndoIgnore}
+          className="mt-1 w-full rounded-md border border-line py-1 text-[11px] font-semibold text-fg3 hover:bg-bg2 disabled:opacity-70"
+        >
+          {busy ? "…" : "Not for me · undo"}
+        </button>
+      ) : (
+        <>
+          <RequestButton tmdbId={tmdbId} title={title} />
+          {onIgnore && (
+            <button
+              onClick={() => void ignore()}
+              disabled={busy}
+              aria-label={`Never suggest ${title} again`}
+              className="mt-1 w-full rounded-md border border-line py-1 text-[11px] font-semibold text-fg3 hover:bg-bg2 disabled:opacity-70"
+            >
+              {busy ? "…" : "Not for me"}
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }
