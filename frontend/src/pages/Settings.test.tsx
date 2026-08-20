@@ -77,3 +77,105 @@ describe("NEGATIVE CONTROL: credentials that are fine", () => {
     expect(screen.queryByText(/can no longer be read/i)).not.toBeInTheDocument();
   });
 });
+
+// The Account tab. At 11% coverage this whole screen was effectively untested —
+// including the panel that changes the password, which is the one place in the
+// app where wrong copy has a security consequence rather than a cosmetic one.
+
+async function openAccount() {
+  renderPage(<Settings />);
+  await userEvent.click(await screen.findByRole("button", { name: /^account$/i }));
+}
+
+describe("changing the password", () => {
+  it("says the other devices were signed out, because they were", async () => {
+    // Rotating the signing secret is the point of this feature: the reason
+    // anyone changes a password on a reachable instance is that they think
+    // someone else has access. The message used to say "your sessions stay
+    // signed in" — true of the old behaviour, and read as "nothing was revoked"
+    // by the one person who most needs to know that something was.
+    const change = vi
+      .spyOn(api, "changePassword")
+      .mockResolvedValue({ token: "new", username: "owner" } as never);
+
+    await openAccount();
+    await userEvent.type(screen.getByLabelText(/current password/i), "oldpassword");
+    await userEvent.type(screen.getByLabelText(/^new password/i), "newpassword");
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), "newpassword");
+    await userEvent.click(screen.getByRole("button", { name: /change password/i }));
+
+    expect(change).toHaveBeenCalledWith("oldpassword", "newpassword");
+    expect(await screen.findByText(/other device has been signed out/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sessions stay signed in/i)).not.toBeInTheDocument();
+  });
+
+  it("clears the fields so the new password is not left on screen", async () => {
+    vi.spyOn(api, "changePassword").mockResolvedValue({
+      token: "new",
+      username: "owner",
+    } as never);
+
+    await openAccount();
+    const current = screen.getByLabelText(/current password/i) as HTMLInputElement;
+    const next = screen.getByLabelText(/^new password/i) as HTMLInputElement;
+    await userEvent.type(current, "oldpassword");
+    await userEvent.type(next, "newpassword");
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), "newpassword");
+    await userEvent.click(screen.getByRole("button", { name: /change password/i }));
+
+    await screen.findByText(/signed out/i);
+    expect(current.value).toBe("");
+    expect(next.value).toBe("");
+  });
+
+  it("NEGATIVE CONTROL: mismatched confirmation never reaches the server", async () => {
+    // Caught in the browser rather than by a round trip — and, more to the point,
+    // a password nobody typed twice is a password nobody knows.
+    const change = vi.spyOn(api, "changePassword").mockResolvedValue({} as never);
+
+    await openAccount();
+    await userEvent.type(screen.getByLabelText(/current password/i), "oldpassword");
+    await userEvent.type(screen.getByLabelText(/^new password/i), "newpassword");
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), "different");
+    await userEvent.click(screen.getByRole("button", { name: /change password/i }));
+
+    expect(await screen.findByText(/don't match/i)).toBeInTheDocument();
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("NEGATIVE CONTROL: a short password never reaches the server", async () => {
+    const change = vi.spyOn(api, "changePassword").mockResolvedValue({} as never);
+
+    await openAccount();
+    await userEvent.type(screen.getByLabelText(/current password/i), "oldpassword");
+    await userEvent.type(screen.getByLabelText(/^new password/i), "short");
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), "short");
+    await userEvent.click(screen.getByRole("button", { name: /change password/i }));
+
+    expect(await screen.findByText(/needs 8\+ characters/i)).toBeInTheDocument();
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("reports a wrong current password instead of claiming success", async () => {
+    // The server answers 401 here. Showing the success message anyway would tell
+    // someone their password had changed when it had not — and they would find
+    // out at the worst possible moment, which is the next time they sign in.
+    vi.spyOn(api, "changePassword").mockRejectedValue(
+      new Error("current password is wrong"),
+    );
+
+    await openAccount();
+    await userEvent.type(screen.getByLabelText(/current password/i), "wrongpassword");
+    await userEvent.type(screen.getByLabelText(/^new password/i), "newpassword");
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), "newpassword");
+    await userEvent.click(screen.getByRole("button", { name: /change password/i }));
+
+    const message = await screen.findByText(/current password is wrong/i);
+    expect(message).toBeInTheDocument();
+    expect(screen.queryByText(/signed out/i)).not.toBeInTheDocument();
+    // Colour is the only thing that distinguishes the two outcomes at a glance,
+    // and the `ok` flag drives nothing else. A failure rendered in the success
+    // green is a failure most people would read straight past.
+    expect(message).toHaveStyle({ color: "var(--junk)" });
+  });
+});
