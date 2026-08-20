@@ -137,19 +137,25 @@ export function Missing() {
     setTotal((n) => n + 1);
   }, []);
 
-  async function refresh() {
+  // Find more films. TMDB discovery first, then whichever AI providers are
+  // connected — both extending the same list rather than opening another one.
+  async function findMore() {
     setRefreshing(true);
     setNote(null);
     try {
-      const r = await api.canonRefresh();
+      const r = await api.topup();
       setNote(
-        `Catalog refreshed — ${r.canon_written.toLocaleString()} titles in the catalog.`,
+        !r.ran
+          ? (r.note ?? "Nothing to do right now.")
+          : r.added > 0
+            ? `Found ${r.added.toLocaleString()} more — ${r.remaining.toLocaleString()} on the list.`
+            : "Nothing new this time. Try again to search further back.",
       );
       offsetRef.current = 0;
       setDone(false);
       await fetchPage(0, true);
     } catch {
-      toastError("The catalog refresh failed — check the TMDB connection.");
+      toastError("Couldn't look for more films — check the TMDB connection.");
     } finally {
       setRefreshing(false);
     }
@@ -223,11 +229,11 @@ export function Missing() {
           </p>
         </div>
         <button
-          onClick={() => void refresh()}
+          onClick={() => void findMore()}
           disabled={refreshing}
           className="gradient-fill shrink-0 rounded-pill px-4 py-1.5 text-sm font-bold shadow-glow disabled:opacity-60"
         >
-          {refreshing ? "Refreshing catalog…" : "Refresh catalog"}
+          {refreshing ? "Looking…" : "Find more"}
         </button>
       </div>
 
@@ -284,14 +290,14 @@ export function Missing() {
           <div className="panel">
             <EmptyState
               title="Nothing left on this list"
-              hint="Either the catalog hasn't been built yet, or you own — or have decided about — everything in it. Refresh rebuilds the catalog and compares it against your Plex library again."
+              hint="Either you own — or have decided about — everything on the list, or a scan hasn't run yet. Finding more asks TMDB, and any AI you have connected, for films past the ones Sift ships with."
               action={
                 <button
-                  onClick={() => void refresh()}
+                  onClick={() => void findMore()}
                   disabled={refreshing}
                   className="gradient-fill rounded-md px-4 py-2 text-sm font-bold shadow-glow disabled:opacity-60"
                 >
-                  {refreshing ? "Refreshing…" : "Build the catalog"}
+                  {refreshing ? "Looking…" : "Find more films"}
                 </button>
               }
             />

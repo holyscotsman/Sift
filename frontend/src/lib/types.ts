@@ -258,6 +258,16 @@ export interface SuggestionListResponse {
   ignored_total: number;
 }
 
+export interface TopupResult {
+  added: number;
+  remaining: number;
+  // False when nothing was attempted — no TMDB, or the list is still deep enough
+  // that spending API budget would buy nothing. `note` says which.
+  ran: boolean;
+  considered: number;
+  note: string | null;
+}
+
 export interface IgnoredItem {
   tmdb_id: number;
   title: string;

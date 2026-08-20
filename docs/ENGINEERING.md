@@ -248,6 +248,18 @@ here so they are not re-litigated, not so they can be admired.
   carry exactly one source, and tiers 3–4 carry one universally. Ranking by it
   is a near-universal tie. Order stays `(tier, -votes, tmdb_id)`; source count
   only becomes meaningful once AI sources can disagree with the local list.
+- **Top-ups write into `canon_entries`, never into a table of their own.** One
+  list, one ranking, one set of subtractions. A second table needs its own
+  paging, ignore handling and ordering — three chances to disagree.
+- **Theatrical is a TMDB query parameter, not a post-filter.**
+  `with_release_type=3|2` and `with_runtime.gte=60` state the owner's rule at the
+  source: a theatrical release counts however bad it was, direct-to-video does
+  not, and shorts never arrive at all.
+- **Exclusion matching is asymmetric on purpose.** An IMDb id decides alone; a
+  title-and-year match is only the fallback for candidates that arrive without
+  one. Falling through would let a different film answer for this one.
+- **AI proposes, TMDB and the gates decide.** `musthave.gated_candidates` is the
+  single seam for "an AI named some films, now verify them". Do not add a second.
 - **A Missing page costs two statements, pinned exactly.** All three subtractions
   are `EXISTS` clauses inside the count and the page. Moving one into Python
   costs exactly one more round trip, so a loose bound would not catch it.

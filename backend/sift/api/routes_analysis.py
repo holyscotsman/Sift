@@ -51,6 +51,7 @@ from .schemas import (
     SignalOut,
     SuggestionListResponse,
     SuggestionOut,
+    TopupResponse,
     UpgradeCandidateOut,
     UpgradesResponse,
 )
@@ -434,3 +435,31 @@ def unignore_title(
         session.delete(row)
         session.commit()
         return {"removed": True}
+
+
+@router.post("/missing/topup", response_model=TopupResponse)
+async def missing_topup(
+    force: bool = True,
+    factory: sessionmaker[Session] = Depends(get_session_factory),
+    settings: Settings = Depends(get_settings),
+) -> TopupResponse:
+    """Extend the Missing list past the list that ships with Sift.
+
+    TMDB discovery first, then whichever AI providers are connected — both
+    writing into the same table the built-in list uses, so this makes the one
+    list longer rather than opening a second one.
+
+    ``force`` defaults to true because this endpoint exists to be pressed: a
+    person asking for more titles has already decided the list is short enough.
+    Scheduled callers pass false and get the low-water check instead.
+    """
+    from ..services import topup as topup_service
+
+    result = await topup_service.topup(factory, settings, force=force)
+    return TopupResponse(
+        added=int(result["added"]),
+        remaining=int(result["remaining"]),
+        ran=bool(result["ran"]),
+        considered=int(result.get("considered") or 0),
+        note=result.get("note"),
+    )
