@@ -310,6 +310,53 @@ describe("setting a title aside", () => {
   });
 });
 
+describe("bringing a film back from Set aside", () => {
+  it("reloads the Movies list so the film reappears in it", async () => {
+    // Switching tabs does not remount this page, so nothing reloads on its own.
+    // A restored film rejoins the list at its usual rank and its counts move —
+    // and the first version of this clearing `items` without a reload trigger
+    // would have left the Movies tab permanently, silently empty.
+    const suggestions = vi
+      .spyOn(api, "suggestions")
+      .mockResolvedValue(page([{ id: 603, title: "The Matrix" }], 1) as never);
+    vi.spyOn(api, "ignoredTitles").mockResolvedValue({
+      items: [{ tmdb_id: 604, title: "Stalker", source: "missing" }],
+      total: 1,
+    } as never);
+    vi.spyOn(api, "unignoreTitle").mockResolvedValue({ removed: true } as never);
+
+    renderPage(<Missing />);
+    await screen.findByText(/The Matrix/);
+    expect(suggestions).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole("tab", { name: /set aside/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /suggest Stalker again/i }));
+
+    await userEvent.click(screen.getByRole("tab", { name: /^movies$/i }));
+    await waitFor(() => expect(suggestions).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/The Matrix/)).toBeInTheDocument();
+  });
+
+  it("NEGATIVE CONTROL: opening the tab and leaving does not reload anything", async () => {
+    // A page that refetched on every tab switch would pass the test above while
+    // spending a request each time someone looked at a different tab.
+    const suggestions = vi
+      .spyOn(api, "suggestions")
+      .mockResolvedValue(page([{ id: 603, title: "The Matrix" }], 1) as never);
+    vi.spyOn(api, "ignoredTitles").mockResolvedValue({ items: [], total: 0 } as never);
+
+    renderPage(<Missing />);
+    await screen.findByText(/The Matrix/);
+
+    await userEvent.click(screen.getByRole("tab", { name: /set aside/i }));
+    await screen.findByText(/Nothing set aside/i);
+    await userEvent.click(screen.getByRole("tab", { name: /^movies$/i }));
+    await screen.findByText(/The Matrix/);
+
+    expect(suggestions).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("looking for more films", () => {
   it("extends the list and reloads it from the top", async () => {
     // Scrolled past the first page before pressing the button, which is the only
