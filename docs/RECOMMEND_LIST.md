@@ -140,3 +140,41 @@ lose a film for ever.
 IMDb Datasets — <https://datasets.imdbws.com/> (`title.basics`, `title.ratings`).
 Free for personal and non-commercial use. Not affiliated with IMDb. Criterion and
 cult membership from Wikipedia (CC BY-SA).
+
+## Keeping it current
+
+The evidence moves. IMDb publishes fresh dataset dumps daily, films get released,
+and a vote count that was thin two years ago is not thin now. A list built once
+and never rebuilt is a snapshot of whenever somebody last remembered to run the
+script.
+
+`.github/workflows/refresh-lists.yml` rebuilds both lists monthly and **opens a
+draft pull request** with a readable summary — what came in, what went out, what
+moved tier, and whether metadata coverage held. It never commits to `main`: these
+files ship inside the product, a rebuild can drop a title that was there last
+time, and a robot changing 7 MB of JSON is exactly the change that wants a person
+to look at it.
+
+The rebuilt files have to pass the same tests as the shipped ones before the PR
+opens — entry count, every entry tiered, ids unique, metadata coverage, and the
+invariant that the two lists never overlap by IMDb id.
+
+It can also be run on demand from the Actions tab, and by hand:
+
+```bash
+python tools/canon/build_lists_from_imdb.py \
+  --basics title.basics.tsv.gz --ratings title.ratings.tsv.gz \
+  --crew title.crew.tsv.gz --names name.basics.tsv.gz
+
+python tools/canon/diff_lists.py \
+  --old /path/to/previous/canon_25k.json \
+  --new backend/sift/data/canon_25k.json --label "Recommendation list"
+```
+
+**The generator is deterministic**: the same inputs produce the same files, so
+anything the diff reports is a change in the evidence rather than in the rules.
+
+`list_overrides.json` is the other half of the loop and the one place a judgement
+call belongs. The generator never writes it, this workflow never touches it, and a
+correction put there survives every rebuild. If the summary shows something
+dropped that should not have been, that is where to put it back.
