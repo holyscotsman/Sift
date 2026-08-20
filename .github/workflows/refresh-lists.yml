@@ -1,0 +1,136 @@
+# Rebuild the two shipped lists from fresh IMDb data and open a PR with the diff.
+#
+# The lists are derived from evidence, and the evidence moves: IMDb publishes new
+# dataset dumps daily, films get released, vote counts settle, and a rating that
+# was thin two years ago is not thin now. A list built once and never rebuilt is a
+# snapshot of whenever somebody last remembered to run the script.
+#
+# **It opens a pull request; it never commits to main.** The generated files are
+# data that ships inside the product, a rebuild can drop a title that was there
+# last time, and "a robot changed 7 MB of JSON" is exactly the change that needs a
+# person to look at it. The PR body carries a readable summary — added, removed,
+# retiered, and whether metadata coverage held — so looking at it is a minute's
+# work rather than an impossible diff.
+#
+# Hand corrections live in `list_overrides.json`, which the generator never
+# writes and this workflow never touches. That is the other half of the loop: the
+# machine proposes from evidence, a person corrects by hand, and the correction
+# survives every rebuild.
+name: refresh-lists
+
+on:
+  schedule:
+    # Monthly. The inputs move daily but the *output* barely does — a weekly run
+    # would mostly open PRs that say "nothing changed" and train everyone to
+    # ignore them.
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Keep the current lists for comparison
+        run: |
+          mkdir -p /tmp/previous
+          cp backend/sift/data/canon_25k.json /tmp/previous/
+          cp backend/sift/data/exclude_list.json /tmp/previous/
+
+      - name: Fetch IMDb datasets
+        run: |
+          mkdir -p /tmp/imdb
+          for f in title.basics title.ratings title.crew name.basics; do
+            curl -sSf --retry 3 --retry-delay 5 --max-time 900 \
+              -o "/tmp/imdb/$f.tsv.gz" "https://datasets.imdbws.com/$f.tsv.gz"
+          done
+          ls -la /tmp/imdb
+
+      - name: Rebuild both lists
+        run: |
+          python tools/canon/build_lists_from_imdb.py \
+            --basics /tmp/imdb/title.basics.tsv.gz \
+            --ratings /tmp/imdb/title.ratings.tsv.gz \
+            --crew /tmp/imdb/title.crew.tsv.gz \
+            --names /tmp/imdb/name.basics.tsv.gz \
+            | tee /tmp/build.log
+
+      - name: Check whether anything actually changed
+        id: changed
+        run: |
+          if git diff --quiet -- backend/sift/data/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Lists are unchanged — nothing to propose."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarise the change
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          {
+            echo "Rebuilt from IMDb's datasets. The generator is deterministic:"
+            echo "the same inputs produce the same files, so everything below is a"
+            echo "change in the *evidence*, not in the code."
+            echo
+            python tools/canon/diff_lists.py \
+              --old /tmp/previous/canon_25k.json \
+              --new backend/sift/data/canon_25k.json \
+              --label "Recommendation list"
+            echo
+            python tools/canon/diff_lists.py \
+              --old /tmp/previous/exclude_list.json \
+              --new backend/sift/data/exclude_list.json \
+              --label "Exclusion list"
+            echo
+            echo "### Build output"
+            echo
+            echo '```'
+            cat /tmp/build.log
+            echo '```'
+            echo
+            echo "---"
+            echo
+            echo "Hand corrections in \`list_overrides.json\` are untouched by the"
+            echo "generator and survive this rebuild. If something above was dropped"
+            echo "and should not have been, that file is where to put it back."
+          } > /tmp/pr-body.md
+          cat /tmp/pr-body.md
+
+      # The tests are the gate that matters here: they pin the entry count, that
+      # every entry is tiered, that ids are unique, that metadata coverage holds,
+      # and that the two lists never overlap by id. A rebuild that breaks any of
+      # those should fail loudly rather than open a tidy-looking PR.
+      - name: Verify the rebuilt lists
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pytest backend/tests/test_canon_entries.py backend/tests/test_exclusions.py -q
+
+      - name: Open a pull request
+        if: steps.changed.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/refresh-lists
+          base: main
+          title: "Refresh the shipped lists from current IMDb data"
+          body-path: /tmp/pr-body.md
+          commit-message: |
+            Refresh the shipped lists from current IMDb data
+
+            Regenerated by tools/canon/build_lists_from_imdb.py against the
+            current IMDb dataset dumps. The generator is unchanged, so every
+            difference is a change in the evidence rather than in the rules.
+          add-paths: backend/sift/data/
+          delete-branch: true
+          draft: true

@@ -2,6 +2,36 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.86.0 — The lists rebuild themselves, and ask before changing anything
+
+The two shipped lists are derived from evidence, and **the evidence moves**. IMDb
+publishes fresh dataset dumps daily, films get released, vote counts settle, and a
+rating that was thin two years ago is not thin now. A list built once and never
+rebuilt is a snapshot of whenever somebody last remembered to run the script.
+
+`.github/workflows/refresh-lists.yml` now rebuilds both lists monthly.
+
+**It opens a draft pull request; it never commits to `main`.** These files ship
+inside the product, a rebuild can drop a title that was on the list last time, and
+"a robot changed 7 MB of JSON" is exactly the change that wants a person to look
+at it. The rebuilt files also have to pass the same tests as the shipped ones
+before the PR opens — entry count, every entry tiered, ids unique, metadata
+coverage, and the invariant that the two lists never overlap by IMDb id.
+
+A 25,000-entry JSON diff is unreadable, so `tools/canon/diff_lists.py` writes the
+PR body instead: what came in, what went out, what moved tier, and whether
+metadata coverage held, with the most-voted examples of each. Dropped titles are
+called out specifically, since anything there was on the list last time and its
+removal is the change most likely to be wrong.
+
+The generator is deterministic — the same inputs produce the same files — so
+anything the summary reports is a change in the *evidence* rather than in the
+rules. Verified by rebuilding twice from the same dumps and getting no diff.
+
+`list_overrides.json` is the other half of the loop and the one place a judgement
+call belongs. The generator never writes it, the workflow never touches it, and a
+correction put there survives every rebuild. That is the whole shape: the machine
+proposes from evidence, a person corrects by hand, and the correction sticks.
 ## 2607.85.0 — A README that describes the app that exists
 
 The README still described Sift as reading "Plex + Radarr (plus Tautulli + TMDB)"
