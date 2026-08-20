@@ -295,3 +295,79 @@ async def test_the_running_total_is_re_measured_after_an_eviction(
     assert await cache.get(4) is not None
     assert cache.cached(4) is not None
     assert cache.stats()[0] == 2
+
+
+async def test_a_canon_poster_needs_no_tmdb_lookup(settings, factory, tmp_path):
+    """The Missing page is entirely titles you do not own.
+
+    None of them has a `movies` row, so every thumbnail fell through to a live
+    TMDB lookup — one network round trip per poster, on a page that shows thirty
+    at once and can show five hundred. The path was in the database the whole
+    time: the canon refresh stores `canon_movies.poster_path` for exactly these
+    titles, and nothing read it. It could not even be cached back into `movies`
+    afterwards, because there is no row to write it to — so the lookup repeated
+    every time the image cache went cold, which on an ephemeral disk is every
+    redeploy.
+    """
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+
+    with factory() as session:
+        # Canon only: no Movie row, which is the whole point.
+        session.add(
+            CanonMovie(tmdb_id=27205, title="Inception", year=2010, poster_path="/canon.jpg")
+        )
+        session.commit()
+
+    lookups: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "api.themoviedb.org" in str(request.url):
+            lookups.append(str(request.url))
+            return httpx.Response(200, json={"poster_path": "/resolved.jpg"})
+        return httpx.Response(200, content=_JPEG, headers={"content-type": "image/jpeg"})
+
+    cache = PosterCache(settings, factory, transport=httpx.MockTransport(handler))
+    path = await cache.get(27205)
+
+    assert path is not None and path.read_bytes() == _JPEG
+    assert not lookups, f"asked TMDB for a poster path it already had: {lookups}"
+
+
+async def test_an_owned_poster_still_wins_over_the_canon_one(settings, factory, tmp_path):
+    """NEGATIVE CONTROL: the library's own artwork is the better answer.
+
+    A film you own may have a poster from Radarr or a healed TMDB URL, and the
+    canon's copy is a fallback for titles that have no row of their own — not a
+    replacement for one that does.
+    """
+    from sift.db.models import CanonMovie
+
+    settings.posters.cache_dir = tmp_path
+    settings.tmdb.enabled = True
+    settings.tmdb.api_key = SecretStr("k")
+
+    with factory() as session:
+        session.add(
+            Movie(
+                tmdb_id=603,
+                title="The Matrix",
+                in_plex=True,
+                poster_url="https://image.tmdb.org/t/p/w342/owned.jpg",
+            )
+        )
+        session.add(CanonMovie(tmdb_id=603, title="The Matrix", poster_path="/canon.jpg"))
+        session.commit()
+
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(200, content=_JPEG, headers={"content-type": "image/jpeg"})
+
+    cache = PosterCache(settings, factory, transport=httpx.MockTransport(handler))
+    assert await cache.get(603) is not None
+    assert any("owned.jpg" in url for url in asked), f"fetched the wrong artwork: {asked}"

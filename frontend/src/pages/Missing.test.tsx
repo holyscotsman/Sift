@@ -75,3 +75,28 @@ describe("NEGATIVE CONTROL: a genuinely empty catalog", () => {
     expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
   });
 });
+
+describe("when the request never comes back", () => {
+  it("gives up and offers a retry instead of spinning for ever", async () => {
+    // What the owner reported as "the Missing page times out". Without a bound
+    // the page has no way to distinguish a slow answer from no answer, so it
+    // shows the loading state until the tab is closed. A sleeping free-tier
+    // instance takes about thirty seconds to wake, so the bound is generous —
+    // what it catches is the case with no end.
+    const { PAGE_LOAD_TIMEOUT_MS } = await import("@/lib/api");
+    vi.useFakeTimers();
+    vi.spyOn(api, "canonMissing").mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          setTimeout(() => reject(new Error("timed out")), PAGE_LOAD_TIMEOUT_MS);
+        }),
+    );
+
+    renderPage(<Missing />);
+    await vi.advanceTimersByTimeAsync(PAGE_LOAD_TIMEOUT_MS + 100);
+    vi.useRealTimers();
+
+    expect(await screen.findByText(/timed out/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
+});

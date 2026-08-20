@@ -20,11 +20,12 @@ import logging
 from pathlib import Path
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..clients.tmdb import TmdbClient
 from ..config import Settings
-from ..db.models import Movie
+from ..db.models import CanonMovie, Movie
 
 log = logging.getLogger("sift.posters")
 
@@ -86,8 +87,31 @@ class PosterCache:
     # -------------------------------------------------------------------- resolve
 
     def _stored_url(self, tmdb_id: int) -> str | None:
+        """A poster URL we already hold, from either table that can hold one.
+
+        The Missing page is entirely titles you do *not* own, so none of them has
+        a ``movies`` row and every thumbnail fell through to a live TMDB lookup —
+        one network round trip per poster, on a page that shows thirty at once.
+        The path was already in the database the whole time: the canon refresh
+        stores ``canon_movies.poster_path`` for exactly these titles. Nothing was
+        reading it.
+
+        It cannot be cached back into ``movies`` either, for the same reason —
+        there is no row to write it to — so without this the lookup repeated
+        every time the image cache went cold, which on an ephemeral disk is every
+        redeploy.
+        """
         with self._factory() as session:
             movie = session.get(Movie, tmdb_id)
+            if movie is not None and movie.poster_url:
+                return movie.poster_url
+            path = session.scalar(
+                select(CanonMovie.poster_path).where(CanonMovie.tmdb_id == tmdb_id)
+            )
+            if path:
+                if path.startswith(("http://", "https://")):
+                    return path
+                return f"{_TMDB_IMG_BASE}{path}"
             return movie.poster_url if movie else None
 
     async def _tmdb_url(self, tmdb_id: int, *, heal: bool = False) -> str | None:

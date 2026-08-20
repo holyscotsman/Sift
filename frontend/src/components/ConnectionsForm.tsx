@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { Connections, ServiceHealth } from "@/lib/types";
+import type { Connections, ConnectionsResponse, ServiceHealth } from "@/lib/types";
 
 // AI engine modes: tandem uses both providers (local drafts, Claude refines);
 // the other two pin all AI work to a single provider.
@@ -121,7 +121,10 @@ export function ConnectionsForm({
 }: {
   specs?: ServiceSpec[];
   initial: Connections;
-  onSaved?: (c: Connections) => void;
+  // The whole response, not just the connections: the caller needs the
+  // unreadable-secret map too, and clearing that wholesale on any save would
+  // hide services the owner has not re-entered yet.
+  onSaved?: (res: ConnectionsResponse) => void;
   // Fired once, the moment both Plex and Radarr have tested green — their values are
   // auto-saved so the caller (the wizard) can start the first scan in the background.
   onEssentialsReady?: () => void;
@@ -167,7 +170,7 @@ export function ConnectionsForm({
         delete n[spec.key];
         return n;
       });
-      onSaved?.(res.connections);
+      onSaved?.(res);
     } finally {
       setConfirmClear(null);
     }
@@ -253,7 +256,7 @@ export function ConnectionsForm({
       const res = await api.saveConfig(connections);
       setSaved(true);
       setVals({}); // clear typed secrets; saved state now reflects *_set flags
-      onSaved?.(res.connections);
+      onSaved?.(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save.");
     } finally {
