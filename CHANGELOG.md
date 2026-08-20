@@ -2,6 +2,31 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.88.0 — The TV list, at 2%
+
+`ShowsList` is read-only, so nothing in it can delete a file. It is also the only
+place the app states a number about television, and a wrong number is worse than
+no number — somebody deciding what to remove reads "4.2 TB" and acts on it.
+
+Pinned: the summary adds up episodes from what arrived but takes the shelf's size
+and count from the server, which is the distinction between "this page" and "your
+library"; a failure says so rather than rendering an empty shelf, because an empty
+TV list means *you own no television* and that is a completely different statement
+from *the server did not answer*; sorting and filtering ask the server rather than
+reordering the page in place; "last watched" sorts newest-first, since ascending
+would put the shows nobody has touched in years at the top of it; and a show
+nobody has ever played reads **never** rather than "0 plays".
+
+**The first version of the fixture was wrong, and every test passed anyway.** It
+invented `episode_file_count`, `size_on_disk` and `quality` — none of which the
+component reads — so every row rendered its size as "—" and its season count as
+`undefined`, and seven green tests said nothing about any of it. The fixture now
+matches `ShowSummary` field for field. A fixture that does not match the type is a
+test of nothing in particular, and it is green, which is the dangerous part.
+
+`ShowsList.tsx` goes from 1.9% to **94.4%**; the frontend overall to 65.8%. Six
+mutations, all red.
+
 ## 2607.87.0 — Walking the whole thing once, as a person would
 
 Every part of the Missing feature was tested. The lists have their own pins, the
