@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.77.0 — Proving it wasn't the form
+
+The original report was "why are my keys not being saved?". That turned out to be
+a server-side decryption problem — the key that decrypts stored secrets had
+changed — and `ConnectionsForm` was never the cause. But it was at **38%**
+coverage, and it is the only thing standing between a typed key and the database,
+so "it wasn't the form" was a guess wearing the clothes of a conclusion.
+
+It is a fact now: **82%**, with the save path pinned end to end.
+
+The behaviour guarded hardest is the **blank field**. Blank means *keep what is
+stored*, because a saved secret comes back masked and there is nothing to
+re-type. Get that backwards and editing the Plex URL silently wipes the Plex
+token and the TMDB key sitting untouched beside it — which, from the outside, is
+indistinguishable from keys that were never saved at all. The mutation that sends
+blanks for everything now turns that pin red.
+
+Also pinned: typed secrets are dropped from component state after a save (the
+fields re-render from the masked server response, so anything left behind is a
+copy of a secret with no reason to exist); a failed save says so instead of
+showing "Saved ✓"; Clear sends explicit empty strings, which is the one path
+where an empty string is the message rather than the absence of one; and a Test
+request that throws is reported rather than leaving the button in its resting
+state, since the reading most people take from silence is "fine".
+
+Six mutations, all red. Frontend overall 55% → 57%.
+
 ## 2607.76.0 — The password screen was telling you the opposite of the truth
 
 I had measured backend coverage but never the frontend. It is 51%, against the
