@@ -24,6 +24,7 @@ export const SCAN_PHASES: { key: string; label: string }[] = [
   { key: "tautulli", label: "Pulling Tautulli history" },
   { key: "tmdb", label: "Grabbing TMDB metadata" },
   { key: "finalize", label: "Finalizing snapshot" },
+  { key: "affinity", label: "Ranking recommendations" },
   { key: "score", label: "Scoring library" },
   { key: "topup", label: "Topping up the Missing list" },
   { key: "ai", label: "AI analysis" },

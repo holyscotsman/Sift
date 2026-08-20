@@ -145,6 +145,7 @@ export function RequestCard({
   title,
   year,
   subtitle,
+  reason,
   voteAverage,
   width = 108,
   onIgnore,
@@ -154,6 +155,10 @@ export function RequestCard({
   title: string;
   year: number | null;
   subtitle?: string;
+  // Why this film is being suggested, in a sentence. Wraps rather than truncates:
+  // a reason cut off at "You own 3 films by Aki…" is worse than no reason, because
+  // the whole point of showing it is that the person can check whether it is true.
+  reason?: string;
   voteAverage?: number | null;
   width?: number;
   onIgnore?: (tmdbId: number, title: string) => Promise<void>;
@@ -210,6 +215,11 @@ export function RequestCard({
           {title} {year ? `· ${year}` : ""}
         </p>
         {subtitle && <p className="truncate text-[10px] text-fg3/80">{subtitle}</p>}
+        {reason && (
+          <p className="mt-0.5 text-[10px] leading-snug" style={{ color: "var(--accent)" }}>
+            {reason}
+          </p>
+        )}
       </a>
       {ignored ? (
         <button

@@ -368,6 +368,72 @@ class IgnoredTitle(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class CanonMetadata(Base):
+    """What the canon knows about a film: genres, runtime, who directed it.
+
+    A *new table* rather than columns on ``canon_entries``, for the reason
+    recorded throughout this schema: ``create_all`` adds tables on a live
+    database and never adds columns.
+
+    Keyed on ``imdb_id`` rather than on a ``canon_entries`` row, because that is
+    the key the data arrives under and the key it stays true under. The same
+    three facts about *Seven Samurai* are the same three facts whether the row
+    that needs them came from Criterion, from the cult list, or from a rebuild
+    six months from now — tying them to one entry's id would mean re-deriving
+    them every time the canon is reseeded.
+
+    Every field is nullable and none is load-bearing. IMDb records no genres for
+    360 of the shipped entries and no director for a few hundred more, so a
+    consumer that assumes these are present is a consumer that breaks on
+    experimental cinema.
+    """
+
+    __tablename__ = "canon_metadata"
+
+    imdb_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # IMDb's own genre vocabulary ("Sci-Fi", not TMDB's "Science Fiction").
+    # Normalising happens where they are compared, not where they are stored:
+    # storing them as they arrived keeps the row traceable to its source line.
+    genres: Mapped[list[str]] = mapped_column(JSON, default=list)
+    runtime: Mapped[int | None] = mapped_column(Integer)
+    # At most three. Anthology films list every segment's director and past a
+    # handful that stops being an answer to "who made this".
+    directors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    file_version: Mapped[str | None] = mapped_column(String(32))
+
+
+class CanonAffinity(Base):
+    """How many reasons there are to suggest a canon film to *this* owner.
+
+    A *new table* rather than a column on ``canon_entries``, for the usual reason:
+    ``create_all`` adds tables on a live database and never adds columns.
+
+    Recomputed from scratch on every scan rather than updated in place, because
+    the inputs move underneath it — buying two more films by one director changes
+    the score of everything else that director made, and there is no cheap way to
+    know which rows those are. A full rewrite of twenty-five thousand small rows
+    is one bulk statement per five hundred; working out the delta would cost more
+    than it saved.
+
+    The score is arithmetic over stored rows and nothing else. No model is
+    consulted, which is why the same library always produces the same list.
+    """
+
+    __tablename__ = "canon_affinity"
+
+    imdb_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # Indexed because it is the Missing list's primary sort key.
+    score: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    # The words behind the score, stored rather than re-derived. Deriving them at
+    # read time meant two aggregate statements against the library on every page
+    # of an endless list, which the statement-count pins caught immediately.
+    # Stored, they cost sixty short JSON blobs per page and always agree with the
+    # score sitting beside them — a fresh reason attached to a stale score would
+    # be the worse kind of wrong.
+    reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CanonMovie(Base):
     """The backend's internal canon of theatrical-scale films worth owning.
 

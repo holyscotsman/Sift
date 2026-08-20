@@ -28,7 +28,16 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..db.models import Action, ActionStatus, ActionType, CanonEntry, IgnoredTitle, Movie
+from ..db.models import (
+    Action,
+    ActionStatus,
+    ActionType,
+    CanonAffinity,
+    CanonEntry,
+    CanonMetadata,
+    IgnoredTitle,
+    Movie,
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +51,13 @@ class CanonMissing:
     spine: int | None
     rating: float | None
     votes: int | None
+    genres: list[str]
+    runtime: int | None
+    directors: list[str]
+    # Why this film, in words. Derived from the same arithmetic as the sort key,
+    # and carried on the row because a recommendation nobody can explain is one
+    # nobody trusts.
+    reasons: list[str]
 
 
 def _owned() -> ColumnElement[bool]:
@@ -142,7 +158,14 @@ def missing(
     Source count is *not* in the ranking, and that is a measurement rather than an
     oversight: 24,417 of the 25,000 shipped entries carry exactly one source, so
     ranking by it would be a near-universal tie broken by whatever came next.
-    Tier already encodes the same judgement with usable resolution.
+
+    What ranks instead is ``CanonAffinity.score`` — the weight of the reasons to
+    suggest this film to *this* owner, counted from the library by
+    ``analysis/affinity.py`` and stored per entry at scan time. Tier is folded
+    into that score rather than left as the primary key, so a film by a director
+    the owner clearly loves can outrank a canon title they have shown no interest
+    in. Tier remains the first tiebreak, so the ordering is unchanged for a
+    library that has nothing to say yet.
     """
     conditions: list[ColumnElement[bool]] = [
         CanonEntry.tmdb_id.is_not(None),
@@ -164,11 +187,18 @@ def missing(
         if with_total
         else None
     )
+    # One statement, three tables. The metadata join is what puts genres and a
+    # director on the card; the affinity join is what decides the order. Both are
+    # outer joins because both are allowed to be missing — an entry IMDb records
+    # nothing about still belongs on the list, ranked on its tier alone.
     page = list(
-        session.scalars(
-            select(CanonEntry)
+        session.execute(
+            select(CanonEntry, CanonMetadata, CanonAffinity.reasons)
+            .outerjoin(CanonMetadata, CanonMetadata.imdb_id == CanonEntry.imdb_id)
+            .outerjoin(CanonAffinity, CanonAffinity.imdb_id == CanonEntry.imdb_id)
             .where(*conditions)
             .order_by(
+                CanonAffinity.score.desc().nulls_last(),
                 CanonEntry.tier.asc(),
                 CanonEntry.votes.desc().nulls_last(),
                 CanonEntry.tmdb_id.asc(),
@@ -189,11 +219,16 @@ def missing(
                 spine=row.spine,
                 rating=row.rating,
                 votes=row.votes,
+                genres=list(meta.genres or []) if meta else [],
+                runtime=meta.runtime if meta else None,
+                directors=list(meta.directors or []) if meta else [],
+                reasons=list(reasons or []),
             )
-            for row in page
+            for row, meta, reasons in page
         ],
         total,
     )
+
 
 
 def hidden(session: Session) -> dict[str, int]:

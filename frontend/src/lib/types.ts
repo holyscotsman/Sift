@@ -237,9 +237,12 @@ export interface CanonMissingResponse {
   requested_total: number;
 }
 
-// One film on the unified Missing list. `reasons` says why it is worth owning
-// — award, cult, criterion — and deliberately never says which list it came
-// from: the built-in list is meant to be invisible.
+// One film on the unified Missing list.
+//
+// `reasons` is now sentences rather than tags — "You own 3 films by Akira
+// Kurosawa", "Thriller is 22% of your library" — because they are counted from
+// the library rather than read off a source list. It still deliberately never
+// says which list the film came from: the built-in list is meant to be invisible.
 export interface SuggestionItem {
   tmdb_id: number;
   title: string;
@@ -248,6 +251,11 @@ export interface SuggestionItem {
   reasons: string[];
   rating: number | null;
   votes: number | null;
+  // All three may be absent — IMDb records no genres for a few hundred entries,
+  // and a card must render perfectly well without them.
+  genres: string[];
+  runtime: number | null;
+  directors: string[];
 }
 
 export interface SuggestionListResponse {

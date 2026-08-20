@@ -30,19 +30,38 @@ const TIER_LABEL: Record<number, string> = {
   4: "Well known",
 };
 
-const REASON_LABEL: Record<string, string> = {
-  criterion: "Criterion",
-  cult: "Cult",
-  award: "Award",
-  imdb_wr: "Consensus",
-  canon_patch: "Curated",
-  floor_override: "Curated",
-};
+// What the film *is*: the facts, for deciding whether you want it.
+//
+// The reasons used to be raw pillar tags (`cult`, `imdb_wr`) mapped to single
+// words, which told you the film was "Consensus" and nothing else. They are
+// sentences now, counted from your own library, so they get their own line
+// rather than being crushed into this one.
+// The one reason worth the space on a 108px card: the most specific one.
+//
+// The server returns them tier-first, which is the right order for a list but the
+// wrong one for a card — "Widely regarded as essential" is already in the
+// subtitle as its tier label, and repeating it in the accent colour says nothing
+// new. What earns the line is the reason drawn from the owner's own shelf, which
+// is also the only one they can check.
+//
+// Every field access here is defensive, and not out of politeness to the type
+// checker: the type is a promise about the *shape we asked for*, and a deploy
+// serves a new page against the old API for as long as it takes the backend to
+// roll. A missing array crashed the whole Missing page rather than rendering one
+// card without a director, which is the wrong trade by a wide margin.
+function personalReason(item: SuggestionItem): string | undefined {
+  const reasons = item.reasons ?? [];
+  return (
+    reasons.find((r) => r.startsWith("You own")) ??
+    reasons.find((r) => r.includes("of your library"))
+  );
+}
 
 function describe(item: SuggestionItem): string {
-  const reasons = item.reasons.map((r) => REASON_LABEL[r] ?? r).filter(Boolean);
-  const tier = TIER_LABEL[item.tier];
-  return [tier, ...reasons].filter(Boolean).join(" · ");
+  const runtime = item.runtime ? `${item.runtime} min` : null;
+  const director = (item.directors ?? []).slice(0, 2).join(", ") || null;
+  const genres = (item.genres ?? []).slice(0, 2).join(", ") || null;
+  return [TIER_LABEL[item.tier], director, genres, runtime].filter(Boolean).join(" · ");
 }
 
 export function Missing() {
@@ -348,6 +367,7 @@ export function Missing() {
                   title={m.title}
                   year={m.year}
                   subtitle={describe(m)}
+                  reason={personalReason(m)}
                   voteAverage={m.rating}
                   onIgnore={ignore}
                   onUndoIgnore={undoIgnore}

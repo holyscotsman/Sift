@@ -358,12 +358,23 @@ class SuggestionOut(BaseModel):
     # 1 is the strongest claim, 4 the weakest. Kept as the ranking key rather
     # than a source count: see ``analysis/canon_missing.missing``.
     tier: int = 4
-    # Which pillars vouch for it. Local-list provenance is deliberately not
-    # spelled out to the client — the owner asked for the built-in list to stay
-    # invisible — so this carries reasons, not the name of the file they came from.
+    # Why this film, in words a person can check: "You own 3 films by Akira
+    # Kurosawa", "Thriller is 22% of your library". Local-list provenance is
+    # deliberately not spelled out — the owner asked for the built-in list to stay
+    # invisible — so a canon claim reads "Widely regarded as essential" rather
+    # than naming the list it came from.
+    #
+    # This used to be handed the raw pillar names (`cult`, `imdb_wr`,
+    # `criterion`), which was both meaningless to read and exactly the provenance
+    # that was supposed to stay hidden.
     reasons: list[str] = []
     rating: float | None = None
     votes: int | None = None
+    # Shown on the card so a suggestion arrives with enough context to judge it.
+    # All three may be absent: IMDb records no genres for a few hundred entries.
+    genres: list[str] = []
+    runtime: int | None = None
+    directors: list[str] = []
 
 
 class SuggestionListResponse(BaseModel):

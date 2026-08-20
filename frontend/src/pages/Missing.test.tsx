@@ -433,3 +433,80 @@ describe("looking for more films", () => {
     expect(screen.queryByText(/connect TMDB/i)).not.toBeInTheDocument();
   });
 });
+
+describe("a card whose film the sources know nothing about", () => {
+  it("renders anyway instead of taking the page down with it", async () => {
+    // Not a hypothetical: a deploy serves the new page against the old API for
+    // as long as the backend takes to roll, and IMDb genuinely records no genres
+    // for a few hundred canon entries. The first version of this card read
+    // `item.directors.slice(...)` and threw, which unmounted the whole Missing
+    // page — every other suggestion gone because one film had no director.
+    vi.spyOn(api, "suggestions").mockResolvedValue({
+      items: [
+        {
+          tmdb_id: 1,
+          title: "Zorns Lemma",
+          year: 1970,
+          tier: 1,
+          reasons: [],
+          rating: null,
+          votes: null,
+        } as never,
+        {
+          tmdb_id: 2,
+          title: "Seven Samurai",
+          year: 1954,
+          tier: 1,
+          reasons: ["You own 3 films by Akira Kurosawa"],
+          rating: 8.6,
+          votes: 400000,
+          genres: ["Action", "Drama"],
+          runtime: 207,
+          directors: ["Akira Kurosawa"],
+        } as never,
+      ],
+      total: 2,
+      requested_total: 0,
+      ignored_total: 0,
+    } as never);
+
+    renderPage(<Missing />);
+
+    // Regex, because the card renders "{title} · {year}" as separate text
+    // nodes and an exact match never sees a node equal to the title alone.
+    expect(await screen.findAllByText(/Zorns Lemma/)).not.toHaveLength(0);
+    // The complete one still shows everything it knows.
+    expect(await screen.findAllByText(/Seven Samurai/)).not.toHaveLength(0);
+    expect(screen.getByText(/Akira Kurosawa · Action, Drama · 207 min/)).toBeInTheDocument();
+  });
+
+  it("puts the reason from your own shelf on the card, not the tier", async () => {
+    // "Widely regarded as essential" is already the tier label in the subtitle.
+    // Repeating it in the accent colour says nothing new; the reason worth the
+    // space is the one the person can check against their own library.
+    vi.spyOn(api, "suggestions").mockResolvedValue({
+      items: [
+        {
+          tmdb_id: 2,
+          title: "Ran",
+          year: 1985,
+          tier: 1,
+          reasons: ["Widely regarded as essential", "You own 3 films by Akira Kurosawa"],
+          rating: 8.2,
+          votes: 130000,
+          genres: ["Drama"],
+          runtime: 162,
+          directors: ["Akira Kurosawa"],
+        } as never,
+      ],
+      total: 1,
+      requested_total: 0,
+      ignored_total: 0,
+    } as never);
+
+    renderPage(<Missing />);
+
+    expect(await screen.findByText(/You own 3 films by Akira Kurosawa/)).toBeInTheDocument();
+    expect(screen.queryByText("Widely regarded as essential")).not.toBeInTheDocument();
+  });
+});

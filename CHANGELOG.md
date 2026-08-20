@@ -2,6 +2,64 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.82.0 — Recommendations that can say why
+
+The Missing list was ranked `(tier, -votes, tmdb_id)` — the canon's judgement,
+then fame. A defensible global ranking, and **the same ranking for everybody**:
+it recommends the most famous unowned film in the strongest tier, over and over,
+to a person whose library says plainly what they actually watch.
+
+The ask was suggestions "sorted by what is suggested the most". The obvious
+reading — count the sources vouching for a title — does not survive the data:
+24,417 of the 25,000 entries carry exactly one source, so that ranking is a
+near-universal tie broken by whatever comes next. The reasons are counted from
+the shelf instead.
+
+**A director already on the shelf is a reason. A genre the shelf is full of is a
+weaker one.** Both are arithmetic over stored rows, both are facts about this
+household, and both can be said in a sentence on the card — which matters,
+because a recommendation nobody can explain is one nobody trusts. Cards now read
+*"You own 5 films by Akira Kurosawa"* and *"Horror is 80% of your library"*.
+
+Tier is folded into the score rather than left as the primary sort key. That is
+the whole mechanism: leaving tier on top and affinity as a tiebreak produces the
+same list as before with reasons written on it, which is a worse outcome dressed
+as a better one. A tier-4 film by a director the owner clearly loves should
+outrank a tier-1 film they have shown no interest in, and now does.
+
+**One director must not own the whole page.** Measured, not feared: a shelf with
+five Kurosawa films on it put **twenty-five consecutive Kurosawa films** at the
+head of page one. Every one is a film the owner plausibly wants, and it is still
+not a recommendation list — it is a filmography, and you have to scroll past all
+of it to find out the list contains anything else. Each film after the first by a
+given director now pays a small fixed toll: three lead instead of twenty-five, and
+distinct directors on the first page went from 34 to 61.
+
+Two supporting tables, both new rather than columns, because `create_all` adds
+tables on a live database and never adds columns. `canon_metadata` holds the
+genres, runtime and directors the lists gained in 2607.81.0. `canon_affinity`
+holds the score and the words behind it, rewritten whole on every scan by a new
+`affinity` phase — buying two more films by one director changes the score of
+everything else they made, and working out which rows those are costs more than
+recomputing all of them.
+
+The reasons are **stored** beside the score rather than derived at read time. The
+first version derived them, which added two aggregate statements to every page of
+an endless list; the statement-count pins caught it immediately. Stored, they cost
+sixty short blobs per page and always agree with the score sitting next to them —
+a fresh reason attached to a stale score is the worse kind of wrong.
+
+**Two fixes found on the way.** The API was sending raw pillar names (`cult`,
+`imdb_wr`, `criterion`) as the reasons — meaningless to read, and exactly the
+built-in-list provenance that is supposed to stay invisible. Tier claims now read
+"Widely regarded as essential" and name no list at all. And the card crashed the
+entire Missing page on a film with no director, which is not hypothetical: IMDb
+records no genres for a few hundred canon entries, and a deploy serves the new
+page against the old API for as long as the backend takes to roll. One card
+without a director is a fine outcome; every other suggestion vanishing is not.
+
+Thirteen mutations, all red.
+
 ## 2607.81.0 — The lists learn what the films actually are
 
 Both lists carried a title, a year, a rating and a vote count. That is enough to
