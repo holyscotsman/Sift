@@ -20,10 +20,12 @@ is unavailable for the duration.
 The database reads and the file writes now run on worker threads, through the
 `in_thread` helper the pipeline and AI modules already use for exactly this.
 
-Two tests. The pin measures *concurrency*, not speed — a slow read is fine,
-thirty slow reads that refuse to overlap are not — and the control checks the
-bytes still arrive, because a cache that stopped serving posters would be
-perfectly concurrent.
+Two tests. The pin counts how many reads are **in flight at once**, not how long
+they take: a wall-clock threshold would depend on how many worker threads the
+machine gives us and how loaded it is, which is exactly how a test passes locally
+and fails in CI. On the event loop the count can only ever be one. The control
+checks the bytes still arrive, because a cache that stopped serving posters
+altogether would be perfectly concurrent.
 
 **Still outstanding, and worth naming rather than leaving to be rediscovered:**
 twelve other `async` endpoints do synchronous database work on the loop the same

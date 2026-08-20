@@ -382,10 +382,14 @@ async def test_thirty_posters_do_not_queue_behind_each_other(settings, factory, 
     while it is in flight *nothing else in the process moves* — including the
     page's own API call. Thirty of them in a row is how a page stops loading.
 
-    Measured as concurrency, not speed: a slow read is fine, thirty slow reads
-    that refuse to overlap are not.
+    What is asserted is *overlap*, not elapsed time. A wall-clock threshold would
+    depend on how many worker threads the machine happens to give us and how
+    loaded it is, which is how a test starts passing locally and failing in CI.
+    Counting how many reads are in flight at once does not: on the event loop it
+    can only ever be one.
     """
     import asyncio
+    import threading
     import time
 
     from sift.db.models import CanonMovie
@@ -398,7 +402,9 @@ async def test_thirty_posters_do_not_queue_behind_each_other(settings, factory, 
             session.add(CanonMovie(tmdb_id=9_000 + n, title=f"Canon {n}", poster_path="/p.jpg"))
         session.commit()
 
-    delay = 0.05
+    lock = threading.Lock()
+    in_flight = 0
+    peak = 0
 
     class SlowFactory:
         """A database that answers, but not instantly — a hosted one, in other words."""
@@ -406,18 +412,22 @@ async def test_thirty_posters_do_not_queue_behind_each_other(settings, factory, 
         kw = factory.kw
 
         def __call__(self):
-            time.sleep(delay)
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.05)
+            with lock:
+                in_flight -= 1
             return factory()
 
     cache = PosterCache(settings, SlowFactory(), transport=_transport())
-
-    started = time.perf_counter()
     await asyncio.gather(*(cache.get(9_000 + n) for n in range(30)))
-    elapsed = time.perf_counter() - started
 
-    # Serialised, thirty 50 ms reads take 1.5 s. Overlapped, they take a fraction
-    # of that. The bar is deliberately loose — this is about the shape.
-    assert elapsed < delay * 30 / 3, f"thirty reads took {elapsed:.2f}s — they queued"
+    assert peak > 1, (
+        "every database read waited for the one before it — the reads are running "
+        "on the event loop, which blocks the whole server while each one is in flight"
+    )
 
 
 async def test_the_poster_still_comes_back(settings, factory, tmp_path):
