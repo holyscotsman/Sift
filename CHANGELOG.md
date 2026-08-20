@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.71.0 — The list refills itself
+
+The top-up shipped with a low-water check and nothing that used it. Its docstring
+said "it only runs when the list is actually running low", which was true of a
+caller passing `force=False` — and the only caller was the button, which forces.
+The whole restraint mechanism was describing a code path nothing exercised.
+
+It is now a scan phase, sitting between scoring and the AI pass and passing
+`force=False`, so the service's own check does the deciding. On a library with
+thousands of titles still queued that costs one count; below the water mark it
+sweeps. Nobody has to notice the list was getting short and press a button, which
+is the one thing nobody does — a list that is running out looks exactly like a
+list that is nearly finished.
+
+Guarded like the AI pass and for the same reason: a discovery sweep is a
+convenience, and a dead TMDB or a rate limit must never be why a scan that read
+the whole library reports failure. A skipped run is reported as skipped rather
+than as zero added, because "added 0" and "did not look" are different answers
+and only one of them means something is wrong.
+
+`test_scan_phases_mirror` caught the frontend half before CI did — the checklist
+in `scan.tsx` has to match `PHASES` exactly or the polling fallback divides by the
+wrong number and the progress bar can never reach 100. That test exists because
+`sonarr` once went in without it.
+
+Five mutations, all red.
+
 ## 2607.70.0 — The corrections file actually corrects things
 
 `list_overrides.json` shipped as the one place a judgement call belongs — the

@@ -63,6 +63,7 @@ PHASES = (
     "tmdb",
     "finalize",
     "score",
+    "topup",
     "ai",
 )
 
@@ -1013,6 +1014,33 @@ class ScanPipeline:
         # Deterministic junk scoring over the Plex library. Data decides the score.
         scored = await asyncio.to_thread(self._score)
         return {"scored": scored}
+
+    async def _phase_topup(self) -> dict[str, int]:
+        """Refill the Missing list when it is close to running out.
+
+        Not forced: the low-water check inside the service does the deciding, so
+        this costs a single count on a library that still has thousands of titles
+        queued. It exists so the list stays endless without anyone having to
+        notice it was getting short and press a button — which is the one thing
+        nobody does, because a list that is running out looks exactly like a list
+        that is nearly finished.
+
+        Guarded like the AI pass, and for the same reason: a discovery sweep is a
+        convenience, and it must never be why a finished scan reports failure.
+        """
+        try:
+            from ..services import topup as topup_service
+
+            result = await topup_service.topup(self.factory, self.settings, force=False)
+        except Exception as exc:  # noqa: BLE001 - advisory; never fails the scan
+            log.warning("missing-list top-up failed, continuing without it: %s", exc)
+            return {"topup_failed": 1}
+        if not result.get("ran"):
+            # Not an error, and the common case: the list is still deep. Reported
+            # rather than left as a silent zero so a scan that *should* have
+            # topped up and did not is visible in the checkpoint.
+            return {"topup_skipped": 1}
+        return {"topup_added": int(result.get("added", 0))}
 
     async def _phase_ai(self) -> dict[str, int]:
         """Advisory AI pass over the freshly scored removal queue. Never changes a
