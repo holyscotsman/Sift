@@ -414,7 +414,11 @@ export function Junk() {
 
       <ConfirmModal
         open={modal !== null}
-        title={`Approve removal of ${modal?.candidates.length ?? 0} title(s)?`}
+        // "title(s)" on the one dialog that deletes files reads as unfinished,
+        // and the count is the single most important word in the sentence.
+        title={`Approve removal of ${modal?.candidates.length ?? 0} ${
+          modal?.candidates.length === 1 ? "title" : "titles"
+        }?`}
         confirmLabel={dryRun ? "Approve (staged)" : "Approve & remove"}
         busy={busy}
         onCancel={() => setModal(null)}
