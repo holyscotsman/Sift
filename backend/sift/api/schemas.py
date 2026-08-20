@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..db.models import ActionActor, ActionType
 
@@ -368,11 +368,17 @@ class SuggestionOut(BaseModel):
 
 class SuggestionListResponse(BaseModel):
     items: list[SuggestionOut]
-    total: int
+    # ``None`` means *not measured on this request*, which is a different
+    # statement from zero. These three counts only change when the owner acts, so
+    # they are computed for the first page of a list and skipped for the pages
+    # that continue it — the count walks every matching row while the page reads
+    # sixty off an index, and on an endless list that is the whole cost of
+    # scrolling. A client continuing a list keeps the figures it already has.
+    total: int | None = None
     # Titles subtracted from the list rather than absent from it, so a list that
     # just got shorter can say why.
-    requested_total: int = 0
-    ignored_total: int = 0
+    requested_total: int | None = None
+    ignored_total: int | None = None
 
 
 class TopupResponse(BaseModel):
@@ -386,10 +392,20 @@ class TopupResponse(BaseModel):
 
 
 class IgnoreIn(BaseModel):
-    tmdb_id: int
-    title: str = ""
+    """A refusal, on its way into ``ignored_titles``.
+
+    The lengths are not decoration. ``title`` and ``source`` are written straight
+    into ``VARCHAR(512)`` and ``VARCHAR(32)``, and Postgres rejects an over-long
+    value with an error that surfaces as a 500 while SQLite ignores the width
+    entirely — so an unbounded field here is a bug that passes every test and
+    only appears in production. Bounding it at the schema turns that into a 422
+    that says which field was wrong.
+    """
+
+    tmdb_id: int = Field(ge=1)
+    title: str = Field(default="", max_length=512)
     # Which surface the refusal came from. Audit trail only; no decision reads it.
-    source: str = "missing"
+    source: str = Field(default="missing", max_length=32)
 
 
 class IgnoredOut(BaseModel):

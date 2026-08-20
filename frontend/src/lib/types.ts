@@ -252,10 +252,14 @@ export interface SuggestionItem {
 
 export interface SuggestionListResponse {
   items: SuggestionItem[];
-  total: number;
+  // `null` means *not measured on this request*, which is not the same as zero.
+  // These only change when you act, so the server computes them for the first
+  // page of a list and skips them for the pages that continue it. Keep whatever
+  // you already had when they come back null.
+  total: number | null;
   // Subtracted from the list rather than absent from it.
-  requested_total: number;
-  ignored_total: number;
+  requested_total: number | null;
+  ignored_total: number | null;
 }
 
 export interface TopupResult {

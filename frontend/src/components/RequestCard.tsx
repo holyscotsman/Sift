@@ -47,8 +47,21 @@ export function RequestButton({ tmdbId, title }: { tmdbId: number; title: string
   );
 }
 
-// Fill a whole set in one click — sequential, visible progress, a failure stops
-// the walk and names the title. Same server-side routing as a single request.
+// The most titles one click may ever request, however many are on screen.
+//
+// This used to be bounded by whatever the caller happened to render — thirty
+// behind a fold, or a collection's handful. The Missing list is now endless, so
+// after a minute of scrolling "request all shown" meant six hundred films: fifty
+// terabytes and an Overseerr queue to unpick by hand. The server's own batch
+// endpoint caps at fifty for exactly this reason; this loop does not go through
+// it, so it needs its own ceiling rather than borrowing that one's reputation.
+//
+// It lives in the component, not the caller, because no caller should be able to
+// hand this thing an unbounded set by accident — which is precisely what happened.
+const MAX_BATCH = 25;
+
+// Fill a set in one click — sequential, visible progress, a failure stops the walk
+// and names the title. Same server-side routing as a single request.
 //
 // `confirmFirst` turns it into a two-step: one click arms, the next sends. Worth it
 // wherever the set is large enough that an accidental click would flood Overseerr
@@ -67,6 +80,12 @@ export function RequestAllButton({
   const [state, setState] = useState<"idle" | "armed" | "busy" | "done">("idle");
   const [label, setLabel] = useState("");
   const toastError = useToast();
+  // The cap is applied to the *set*, and the label below says so when it bites.
+  // A silent truncation reads as "it did what I asked" and is how someone
+  // discovers, later, that a hundred films they thought they had asked for were
+  // never requested.
+  const batch = items.slice(0, MAX_BATCH);
+  const capped = items.length > MAX_BATCH;
   if (items.length < 2 || state === "done") {
     return state === "done" ? (
       <span className="ml-auto text-xs font-semibold text-fg3">{label}</span>
@@ -75,17 +94,17 @@ export function RequestAllButton({
   async function requestAll() {
     setState("busy");
     let sent = 0;
-    for (const item of items) {
-      setLabel(`Requesting ${sent + 1}/${items.length}…`);
+    for (const item of batch) {
+      setLabel(`Requesting ${sent + 1}/${batch.length}…`);
       try {
         await api.requestMovie(item.tmdb_id, item.title);
         sent += 1;
       } catch {
-        toastError(`Requesting “${item.title}” failed — ${sent} of ${items.length} were sent.`);
+        toastError(`Requesting “${item.title}” failed — ${sent} of ${batch.length} were sent.`);
         break;
       }
     }
-    setLabel(sent === items.length ? `All ${sent} requested ✓` : `${sent} requested`);
+    setLabel(sent === batch.length ? `All ${sent} requested ✓` : `${sent} requested`);
     setState("done");
     onDone?.();
   }
@@ -93,8 +112,10 @@ export function RequestAllButton({
     state === "busy"
       ? label
       : state === "armed"
-        ? `Send ${items.length} requests?`
-        : (idleLabel ?? `Request all missing (${items.length})`);
+        ? `Send ${batch.length} requests?`
+        : capped
+          ? `Request the top ${MAX_BATCH} of ${items.length}`
+          : (idleLabel ?? `Request all missing (${items.length})`);
   return (
     <button
       onClick={() => {

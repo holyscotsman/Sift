@@ -267,3 +267,124 @@ def test_a_refusal_outlives_the_canon_row_it_was_made_against(factory):
         session.commit()
         rows, total = canon_missing.missing(session)
         assert rows == [] and total == 0
+
+
+def test_an_over_long_title_is_refused_rather_than_reaching_the_column(client):
+    """``IgnoredTitle.title`` is ``VARCHAR(512)``. Postgres rejects an over-long
+    value with an error that surfaces as a 500; SQLite ignores the width entirely.
+    So an unbounded field here passes every test in this file and breaks only in
+    production, on the owner's own database, on a title long enough to be someone
+    pasting rather than clicking.
+    """
+    c, factory = client
+    body = {"tmdb_id": 42, "title": "x" * 600, "source": "missing"}
+    assert c.post("/api/missing/ignore", json=body).status_code == 422
+    with factory() as session:
+        assert session.get(IgnoredTitle, 42) is None
+
+
+def test_an_over_long_source_is_refused_too(client):
+    """Same column problem, narrower field — ``VARCHAR(32)``."""
+    c, _ = client
+    body = {"tmdb_id": 43, "title": "Fine", "source": "y" * 64}
+    assert c.post("/api/missing/ignore", json=body).status_code == 422
+
+
+def test_NEGATIVE_CONTROL_a_title_that_fits_is_stored_whole(client):
+    """NEGATIVE CONTROL: the bound is a bound, not a rejection of anything long.
+    A 512-character title is legal and must survive intact — truncating it
+    silently would be its own bug, and one nobody would notice."""
+    c, factory = client
+    title = "z" * 512
+    assert c.post("/api/missing/ignore", json={"tmdb_id": 44, "title": title}).status_code == 200
+    with factory() as session:
+        assert session.get(IgnoredTitle, 44).title == title
+
+
+def test_the_stored_column_really_is_the_width_the_bound_claims(client):
+    """The bound above is a number typed into a schema; this is where it comes
+    from. If someone widens the column the schema should follow, and if someone
+    narrows it these tests should be the ones that notice."""
+    from sqlalchemy import String
+
+    assert IgnoredTitle.__table__.c.title.type.length == 512
+    assert IgnoredTitle.__table__.c.source.type.length == 32
+    assert isinstance(IgnoredTitle.__table__.c.title.type, String)
+
+
+def test_a_nonsense_tmdb_id_is_refused(client):
+    """TMDB ids are positive. A zero or a negative one is not a film, and storing
+    it means a row nothing can ever match, delete through the UI, or explain."""
+    c, _ = client
+    assert c.post("/api/missing/ignore", json={"tmdb_id": 0, "title": "x"}).status_code == 422
+    assert c.post("/api/missing/ignore", json={"tmdb_id": -5, "title": "x"}).status_code == 422
+
+
+def test_continuing_a_list_costs_one_statement_instead_of_three(client):
+    """The whole cost of scrolling.
+
+    The page reads sixty rows off an index; the count walks every one of the
+    twenty thousand that match, through three correlated EXISTS clauses, and
+    ``hidden()`` walks them again. Paying for all three on every scroll buys three
+    numbers that only change when the owner acts — and on hosted Postgres each one
+    is a round trip, which is the cost that actually matters.
+    """
+    from sqlalchemy import event
+
+    c, factory = client
+    with factory() as session:
+        session.add_all([_entry(400 + i, f"Film {i}") for i in range(80)])
+        session.commit()
+
+    engine = factory.kw["bind"]
+    counted = {"first": 0, "next": 0}
+
+    def _watch(key):
+        def _count(*_a, **_kw):
+            counted[key] += 1
+
+        return _count
+
+    first = _watch("first")
+    event.listens_for(engine, "before_cursor_execute")(first)
+    try:
+        body = c.get("/api/missing/suggestions", params={"limit": 60, "offset": 0}).json()
+    finally:
+        event.remove(engine, "before_cursor_execute", first)
+
+    nxt = _watch("next")
+    event.listens_for(engine, "before_cursor_execute")(nxt)
+    try:
+        more = c.get("/api/missing/suggestions", params={"limit": 60, "offset": 60}).json()
+    finally:
+        event.remove(engine, "before_cursor_execute", nxt)
+
+    # The first page pays for its own headline figures. Four statements, not
+    # three: every gated request also reads the ``settings`` row for auth, which
+    # is a cost of the API rather than of this endpoint. Named here so the number
+    # is a fact rather than a mystery someone later rounds off.
+    assert body["total"] == 80 and body["requested_total"] == 0
+    assert counted["first"] == 4
+
+    # The pages that continue it do not, and say so with null rather than zero —
+    # a zero here would read as "nothing is missing" and empty the header.
+    assert more["total"] is None
+    assert more["requested_total"] is None and more["ignored_total"] is None
+    # One auth read and the page itself. The endpoint's own work goes from three
+    # statements to one, which is what scrolling costs.
+    assert counted["next"] == 2
+    assert len(more["items"]) == 20
+
+
+def test_NEGATIVE_CONTROL_the_first_page_still_reports_real_figures(client):
+    """NEGATIVE CONTROL: skipping the counts everywhere would pass the statement
+    budget above and leave the header permanently blank."""
+    c, factory = client
+    with factory() as session:
+        session.add_all([_entry(500, "Available"), _entry(501, "Refused")])
+        session.add(IgnoredTitle(tmdb_id=501, title="Refused"))
+        session.commit()
+
+    body = c.get("/api/missing/suggestions").json()
+    assert body["total"] == 1
+    assert body["ignored_total"] == 1

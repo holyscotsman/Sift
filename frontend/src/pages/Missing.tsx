@@ -69,9 +69,12 @@ export function Missing() {
       try {
         const r = await api.suggestions({ tier, limit: PAGE_SIZE, offset });
         setItems((prev) => (replace ? r.items : [...prev, ...r.items]));
-        setTotal(r.total);
-        setRequestedTotal(r.requested_total);
-        setIgnoredTotal(r.ignored_total);
+        // `null` is "not measured on this request", not zero. The server only
+        // counts on the first page of a list, so overwriting blindly would flip
+        // the header to nothing the moment anyone scrolled.
+        if (r.total != null) setTotal(r.total);
+        if (r.requested_total != null) setRequestedTotal(r.requested_total);
+        if (r.ignored_total != null) setIgnoredTotal(r.ignored_total);
         // A short page is the end of the data. Trusting the total instead would
         // keep asking forever whenever a title is acted on mid-scroll.
         if (r.items.length < PAGE_SIZE) setDone(true);
@@ -308,13 +311,9 @@ export function Missing() {
               <span className="text-xs text-fg3">
                 Showing {items.length.toLocaleString()} of {total.toLocaleString()}
               </span>
-              {/* Requests what's on screen, not the whole list — "request all"
-                  against twenty thousand titles is never what one click means. */}
-              <RequestAllButton
-                items={items}
-                label={`Request all ${items.length} shown`}
-                confirmFirst
-              />
+              {/* Capped inside the component. This list is endless, so "what is on
+                  screen" grows with every scroll and is not a bound at all. */}
+              <RequestAllButton items={items} confirmFirst />
             </div>
             <div className="flex flex-wrap gap-3">
               {items.map((m) => (

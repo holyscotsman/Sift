@@ -352,11 +352,17 @@ def missing_suggestions(
     "from the built-in list". The local list is meant to be invisible; naming it
     would turn a recommendation into a citation.
     """
+    start = max(0, offset)
+    # The first page of a list pays for its own headline figures; the pages that
+    # continue it do not. Three statements per scroll for numbers that only move
+    # when the owner acts is most of what scrolling costs, and every one of them
+    # is a round trip on hosted Postgres.
+    first_page = start == 0
     with factory() as session:
         rows, total = canon_missing_analysis.missing(
-            session, tier=tier, limit=max(1, min(limit, 200)), offset=max(0, offset)
+            session, tier=tier, limit=max(1, min(limit, 200)), offset=start, with_total=first_page
         )
-        counts = canon_missing_analysis.hidden(session)
+        counts = canon_missing_analysis.hidden(session) if first_page else None
     return SuggestionListResponse(
         items=[
             SuggestionOut(
@@ -371,8 +377,8 @@ def missing_suggestions(
             for r in rows
         ],
         total=total,
-        requested_total=counts["requested"],
-        ignored_total=counts["ignored"],
+        requested_total=counts["requested"] if counts else None,
+        ignored_total=counts["ignored"] if counts else None,
     )
 
 
