@@ -26,6 +26,34 @@ row in a public dataset or a published list:
 | `bfi_100` | 14 | BFI Top 100. |
 | `afi` | 1 | AFI 100 Years. |
 
+## Metadata
+
+Every entry carries what IMDb's datasets record about the film, so a
+recommendation can be shown with context rather than as a bare title, and so
+ranking has something to work with beyond a vote count.
+
+| Field | Coverage | Source |
+|---|---|---|
+| `genres` | 24,580 (98%) | `title.basics` |
+| `runtime` | 24,599 (98%) | `title.basics`, minutes |
+| `directors` | 24,627 (99%) | `title.crew` → `name.basics`, up to 3 |
+
+A field is **absent rather than null** when the source has nothing to say. An
+entry with no `genres` means IMDb records none, not that the film has none — 360
+of the 25,000 have no IMDb id at all (they arrived from Criterion or the cult list
+by title), and 60 more are IMDb rows with the genre column genuinely empty,
+mostly experimental cinema.
+
+The filters that decide *membership* deliberately do not decide what is *known*.
+An earlier pass built the fact table from the titles that survived the featurette
+floor, which left 461 Criterion entries with no genres — *Sherlock Jr.*, *Simon of
+the Desert*, *Zéro de conduite*: films that are in the canon on Criterion's word
+and are also under an hour long. Facts are now collected before any filter runs.
+
+Directors are capped at three. Anthology films — *Paris, je t'aime*, *New York
+Stories* — list every segment's director, and past a handful the list stops being
+an answer to "who made this".
+
 ## Tiers
 
 Tier 1 is the strongest claim to canon, tier 4 the weakest. Tiers decide ranking,

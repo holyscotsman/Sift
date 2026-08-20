@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.81.0 — The lists learn what the films actually are
+
+Both lists carried a title, a year, a rating and a vote count. That is enough to
+rank by fame and nothing else — no way to say *why* a film is being suggested, and
+no way to filter by anything a person would actually think in.
+
+They now carry **genres**, **runtime** and **directors**, at 98%, 98% and 99%
+coverage. Everything comes from IMDb's official datasets, so the lists stay what
+they have always been: derived from evidence, never hand-authored.
+
+Two of those fields were already being read and thrown away. `read_titles` parsed
+`runtimeMinutes` to enforce the featurette floor and then dropped it, and the
+genres column sat one index further along the same row, untouched. Directors are
+genuinely new work — a streamed pass over `title.crew` to collect director ids for
+titles on either list, then a second over `name.basics` to resolve only those ids.
+Neither file is held in memory; `name.basics` is 300 MB compressed and almost all
+of it is people who directed nothing on either list.
+
+**A bug found on the way.** The first version built its fact table from the titles
+that survived the membership filters, which left 461 Criterion entries with no
+genres at all — *Sherlock Jr.*, *Simon of the Desert*, *Zéro de conduite*. All
+films that are in the canon on Criterion's word and are also under an hour long,
+so the featurette floor had already dropped them before enrichment could see them.
+Membership filters decide what belongs on a list; they have no business deciding
+what is *known* about a title. Facts are now collected before any filter runs.
+
+What remains uncovered is honest: 360 entries have no IMDb id at all (they arrived
+from Criterion or the cult list by title alone) and 60 more are IMDb rows whose
+genre column is genuinely empty, mostly experimental cinema.
+
+Directors are capped at three. Anthology films list every segment's director, and
+past a handful that stops being an answer to "who made this".
+
+The pins are on the shipped files rather than a fixture, because the thing worth
+guarding is a *file*: the generator takes `--crew` and `--names` as optional
+flags, so a rebuild without them produces a perfectly valid canon with every
+director silently gone. Four mutations, all red.
+
 ## 2607.80.0 — Which door opens, and an unlabelled front one
 
 `AuthGate` decides four ways and only one of them shows the app. Getting any of

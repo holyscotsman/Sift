@@ -8,6 +8,9 @@ second, because that is the direction where being wrong deletes a film.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -183,6 +186,51 @@ def test_the_shipped_canon_file_is_the_one_that_was_validated(factory):
     ids = [t["imdb_id"] for t in titles if t.get("imdb_id")]
     assert len(ids) == len(set(ids))
     assert len(ids) / len(titles) > 0.95
+
+
+def test_the_shipped_canon_carries_its_metadata(factory):
+    """Genres, runtime and directors, on the file that ships.
+
+    These are cheap to lose. The generator takes them from three IMDb datasets and
+    two of those are optional flags — a rebuild run without ``--crew`` and
+    ``--names`` produces a perfectly valid file with every director silently gone,
+    and nothing else in the suite would notice. The thresholds are set just under
+    the measured coverage so a rebuild that drops a field fails here rather than
+    quietly shipping a thinner list.
+    """
+    titles = canon_entries.load_file()["titles"]
+
+    def coverage(field: str) -> float:
+        return sum(1 for t in titles if t.get(field)) / len(titles)
+
+    assert coverage("genres") > 0.95
+    assert coverage("runtime") > 0.95
+    assert coverage("directors") > 0.95
+
+    # Absent, never null: a consumer that sees the key can trust the value.
+    assert all(t["genres"] for t in titles if "genres" in t)
+    assert all(isinstance(t["runtime"], int) and t["runtime"] > 0 for t in titles
+               if "runtime" in t)
+    assert all(len(t["directors"]) <= 3 for t in titles if "directors" in t)
+
+    # A spot-check with a real answer, because coverage percentages can be met by
+    # a file full of plausible nonsense.
+    keaton = next(t for t in titles if t.get("imdb_id") == "tt0015324")
+    assert keaton["directors"] == ["Buster Keaton"]
+    assert keaton["runtime"] == 45
+    # And this is the one the filter-order bug hid: a Criterion short is in the
+    # canon on Criterion's word, and is also under the featurette floor.
+    assert "Comedy" in keaton["genres"]
+
+
+def test_the_shipped_exclusion_list_carries_its_metadata():
+    """The exclusion list gets the same treatment, from the same pass."""
+    data = json.loads(
+        (Path(canon_entries.__file__).parent.parent / "data" / "exclude_list.json").read_text()
+    )
+    titles = data["titles"]
+    assert len(titles) > 20_000
+    assert sum(1 for t in titles if t.get("genres")) / len(titles) > 0.95
 
 
 def test_seeding_the_canon_does_not_cost_a_statement_per_title(factory, canon_file, monkeypatch):

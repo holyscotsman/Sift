@@ -20,6 +20,13 @@ which is exactly why this list can be trusted and a hand-written one could not.
 | `tvMovie` | 16,128 |
 | `video` | 7,809 |
 
+## Metadata
+
+Exclusions carry `genres` (23,800, 99%) and `runtime` where IMDb records
+them, from the same `title.basics` pass that builds the recommendation list. They
+are here for the same reason: so a title can be shown with context, and so a
+future rule can be written against evidence rather than a name.
+
 ## What is *not* the rule
 
 **A low rating never excludes anything.** A theatrical release stays recommendable
