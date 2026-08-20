@@ -86,8 +86,26 @@ Do not edit `canon_25k.json`; the next rebuild overwrites it. Put corrections in
 `backend/sift/data/list_overrides.json`, which the generator never touches.
 
 ```json
-{ "always_recommend": { "titles": [ { "imdb_id": "tt0111161" } ] } }
+{
+  "always_recommend": { "titles": [ { "imdb_id": "tt0111161" } ] },
+  "never_recommend": { "titles": [ { "title": "Some Film", "year": 2004 } ] }
+}
 ```
+
+**It takes effect on the next scan, on titles already stored as well as new
+ones.** `always_recommend` seeds the title into the canon at tier 1 — the reason
+to write it here is that the generated list got it wrong, so the generated list
+does not outrank it. `never_recommend` keeps the title from being seeded *and*
+deletes the row if one is already there; without that second half a correction
+would be silently inert against everything that shipped, which is nearly the
+whole list.
+
+Give an `imdb_id` where you have one. A `title` + `year` pair also works and
+matches whether or not the stored row carries an id — deliberately the opposite
+of how `exclude_list.json` behaves, because that list is generated and id-keyed
+while this one is a person writing down a decision with whatever they had to
+hand. A film named in both sections stays out: only one of the two readings can
+lose a film for ever.
 
 ## Source
 

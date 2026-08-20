@@ -268,6 +268,14 @@ here so they are not re-litigated, not so they can be admired.
   existing instance does not silently switch which account is billed.
 - **A pinned mode is not overridable by a key.** `openai` mode with only an
   Anthropic key configured resolves to *nothing*, not to Anthropic.
+- **`list_overrides.json` applies to stored rows, not just to new candidates.**
+  Seeding skips struck-out titles and a prune removes ones already there. A
+  correction that only filtered incoming candidates would be inert against the
+  whole shipped list.
+- **Override matching is *not* the exclusion list's rule.** There an id decides
+  alone (generated, id-keyed, complete). Here a title-and-year strike lands even
+  on a row that carries an id, because the file is one person naming a film with
+  whatever they had to hand.
 - **A Missing page costs two statements, pinned exactly.** All three subtractions
   are `EXISTS` clauses inside the count and the page. Moving one into Python
   costs exactly one more round trip, so a loose bound would not catch it.

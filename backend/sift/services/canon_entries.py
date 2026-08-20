@@ -25,10 +25,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session
 
 from ..db.models import CanonEntry, Movie, utcnow
+from . import exclusions
 
 log = logging.getLogger("sift.canon")
 
@@ -75,7 +76,18 @@ def seed(session: Session) -> int:
     be paying for it twice.
     """
     data = load_file()
-    titles = data.get("titles") or []
+    # Hand additions are seeded alongside the file and default to tier 1: the
+    # point of writing a title into the overrides file is that the generated list
+    # got it wrong, so the generated list does not get to overrule it. Appended
+    # in one pass — rebuilding a twenty-five-thousand-item list per override is
+    # the sort of quadratic that only shows up once the file has entries in it.
+    titles = [
+        *(data.get("titles") or []),
+        *(
+            {**row, "tier": int(row.get("tier") or 1), "sources": ["curated"]}
+            for row in exclusions.always_recommend()
+        ),
+    ]
     if not titles:
         return 0
     version = str(data.get("version") or "")
@@ -95,12 +107,15 @@ def seed(session: Session) -> int:
         )
     }
 
+    struck_ids, struck_titles = exclusions.never_recommend_keys()
     fresh: list[dict[str, Any]] = []
     for entry in titles:
         imdb_id = entry.get("imdb_id") or None
         title = entry.get("title")
         year = entry.get("year")
         if not title:
+            continue
+        if _struck_out(struck_ids, struck_titles, imdb_id, title, year):
             continue
         if imdb_id is not None:
             if imdb_id in known:
@@ -137,9 +152,82 @@ def seed(session: Session) -> int:
     for start in range(0, added, _CHUNK):
         session.execute(insert(CanonEntry), fresh[start : start + _CHUNK])
     session.commit()
+    prune_struck_out(session)
     if added:
         log.info("canon: seeded %s new entries from %s", added, version or "(no version)")
     return added
+
+
+def _struck_out(
+    ids: set[str],
+    titles: set[tuple[str, int]],
+    imdb_id: str | None,
+    title: str,
+    year: Any,
+) -> bool:
+    """Has the owner written this film into ``never_recommend``?
+
+    **Either key matches, and that is deliberately the opposite of how the
+    exclusion list behaves.** There, an IMDb id decides alone, because the list is
+    generated, id-keyed and complete over its own domain — an id it does not
+    mention is a film it has no opinion about, and a title match would let a
+    different film answer for it.
+
+    This file is neither generated nor complete. It is one person writing down a
+    decision about a specific film, using whatever they had to hand — and most
+    people have a title and a year, not ``tt0000009``. Refusing a title match
+    because the stored row happens to carry an id would mean the correction
+    silently did nothing, which is the exact failure this whole pass exists to
+    prevent. The cost is a same-title-same-year collision, which is rare and
+    which the year already narrows to almost nothing.
+    """
+    if imdb_id and imdb_id in ids:
+        return True
+    return isinstance(year, int) and (exclusions.normalize(title), year) in titles
+
+
+def prune_struck_out(session: Session) -> int:
+    """Delete canon rows the owner has struck out. Returns how many went.
+
+    Seeding skips them on the way in, but most of the list was already stored
+    before the file was ever edited — so without this a hand correction is
+    silently inert against the twenty-five thousand titles that shipped, which is
+    the half someone is most likely to be looking at when they reach for it.
+
+    Bounded by the size of the overrides file rather than by the canon: the
+    strike list is hand-authored and small, so the ids are matched in Python and
+    the delete is a single statement over the handful that matched. Doing it the
+    other way — pulling twenty-five thousand rows back to compare them — is the
+    mistake this codebase keeps a changelog entry about.
+    """
+    ids, titles = exclusions.never_recommend_keys()
+    if not ids and not titles:
+        return 0
+    conditions: list[Any] = []
+    if ids:
+        conditions.append(CanonEntry.imdb_id.in_(sorted(ids)))
+    doomed: set[int] = set()
+    if conditions:
+        doomed.update(
+            row_id for (row_id,) in session.execute(select(CanonEntry.id).where(*conditions))
+        )
+    if titles:
+        # Normalisation cannot be expressed in SQL portably, so the title strikes
+        # are matched by year first — a narrow slice — and normalised in Python.
+        years = sorted({year for _t, year in titles})
+        for row_id, row_title, row_year in session.execute(
+            select(CanonEntry.id, CanonEntry.title, CanonEntry.year).where(
+                CanonEntry.year.in_(years)
+            )
+        ):
+            if (exclusions.normalize(row_title), row_year) in titles:
+                doomed.add(row_id)
+    if not doomed:
+        return 0
+    session.execute(delete(CanonEntry).where(CanonEntry.id.in_(sorted(doomed))))
+    session.commit()
+    log.info("canon: removed %s struck-out entries", len(doomed))
+    return len(doomed)
 
 
 def pending_resolution(

@@ -2,6 +2,55 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.70.0 — The corrections file actually corrects things
+
+`list_overrides.json` shipped as the one place a judgement call belongs — the
+generated lists are evidence-only, so a human decision needs somewhere to live
+that a rebuild will not overwrite. It was only half wired: it filtered candidates
+arriving from TMDB and the AI providers, and did nothing at all to the
+twenty-five thousand titles already stored. Which is nearly the whole list, and
+the half someone is looking at when they reach for the file. Strike a film out,
+nothing happens, and there is nothing on screen to explain why.
+
+Both directions now work, on the next scan:
+
+* **`never_recommend`** keeps a title from being seeded *and* deletes the row if
+  one is already there.
+* **`always_recommend`** seeds the title into the canon at tier 1. The reason to
+  write a title in here is that the generated list got it wrong, so the generated
+  list does not get to outrank it.
+
+A film named in both sections stays out — the same rule the exclusion list uses,
+for the same reason: of the two readings, only one can lose a film for ever.
+
+**Matching here is deliberately the opposite of `exclude_list.json`.** There, an
+IMDb id decides alone, because that list is generated, id-keyed and complete over
+its own domain — an id it does not mention is a film it has no opinion about, and
+a title match would let a different film answer for it. This file is neither
+generated nor complete: it is one person writing down a decision about a specific
+film, using whatever they had to hand, and most people have a title and a year
+rather than `tt0000009`. So a title-and-year strike lands whether or not the
+stored row carries an id.
+
+The prune is bounded by the size of the overrides file rather than by the canon —
+ids matched in one `IN` clause, bare titles narrowed to their struck years in SQL
+and paired up in Python, one delete over whatever matched. An empty file costs
+zero statements, pinned exactly, because it runs on every scan.
+
+**Two bugs the tests found rather than confirmed.** The seed-time filter and the
+prune disagreed about hand-written strikes — one applied the exclusion list's
+id-decides-alone rule and the other did not — which is how the divergence above
+came to be written down instead of left implicit. And a first pass at the pins
+put all six on the prune, which runs immediately after seeding and covered for
+the seed-time filter completely: deleting that filter left every test green while
+every scan would insert the struck title and delete it again, for ever. Those
+pins now assert what `seed` *inserted*, not what survived it.
+
+Sixteen pins. Nine of ten mutations go red; the tenth — deleting the early-exit
+guard in the prune — is a genuine no-op, since an empty strike list reaches the
+same `return 0` having issued no statements either way. The guard is there to say
+so, not to do anything.
+
 ## 2607.69.0 — OpenAI, as an alternative rather than an addition
 
 GPT can now do the work Claude does: the hard-reasoning pass, Ask, and the AI
