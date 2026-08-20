@@ -2,6 +2,58 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.73.0 — Every request stopped asking the database who you are
+
+Found while measuring the Missing page, and worth its own change because a
+caching bug in the auth path is a security bug.
+
+Every gated request read the account row **twice** — once to ask whether an
+account exists, once to verify the token's signature. Two round trips on hosted
+Postgres, on every poster, every page of an endless list, and every
+twenty-second health poll, for a row that changes only when the owner changes it.
+
+Measured on a configured instance:
+
+| | before | after |
+|---|---|---|
+| `GET /api/missing/suggestions` | 5 statements (2 auth) | 3 statements (0 auth) |
+| `GET /api/status` | 10 statements (3 auth) | 8 statements (1 auth) |
+
+The remaining `settings` read on `/api/status` is the junk thresholds, not auth.
+
+**Invalidation is the mechanism; the TTL is only a backstop.** Every writer drops
+the cache, and a thirty-second expiry covers what no writer can see — a direct SQL
+edit, a restore from backup, a second worker.
+
+**`change_password` was already the dangerous one.** It merged the row directly
+rather than going through `_store`, which nothing cared about before because there
+was nothing to invalidate. With a cache in front of the read, that bypass would
+have made a password change silently stop signing other sessions out — leaving a
+suspected intruder signed in, which is the single thing that rotation exists to
+prevent. It now goes through `_store`, and a source scan enumerates every writer
+of the auth row and fails the build when one of them does not drop the cache. A
+hand-maintained list would have been the other thing that got forgotten.
+
+`clear_account` and the factory reset drop it too. The reset needs its own call:
+it deletes the row by bulk `table.delete()`, which the ORM never sees.
+
+The cache is keyed on the engine object, in a weak-keyed map. A URL string would
+have worked — SQLAlchemy renders the password as `***`, so nothing secret lands
+there — but it invites the question every time someone reads the code, two
+engines differing only by password would collide, and the entries would
+accumulate for the life of the process. The weak key answers all three.
+
+**Two tests were closing a security gate by a route production never takes.**
+They hand-merged `Setting(key="auth", value={"username": "x", ...})`, skipping
+the password hash, the signing secret and now the invalidation — so they were
+testing the fixture rather than the gate. Both now create a real account through
+the real API, which is what caught the staleness in the first place.
+
+Twelve pins. All seven mutations red — including one that had to be rewritten
+because the original proved nothing: "hand out the cached dict itself" passed
+either way until the pin stopped tampering with a copy taken on the *miss* path
+and started tampering with one taken on a *hit*.
+
 ## 2607.72.0 — Three things the new Missing list got wrong
 
 An audit of the surface shipped over the last few versions. All three were

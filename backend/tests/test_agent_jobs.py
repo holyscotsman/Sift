@@ -236,13 +236,17 @@ def test_jobs_are_visible_to_the_owner(client, engine, factory):
 def test_the_job_list_needs_a_session(client, engine, factory):
     """NEGATIVE CONTROL: the agent token opens the agent surface only. It must
     not be a way into the owner's endpoints."""
-    from sift.db.models import Setting
+    from sift.services import auth
 
     c, _ = client
     _configure_agent(factory)
     with factory() as session:
-        session.merge(Setting(key="auth", value={"username": "x", "password_hash": "y"}))
-        session.commit()
+        # Through the real API rather than a hand-built row. A merged dict skips
+        # every invariant the module maintains — the password hash, the signing
+        # secret, and the cache invalidation that tells the running app an account
+        # now exists — and a gate test that closes the gate by a route production
+        # never takes is testing the fixture, not the gate.
+        auth.create_account(session, "owner", "hunter2hunter2")
     assert c.get("/api/agent/jobs").status_code == 401
     assert c.get("/api/agent/jobs", headers={"X-Sift-Agent-Token": TOKEN}).status_code == 401
 

@@ -27,6 +27,7 @@ import json
 import secrets
 import time
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from sqlalchemy.orm import Session
 
@@ -72,9 +73,81 @@ def verify_password(password: str, stored: str) -> bool:
 # ------------------------------------------------------------------- credentials
 
 
+# ------------------------------------------------------------------- the auth row
+
+# How long a cached auth row may be trusted without re-reading it.
+#
+# The cache is invalidated explicitly by every writer, so this is a backstop
+# rather than the mechanism — it bounds the damage if a row is changed outside
+# the app (a direct SQL edit, a restore from backup) or by a second worker.
+# Thirty seconds is short enough that "I changed my password" is true almost
+# immediately and long enough that a page polling every twenty seconds pays for
+# at most one read per poll instead of two per request.
+_CACHE_TTL_SECONDS = 30.0
+
+# Keyed by database, not global. The tests build a fresh SQLite file per test in
+# one process, so a single module-level slot would hand one test the previous
+# test's account — and it would be wrong in production too if an instance ever
+# addressed two databases.
+#
+# Keyed on the *engine object*, not on its URL string. A URL would work — SQLAlchemy
+# renders the password as ``***`` in ``str()``, so nothing secret would land here —
+# but it invites the question every time someone reads this, and two engines
+# differing only by password would collide. A weak key sidesteps both, and empties
+# itself when the engine is collected rather than accumulating one entry per
+# database for the life of the process.
+_auth_cache: WeakKeyDictionary[Any, tuple[float, dict[str, Any] | None]] = WeakKeyDictionary()
+
+
+def _cache_key(session: Session) -> Any:
+    """The engine this session talks to.
+
+    ``get_bind`` returns a Connection instead of an Engine under some
+    configurations; this codebase always binds to an Engine, and the fallback is
+    harmless either way — a per-connection key makes the cache less effective, not
+    incorrect.
+    """
+    return session.get_bind()
+
+
+def invalidate_cache(session: Session | None = None) -> None:
+    """Forget the cached auth row. **Every writer must call this.**
+
+    Not optional and not a nicety: ``change_password`` rotates the signing secret
+    precisely so that other sessions stop working, and a cache that kept serving
+    the old secret would leave a suspected intruder signed in — which is the one
+    thing that function exists to prevent. ``test_auth_cache`` enumerates the
+    writers and fails the build when a new one forgets.
+
+    With no session, clears every database's entry. That is what a factory reset
+    wants, since it deletes the row out from under the cache by table.
+    """
+    if session is None:
+        _auth_cache.clear()
+    else:
+        _auth_cache.pop(_cache_key(session), None)
+
+
 def get_auth(session: Session) -> dict[str, Any] | None:
+    """The stored account row, cached in memory between writes.
+
+    Every gated request needs this twice — once to ask whether an account exists
+    and once to verify the token's signature — and it was two round trips on
+    hosted Postgres, on every poster, every page of an endless list, and every
+    twenty-second health poll. Nothing in it changes except when the owner changes
+    it, and each of those paths invalidates the cache.
+
+    A copy is returned rather than the cached dict, so a caller mutating what it
+    got back cannot rewrite what the next request will read.
+    """
+    key = _cache_key(session)
+    hit = _auth_cache.get(key)
+    if hit is not None and time.monotonic() - hit[0] < _CACHE_TTL_SECONDS:
+        return dict(hit[1]) if hit[1] else None
     row = session.get(Setting, _AUTH_KEY)
-    return dict(row.value) if row and row.value else None
+    value = dict(row.value) if row and row.value else None
+    _auth_cache[key] = (time.monotonic(), value)
+    return dict(value) if value else None
 
 
 def is_configured(session: Session) -> bool:
@@ -95,8 +168,10 @@ def _signing_secret(auth: dict[str, Any]) -> str | None:
 
 
 def _store(session: Session, auth: dict[str, Any]) -> None:
+    """The single write path for the auth row. Invalidates the read cache."""
     session.merge(Setting(key=_AUTH_KEY, value=auth))
     session.commit()
+    invalidate_cache(session)
 
 
 def create_account(session: Session, username: str, password: str) -> None:
@@ -128,6 +203,10 @@ def clear_account(session: Session) -> None:
     if row is not None:
         session.delete(row)
         session.commit()
+    # Unconditional: a cache holding an account the database no longer has is
+    # exactly the state this must not leave behind, and the row being absent now
+    # says nothing about what was cached a moment ago.
+    invalidate_cache(session)
 
 
 def change_password(session: Session, current: str, new: str) -> str | None:
@@ -148,17 +227,17 @@ def change_password(session: Session, current: str, new: str) -> str | None:
     if not auth or not verify_password(current, auth.get("password_hash", "")):
         return None
     secret = secrets.token_hex(32)
-    session.merge(
-        Setting(
-            key=_AUTH_KEY,
-            value={
-                **auth,
-                "password_hash": hash_password(new),
-                "secret": secretbox.encrypt(secret),
-            },
-        )
+    # Through ``_store``, not a bare merge: that is where the cache is dropped,
+    # and a rotation the cache did not hear about would leave every other session
+    # working — the precise opposite of what rotating is for.
+    _store(
+        session,
+        {
+            **auth,
+            "password_hash": hash_password(new),
+            "secret": secretbox.encrypt(secret),
+        },
     )
-    session.commit()
     return issue_token(secret, str(auth.get("username", "")))
 
 
