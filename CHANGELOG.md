@@ -2,6 +2,35 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.101.0 — Two scans against one library
+
+A scan writes the whole library snapshot. Two at once against one database is the
+thing `/api/scan` exists to prevent, and the guard had no server-side test. The
+frontend has a pin saying the *client* refuses to start a second, which proves
+nothing about a second browser tab, a curl, or the wizard's silent auto-start
+landing at the same moment as the dashboard button.
+
+Pinned now, in both directions. A second start **joins** the running scan rather
+than racing it, and launches nothing new. A resume that names a *different* run
+while one is live is refused with a 409 — that is not a join, because a resume
+names a specific run and running it beside another is two scans. Resuming the run
+that is already live is a no-op rather than an error, since that is what a
+reconnecting client does.
+
+The other half is the orphan. A `RUNNING` row whose task died with the process
+would wedge scanning forever if it were treated as live — and on a host that
+restarts on deploy that is an ordinary state, not a rare one. It is retired to
+`INTERRUPTED` and a fresh scan starts.
+
+**One test made a claim it could not support, and now does not.** It said the
+`expunge` before returning an ORM row was load-bearing — that without it FastAPI
+would touch attributes on a closed session. Mutation says otherwise: removing
+both expunge calls leaves the test green, because the attributes are already
+loaded and nothing lazy-loads. The call is defensive rather than load-bearing, the
+test now says so, and it covers the property that actually matters — that the
+response serialises — instead of guarding a line it does not.
+
+Four mutations red, one honestly reported green.
 ## 2607.100.0 — Correcting a Plex library mapping was a 500
 
 `/api/config/sections` decides what each Plex library *is* — films, shows, or left
