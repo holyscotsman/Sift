@@ -14,22 +14,31 @@ import { DrawerProvider } from "@/lib/drawer";
 import { PrefsProvider } from "@/lib/prefs";
 import { ScanProvider } from "@/lib/scan";
 
-function Providers({ children }: { children: ReactNode }) {
-  return (
-    <MemoryRouter>
-      <PrefsProvider>
-        <ToastProvider>
-          <DrawerProvider>
-            <ScanProvider>{children}</ScanProvider>
-          </DrawerProvider>
-        </ToastProvider>
-      </PrefsProvider>
-    </MemoryRouter>
-  );
+function makeProviders(route: string) {
+  return function Providers({ children }: { children: ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[route]}>
+        <PrefsProvider>
+          <ToastProvider>
+            <DrawerProvider>
+              <ScanProvider>{children}</ScanProvider>
+            </DrawerProvider>
+          </ToastProvider>
+        </PrefsProvider>
+      </MemoryRouter>
+    );
+  };
 }
 
-export function renderPage(ui: ReactElement): RenderResult {
-  return render(ui, { wrapper: Providers });
+/** Render a page inside the real provider stack.
+ *
+ * `route` sets the router's starting entry. Several pages read their filters
+ * straight off the query string — a deep link from the Dashboard, a search, a
+ * `?tab=tv` — and without this there is no way to render one in the state a link
+ * actually puts it in.
+ */
+export function renderPage(ui: ReactElement, route = "/"): RenderResult {
+  return render(ui, { wrapper: makeProviders(route) });
 }
 
 /** A junk candidate with only the fields a row actually reads filled in. */

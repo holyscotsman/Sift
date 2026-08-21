@@ -2,6 +2,51 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.118.0 — What the Library remembers, and what it refuses to
+
+`Library.test.tsx` pins the paging failure — a dropped page that used to vanish
+without trace. This covers the rest.
+
+**The test harness could not render a page at a route.** Several pages read their
+filters straight off the query string — a deep link from the Dashboard, a search,
+`?tab=tv` — and `renderPage` always mounted at `/`. There was no way to render one
+in the state a link actually puts it in. It now takes an optional route.
+
+**View and sort survive navigation, and an unrecognised stored value falls back.**
+Somebody sorting by size is working through their largest files; coming back to
+alphabetical after opening one title restarts that job. But `localStorage` is
+writable by anything on the origin and survives upgrades that rename a sort field,
+and a stored value taken on trust goes into the query string and comes back 422 —
+a blank library with no explanation.
+
+**The empty state tells two different stories.** "Run a scan to populate the
+library" is useless advice to somebody who has a full library and mistyped a
+title, and running one is the most expensive thing the app does. A search that
+found nothing offers to clear the filters instead.
+
+**The section select hides when there is one section**, because a select with one
+option is a control that cannot do anything sitting in the row where the controls
+that can are.
+
+**Paging stops at a short page**, or the sentinel keeps firing at the bottom of a
+finished list and the server is asked for page after empty page. **And a failed
+page is not re-requested** while the sentinel stays on screen: without the
+`pageError` guard the observer retries continuously — a request storm against a
+server that is already refusing, with nothing on screen changing.
+
+### One mutation came back green, for the second time in the same shape
+
+Replacing `.catch(() => setSections([]))` with a rethrow leaves the "survives the
+section list failing" test passing — exactly as the Activity page's scan-list
+catch did. An unhandled rejection in a detached promise inside an effect never
+reaches the render. Both catches keep the console clean; what protects the page is
+that the two fetches are independent. Recorded as a working decision so the next
+test of this shape claims the right thing.
+
+Eight mutations run, seven red at the expected test.
+
+`Library.tsx` 72% → 85%.
+
 ## 2607.117.0 — The write-back that stops a downgrade being undone
 
 `SonarrClient.set_quality_profile` is the piece the design notes call
