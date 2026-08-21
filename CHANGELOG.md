@@ -2,6 +2,34 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.99.0 — Six dots that were only a colour
+
+The connection-health row is the app's most compressed piece of state: six 8px
+dots standing in for six services. Compressed to the point where **colour was
+doing all the work** — green ok, amber auth-failure, red offline, grey not
+configured, and no other difference between them.
+
+This project's own standard is glyphs rather than colour alone. Six dots that
+differ only in hue are six identical dots to a colour-blind reader. The `title`
+and `aria-label` on each one already covered screen readers and hovering, but
+somebody scanning the header with the mouse elsewhere got nothing — and being
+glanceable is the entire reason the row exists.
+
+Shape carries the state now, alongside the colour rather than instead of it:
+
+* **ok** — a filled circle
+* **auth failure** and **offline** — filled, and square-ish. Amber was the state
+  most at risk: it is a problem, and a round amber dot is indistinguishable from
+  a round green one to anyone who cannot see the hue.
+* **not configured** — a hollow outline. Nothing is wrong and nothing is
+  connected, which an empty ring says without relying on grey-versus-green.
+
+Radius rather than a glyph because a glyph is illegible at 8px and a shape is not.
+Checked the way it should be checked — screenshotted the row through a greyscale
+filter, where the hollow rings and the filled square read apart immediately.
+
+Five mutations, all red, including "drop the colour, keeping only shape": shape is
+the addition, not the replacement. Most people read these by hue and always will.
 ## 2607.98.0 — Three inputs a keyboard user could not find
 
 The browser audit came back clean across all ten screens. Then a grep found three

@@ -1,5 +1,15 @@
 // Connection-health dots for Plex / Radarr / Tautulli / TMDB / Model.
-// green=ok, amber=warn, red=offline, grey=not configured. Hover shows detail.
+//
+// **Shape carries the state as well as colour.** Six 8px dots that differ only in
+// hue are six identical dots to a colour-blind reader, and this project's own
+// standard is glyphs rather than colour alone. The `title`/`aria-label` on each
+// one covers screen readers and hovering, but somebody scanning the header with
+// a mouse nowhere near it gets nothing — and the whole point of the row is to be
+// glanceable.
+//
+// So: a filled circle is fine, a filled square is broken, a hollow circle is not
+// configured. Shape is legible at 8px where a glyph is not, and the three read
+// apart in greyscale.
 
 import { Link } from "react-router-dom";
 
@@ -15,14 +25,33 @@ const LABELS: Record<string, string> = {
   model: "Model",
 };
 
-function dotColor(s: ServiceHealth | undefined): string {
-  if (!s) return "var(--fg-3)";
-  if (s.ok) return "var(--keep)";
+type DotState = "ok" | "warn" | "down" | "off";
+
+function dotState(s: ServiceHealth | undefined): DotState {
+  if (!s) return "off";
+  if (s.ok) return "ok";
   const detail = (s.detail || "").toLowerCase();
-  if (detail.includes("disabled") || detail.includes("not configured")) return "var(--fg-3)";
-  if (detail.includes("auth")) return "var(--borderline)";
-  return "var(--junk)";
+  if (detail.includes("disabled") || detail.includes("not configured")) return "off";
+  if (detail.includes("auth")) return "warn";
+  return "down";
 }
+
+const DOT_COLOR: Record<DotState, string> = {
+  ok: "var(--keep)",
+  warn: "var(--borderline)",
+  down: "var(--junk)",
+  off: "var(--fg-3)",
+};
+
+// Radius doubles as the shape cue: fully round for healthy, barely rounded for
+// broken. `warn` stays square-ish too — it is a problem, and it should not read
+// as fine to anyone who cannot see the amber.
+const DOT_RADIUS: Record<DotState, string> = {
+  ok: "9999px",
+  warn: "2px",
+  down: "1px",
+  off: "9999px",
+};
 
 export function HealthDots() {
   const { data } = useHealth();
@@ -46,13 +75,22 @@ export function HealthDots() {
               s.latency_ms != null ? ` (${s.latency_ms}ms)` : ""
             }`
           : `${LABELS[name]}: not configured`;
+        const state = dotState(s);
+        const color = DOT_COLOR[state];
         return (
           <span
             key={name}
             title={title}
             aria-label={title}
-            className="h-2 w-2 rounded-pill transition-transform hover:scale-125"
-            style={{ background: dotColor(s), boxShadow: `0 0 6px ${dotColor(s)}` }}
+            className="h-2 w-2 transition-transform hover:scale-125"
+            style={{
+              // "off" is hollow: nothing is wrong, nothing is connected either,
+              // and an empty outline says that without needing to be grey.
+              background: state === "off" ? "transparent" : color,
+              border: state === "off" ? `1.5px solid ${color}` : undefined,
+              borderRadius: DOT_RADIUS[state],
+              boxShadow: state === "off" ? "none" : `0 0 6px ${color}`,
+            }}
           />
         );
       })}
