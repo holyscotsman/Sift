@@ -2,6 +2,55 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.108.0 — The half of Storage that answers "I need 500 GB back"
+
+`Storage.tsx` sat at 54%, and the covered half was the confirm dialog. The
+uncovered half was the target planner and the tier board — which is the point of
+the screen.
+
+**Two fixtures were inventing field names, and the compiler was told not to
+mind.** `Storage.test.tsx` mocked `LedgerResponse` as `{items, total_bytes,
+by_tier}` and `MovieSizeResponse` as `{items, excess_bytes, undersized}`. The real
+types carry `total_reclaimable`/`tiers` and five named counts. Both were cast with
+`as never`, so every summary figure on the page rendered the string `undefined`
+and seven tests passed anyway. This is the third time a fixture that did not match
+its type has produced a green suite over a page rendering nothing (see 2607.99.0
+on `ShowSummary`), so the first new test reads all five headline numbers
+precisely and asserts that the string "undefined" appears nowhere.
+
+Now pinned:
+
+- **The target is typed in gigabytes and asked for in bytes.** A nonsense or empty
+  target asks for nothing at all, rather than sending `NaN` — which would either
+  422 or, worse, read as zero and return a plan that frees nothing while looking
+  successful.
+- **A plan that cannot reach the target says so.** Silently returning the best
+  effort would let somebody free 200 GB believing they had freed 500.
+- **The plan names the riskiest tier it has to reach.** "8 GB, and you will have to
+  make a quality judgement for it" is a different offer from "8 GB, nothing is
+  lost", and the number alone hides that.
+- **Tiers are ordered safest first, always.** Sorted by size instead, tier 2 would
+  usually lead — and the ordering *is* the claim the page makes about being
+  dependable.
+- **The staged/live pill assumes staged when it cannot find out.** A failed
+  settings read that defaulted to "Live" would tell somebody their deletes are
+  real when nobody knows either way. Wrong in the safe direction is the only
+  acceptable wrong here.
+- **A finished scan refetches rather than reloads**, so scroll position and
+  anything half-armed survive.
+
+And the television sections, none of which had run: only seasons the server
+actually judged `bloated` are listed (ranking on total bytes would put every long
+season at the top of a list headed "heavier than their peers"); the per-hour rate
+is shown beside the total, because "60 GB" is not an accusation and "5.00 GB/h"
+is; and a season that disagrees with itself is reported separately, since fixing
+one odd SD episode among HD ones usually *costs* space and has no place in a queue
+ranked by bytes reclaimed.
+
+Eleven mutations run, all eleven red at the expected test.
+
+`Storage.tsx` 54% → 82%. Frontend 74.5% → 76.1% statements, 76.0% → 77.6% lines.
+
 ## 2607.107.0 — The library-kind form, and a message that reached nobody
 
 `SectionsForm` is the highest-consequence form in the app and sat at 31%

@@ -307,6 +307,16 @@ here so they are not re-litigated, not so they can be admired.
 - **The shadow diff costs three statements, measured.** Two whole-table score
   reads plus one chunked title hydrate, constant from five films to four hundred.
   The docstring previously claimed two and had forgotten the hydrate.
+- **A test fixture that does not match its type is a test of nothing.** Three
+  times now (`ShowSummary`, `LedgerResponse`, `MovieSizeResponse`) a mock built
+  with invented field names and cast `as never` has produced a green suite over a
+  page rendering `undefined`. Name every field as the interface names it, and pin
+  at least one test that reads the values rather than only the labels.
+- **The staged/live pill fails safe.** A settings read that fails defaults to
+  "Staged". Defaulting to "Live" would tell somebody their deletes are real when
+  nobody knows either way.
+- **Reclaim tiers are ordered safest-first, never by size.** The ordering is the
+  claim the page makes about being dependable; sorted by bytes, tier 2 leads.
 
 ---
 
