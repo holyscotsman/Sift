@@ -76,7 +76,13 @@ export function GlobalSearch() {
 
   return (
     <div className="relative w-full max-w-[400px]">
-      <div className="flex items-center gap-2 rounded-pill border border-line bg-bg2 px-3 py-1.5">
+      {/* The ring lives on the wrapper, not the input. The field itself is
+          transparent inside a bordered pill, so a ring on it would draw a
+          second outline a pixel inside the first. `focus-within` puts it
+          where the border already is. Without any of this the input killed
+          its outline and replaced it with nothing, so a keyboard user could
+          not see that they had landed in the search box. */}
+      <div className="flex items-center gap-2 rounded-pill border border-line bg-bg2 px-3 py-1.5 focus-within:ring-1 focus-within:ring-[color:var(--accent)]">
         <SearchIcon size={15} className="text-fg3 shrink-0" />
         <input
           ref={inputRef}
