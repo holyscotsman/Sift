@@ -317,6 +317,10 @@ here so they are not re-litigated, not so they can be admired.
   nobody knows either way.
 - **Reclaim tiers are ordered safest-first, never by size.** The ordering is the
   claim the page makes about being dependable; sorted by bytes, tier 2 leads.
+- **"Nothing here" and "nothing matched your filter" are different sentences.**
+  On the Activity page especially: an empty state keyed on the filtered row count
+  tells somebody their delete was never recorded. Key it on the unfiltered data
+  and give the filtered case its own words plus a way back.
 
 ---
 

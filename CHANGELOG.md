@@ -2,6 +2,47 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.110.0 — "No activity yet" was the wrong sentence
+
+`Activity.tsx` calls itself the trust surface in its own header, and sat at 55%.
+The two things it must never say were already pinned — that nothing happened when
+the fetch failed, and that a staged action was executed. Everything else was
+untested: the scan history, the type filters, the payload, and the growing window.
+
+**Writing the filter test found a third wrong sentence.** The empty state was
+keyed on the *filtered* row count, so filtering to deletes on a log containing
+none of them rendered "No activity yet" — which on this screen reads as *your
+delete was never recorded*. The two cases now have different words, and the way
+back out of a filter is a button rather than working out which chip to press.
+
+The scan panel is how anyone finds out why a scan produced the numbers it did,
+and none of it had run. Pinned: duration and totals; a run still going shows "…"
+rather than a duration computed from a null finish time (which is `NaN`, and
+"NaNm NaNs" beside a running scan reads as a crash); phase detail stays folded
+until asked for; a failed run shows its error and says plainly that it has no
+phase detail rather than showing an empty box; and the panel is absent entirely
+when nothing has run, because an empty "Scans" panel on a fresh install reads as
+a fault.
+
+Also pinned: the payload stays hidden until asked for and carries `dry_run`
+itself, not only in the pill above it — the pill is a summary and the payload is
+the record, and a record has to stand on its own. And "Show more" appears only
+when the server filled the window it was given; on a partial page it would fetch
+the same rows again.
+
+### One mutation came back green and the test says so
+
+Replacing the `.catch(() => undefined)` on the scan-list fetch with a rethrow
+leaves the "a failed scan list does not take the log down with it" test passing —
+an unhandled rejection in a detached promise inside an effect never reaches the
+render. What protects the log is that the two fetches are independent; the catch
+keeps the console clean. The test pins the log surviving, which is the property
+that matters.
+
+Eight mutations run; seven red at the expected test.
+
+`Activity.tsx` 55% → 92%.
+
 ## 2607.108.0 — The half of Storage that answers "I need 500 GB back"
 
 `Storage.tsx` sat at 54%, and the covered half was the confirm dialog. The
