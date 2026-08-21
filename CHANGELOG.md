@@ -2,6 +2,82 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.113.0 — Two scan phases that had never run under test
+
+Two whole phases of the ingest pipeline were uncovered, for the same structural
+reason in both cases: **the test doubles answered them with nothing.** The shared
+Tautulli double returned an empty list for episode history, and no test in the
+suite ever passed a TMDB client at all — every scan under test ran with
+`tmdb=None` and returned from the first line of that phase.
+
+The result was 137 uncovered lines in `ingest/pipeline.py` that looked like dead
+code and were not: they are three network-shaped loops, each with its own budget
+and its own failure policy.
+
+### Episode watch history
+
+This is one of the three axes that decide whether a show needs to be in HD, and
+none of it had been exercised. Now pinned: plays attach to a show by Plex's
+grandparent rating key, which is the only identifier an episode play carries that
+names its show; history is fetched as a **separate** request per media type, not a
+filter over the movie sweep (`get_history` defaults to `media_type="movie"`, so a
+caller that forgot the argument would silently aggregate film plays into the show
+columns); and plays for a show Plex no longer has are dropped rather than attached
+to whichever show came first.
+
+Three judgements about absent data, each of which matters because a downgrade is
+the irreversible direction:
+
+- **A play with no reported resolution leaves the height unknown**, not SD.
+  Defaulting it to 480 would tell the suitability rules a show is watched in
+  standard definition when nothing of the sort is known.
+- **A play with no completion percentage is not a play at 0%.** Counting it as one
+  drags the mean down and reads as a show nobody finishes.
+- **The stored height is the median, not the maximum.** One 4K play on a borrowed
+  television must not argue that the whole show needs a 4K master.
+
+Plus the round-trip pin the Plex phase already has: `_persist_show_watch` preloads
+every show with a rating key in one statement and matches in memory. Measured at
+under ten statements for 201 shows; a lookup per show is free on SQLite and is the
+difference between a phase that finishes and one that looks hung on Neon.
+
+### The TMDB phase
+
+Enrichment is capped by its budget and a budget of zero asks TMDB nothing. One
+title TMDB refuses is skipped and the rest of the budget is still spent — a phase
+that aborted on the first bad id would leave a whole library unenriched because of
+one deleted TMDB entry.
+
+Canon resolution makes **two different calls for two different qualities of
+evidence**: an IMDb id is an identity and resolves exactly, a title and year is a
+guess and goes through search precisely so it reads as one.
+
+And the distinction the module docstring already claimed but nothing checked: **a
+miss is a counted attempt, not a verdict.** TMDB answering "no such film" today
+does not make a title un-canonical — the attempt is counted and the entry stays
+pending until the ceiling. An *exception* is not a miss at all: counting a network
+error against the attempt ceiling would mark real canon unresolvable during an
+outage, for reasons that have nothing to do with the film.
+
+### Two mutations came back green and the tests now say so
+
+- The `if self.tmdb_enrich_limit > 0` shortcut is not what makes a zero budget
+  fetch nothing — `_tmdb_targets` passes the limit to a SQL `LIMIT`, and `LIMIT 0`
+  returns no rows. Removing the `LIMIT` *does* turn the test red. The shortcut
+  saves a round trip.
+- Removing **all three** `if self.tmdb is None: return {}` guards leaves the phase
+  passing. Every TMDB call sits inside a best-effort `except Exception`, which
+  swallows an `AttributeError` on `None` as readily as a network failure. The
+  guards stop pointless database work and an error log per pending entry; they are
+  not what keeps the scan alive.
+
+In both cases the test docstring records what the mutation showed rather than
+claiming to protect a line that is not load-bearing.
+
+Eleven mutations run in total; nine red at the expected test.
+
+`ingest/pipeline.py` coverage 84% → 95%, `ingest/normalize.py` 87% → 91%.
+
 ## 2607.110.0 — "No activity yet" was the wrong sentence
 
 `Activity.tsx` calls itself the trust surface in its own header, and sat at 55%.

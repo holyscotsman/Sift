@@ -321,6 +321,19 @@ here so they are not re-litigated, not so they can be admired.
   On the Activity page especially: an empty state keyed on the filtered row count
   tells somebody their delete was never recorded. Key it on the unfiltered data
   and give the filtered case its own words plus a way back.
+- **Absent watch data is absent, never a default.** A play with no reported
+  resolution leaves `typical_stream_height` null rather than 480; a play with no
+  completion percentage is excluded from the mean rather than counted as 0%.
+  Both defaults would argue for a downgrade, which is the irreversible direction.
+- **The stored stream height is the median, not the maximum.** One 4K play on a
+  borrowed television must not argue that a whole show needs a 4K master.
+- **Episode history is a separate Tautulli request, not a filter.**
+  `get_history` defaults to `media_type="movie"`, so a caller that omits the
+  argument silently aggregates film plays into the show columns.
+- **A canon miss is a counted attempt; an exception is not a miss.** TMDB
+  answering "no such film" increments `resolve_attempts` and leaves the entry
+  pending until the ceiling. A network error records nothing at all — otherwise
+  an outage burns the ceiling and marks real canon unresolvable.
 
 ---
 
