@@ -2,6 +2,43 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.129.0 — How a canon entry becomes a TMDB id
+
+Ten thousand canon entries resolve through two calls, and the answer decides
+which film ends up on the Missing page. A wrong id there is not a blank row — it
+is a **different film**, recommended confidently, with nothing on screen to
+suggest the lookup was what went wrong.
+
+The client's auth and headers were covered. What it does with the answers was not.
+
+**`find_by_imdb` reads `movie_results`, and only that.** `/find` returns
+`person_results` and `tv_results` alongside, and reading the wrong bucket would
+resolve a director's IMDb id to their *person* id and file it as a film — an id
+that looks perfectly valid and points at nothing. It also sends
+`external_source=imdb_id`, without which TMDB has no idea what kind of id it was
+handed.
+
+**`search_movie` sends the year only when there is one.** The year is what
+separates a remake from the original — without it the 2010 True Grit and the 1969
+one are the same question. But `year=` in the query string is not the same as
+leaving it out: TMDB filters on it, and an empty filter returns nothing for a film
+that does exist. Some canon entries have no year at all.
+
+**The first result is the one taken**, because TMDB orders by relevance and that
+is the only ranking available here.
+
+And on both paths, a malformed answer resolves to nothing rather than raising.
+A proxy, a login page and an error body all arrive as valid JSON of the wrong
+shape; ten thousand entries run through this, and one crash is the whole
+resolution phase. Empty results, a list where an object was expected, an object
+with no `id`, a literal `None` in the results array — each returns `None`, which
+the caller counts as an attempt and retries rather than treating as a verdict.
+
+Six mutations run, all six red at the expected test.
+
+`clients/tmdb.py` 84% → 90%. The six lines still uncovered are one-line wrappers
+around endpoints with no logic of their own.
+
 ## 2607.128.0 — The version check behind the Update button
 
 Picked up from the stale-chunk work: this is the only thing that tells the owner
