@@ -103,19 +103,38 @@ export function Activity() {
           </button>
         </div>
       ) : rows.length === 0 ? (
+        // Two different sentences, and on the trust surface the difference
+        // matters: "No activity yet" says nothing has ever happened, and with a
+        // filter on that is simply false. Somebody filtering to deletes and
+        // reading "no activity yet" concludes their delete was never recorded.
         <div className="panel">
-          <EmptyState
-            title="No activity yet"
-            hint="Actions you approve or that run autonomously will appear here."
-            action={
-              <Link
-                to="/junk"
-                className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
-              >
-                Review the Junk queue
-              </Link>
-            }
-          />
+          {filter === "all" ? (
+            <EmptyState
+              title="No activity yet"
+              hint="Actions you approve or that run autonomously will appear here."
+              action={
+                <Link
+                  to="/junk"
+                  className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+                >
+                  Review the Junk queue
+                </Link>
+              }
+            />
+          ) : (
+            <EmptyState
+              title={`No ${filter} actions in this window`}
+              hint="The log is not empty — this filter matches none of it."
+              action={
+                <button
+                  onClick={() => setFilter("all")}
+                  className="rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+                >
+                  Show everything
+                </button>
+              }
+            />
+          )}
         </div>
       ) : (
         <>
