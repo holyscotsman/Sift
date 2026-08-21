@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.95.0 — The audit log, and the setting that turns motion off
+
+Two surfaces where being wrong is quiet.
+
+**Activity is the only screen that answers "did that file actually go?"**, and
+both wrong answers cost something: believing a file is gone when it was staged
+means re-running a removal that already worked; believing it was staged when it
+is gone means not looking for it until much later. The distinction is one
+ternary, and nothing checked it. Pinned now, in both directions — a staged action
+says so, a live one does not say it — along with the autonomy label that records
+whether a person had to agree, and the `dry_run` flag surviving into the payload
+rather than living only in the pill. The pill is a summary; the payload is the
+record, and somebody reconstructing what happened months later reads the second
+one.
+
+**`reduceMotion` does not animate anything.** It writes `data-reduce-motion` onto
+`<html>` and `tokens.css` collapses the transitions. The setting is only as real
+as that attribute, and `lib/prefs.tsx` had no tests at all — so somebody who
+turned motion off and kept getting animations had no way to tell whether the
+toggle, the attribute or the stylesheet was at fault.
+
+It now pins that the attribute is written, that it says `"false"` rather than
+going absent (the selector is `[data-reduce-motion="true"]`, so removing it works
+today and breaks silently the moment anyone writes a rule for the other case),
+and that the preference survives a reload — asserted by mounting a second
+provider, which reads storage exactly as a fresh page load does.
+
+The OS-level `prefers-reduced-motion` is honoured separately by the stylesheet.
+Checked rather than assumed, and left alone.
+
+Also pinned: a malformed accent is ignored rather than painting the app with
+`undefined` — a half-typed hex reaches that code on every keystroke of a colour
+field — and clearing one *removes* the custom property instead of setting it to
+empty, which would override the stylesheet with nothing.
+
+`lib/prefs.tsx` 46% → 89%, `Activity.tsx` 37% → 55%, frontend overall 69% → 71%.
+Ten mutations, all red.
+
 ## 2607.94.0 — A dialog that showed twenty of forty-five and said forty-five
 
 The confirm dialog for removing surplus episode copies lists the paths it is
