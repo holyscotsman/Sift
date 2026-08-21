@@ -77,12 +77,16 @@ export function Pill({
 }) {
   const map: Record<string, { bg: string; fg: string }> = {
     neutral: { bg: "var(--bg-3)", fg: "var(--fg-2)" },
-    keep: { bg: "color-mix(in srgb, var(--keep) 18%, transparent)", fg: "var(--keep)" },
+    // Text and tint are separate tokens because they need to be on a light
+    // theme: tinting a colour at 18% over white gives a pale wash, and the same
+    // colour as text on that wash measured 2.2-2.8:1. On dark themes `-ink`
+    // resolves to the same value, so nothing changes there.
+    keep: { bg: "color-mix(in srgb, var(--keep) 18%, transparent)", fg: "var(--keep-ink)" },
     borderline: {
       bg: "color-mix(in srgb, var(--borderline) 20%, transparent)",
-      fg: "var(--borderline)",
+      fg: "var(--borderline-ink)",
     },
-    junk: { bg: "color-mix(in srgb, var(--junk) 18%, transparent)", fg: "var(--junk)" },
+    junk: { bg: "color-mix(in srgb, var(--junk) 18%, transparent)", fg: "var(--junk-ink)" },
     accent: { bg: "var(--accent-soft)", fg: "var(--accent)" },
   };
   const c = map[tone];

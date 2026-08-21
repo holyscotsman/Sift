@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:a11y": "node scripts/audit-a11y.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -27,6 +28,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.4.20",
+    "axe-core": "^4.13.0",
     "jsdom": "^25.0.1",
     "playwright": "^1.62.1",
     "postcss": "^8.4.47",

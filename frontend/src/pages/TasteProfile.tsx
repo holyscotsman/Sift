@@ -185,6 +185,11 @@ export function TasteProfile() {
                   </div>
                   <input
                     type="range"
+                    // The <label> beside this is not associated with it — no
+                    // `htmlFor`, no wrapping — so a screen reader announces
+                    // "slider, 0.5" with no idea which weight is being moved.
+                    // There are several on the page and they are indistinguishable.
+                    aria-label={`${w.label} weight`}
                     min={0}
                     max={1}
                     step={0.05}
