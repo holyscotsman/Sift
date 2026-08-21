@@ -291,7 +291,7 @@ export function Ask() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about your library…"
-          className="flex-1 rounded-pill border border-line bg-panel px-4 py-2.5 text-sm text-fg placeholder:text-fg3 focus:outline-none"
+          className="flex-1 rounded-pill border border-line bg-panel px-4 py-2.5 text-sm text-fg placeholder:text-fg3 focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]"
         />
         <button
           type="submit"

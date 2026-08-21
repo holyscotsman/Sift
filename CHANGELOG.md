@@ -2,6 +2,35 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.98.0 — Three inputs a keyboard user could not find
+
+The browser audit came back clean across all ten screens. Then a grep found three
+controls with **no visible focus state at all**: the global search box, the Ask
+question field, and the Radarr defaults inputs in Settings.
+
+`focus:outline-none` is how you stop the browser's default ring clashing with a
+rounded design. It is also how you make a control invisible to anyone navigating
+by keyboard — you tab into the field and nothing on screen says so. WCAG 2.4.7,
+Level AA.
+
+**axe cannot see this**, which is why the audit passed. Focus appearance depends
+on computed styles in a state the page is not in while being scanned. It is a
+grep-shaped problem and it wanted a grep.
+
+Two of them take the ring the rest of the codebase already uses. The search box
+does not: it is a transparent field inside a bordered pill, so a ring on the input
+would draw a second outline a pixel inside the first. That one goes on the wrapper
+with `focus-within`, where the border already is.
+
+`focus-visible.test.ts` now refuses any `focus:outline-none` without a visible
+replacement on the same element or its wrapper — with a negative control checking
+the rule matches a real offender and not a real fix, because a lint-shaped test
+whose regex matches nothing passes beautifully.
+
+Confirmed in a browser afterwards: thirty tab stops, every one of them visible.
+
+Three mutations, all red.
+
 ## 2607.97.0 — Three accessibility failures a browser found
 
 The project's standards ask for keyboard and touch, colour-blind-safe glyphs and

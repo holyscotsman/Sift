@@ -439,7 +439,7 @@ function RadarrDefaultsSection() {
   }
 
   const select =
-    "w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none";
+    "w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-[color:var(--accent)]";
   return (
     <Section title="Radarr add defaults">
       <p className="text-sm text-fg2">
