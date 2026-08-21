@@ -9,6 +9,7 @@ import { useSearchParams } from "react-router-dom";
 import { GridIcon, TableIcon } from "@/components/icons";
 import { ShowsList } from "@/components/ShowsList";
 import { api, urlToken } from "@/lib/api";
+import { fmtSize as fmtBytes } from "@/lib/format";
 import type { MovieQuery } from "@/lib/api";
 import { EmptyState, Pill, Poster, Skeleton } from "@/components/ui";
 import { useDrawer } from "@/lib/drawer";
@@ -29,10 +30,6 @@ const QUICK_LABELS: Record<Quick, string> = {
 };
 
 const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")];
-
-function fmtBytes(bytes: number): string {
-  return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
-}
 
 export function Library() {
   const [params, setParams] = useSearchParams();
@@ -618,7 +615,7 @@ function TableView({
                 </span>
               </td>
               <td className="hidden px-3 text-fg2 md:table-cell">
-                {m.file_size ? `${(m.file_size / 1e9).toFixed(1)} GB` : "—"}
+                {fmtBytes(m.file_size)}
               </td>
               <td className="px-3">
                 {m.in_plex ? <Pill tone="keep">Yes</Pill> : <span className="text-fg3">—</span>}

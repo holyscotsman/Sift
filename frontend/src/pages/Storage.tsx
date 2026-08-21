@@ -14,6 +14,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { EmptyState, PageTitle, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fmtSize } from "@/lib/format";
 import { useDrawer } from "@/lib/drawer";
 import type {
   BaselinesResponse,
@@ -25,12 +26,6 @@ import type {
   ShowDuplicates,
   TvStorageResponse,
 } from "@/lib/types";
-
-function fmtSize(bytes: number | null | undefined): string {
-  if (!bytes) return "—";
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
-  return `${(bytes / 1e9).toFixed(1)} GB`;
-}
 
 function fmtRate(bytesPerHour: number): string {
   return `${(bytesPerHour / 1e9).toFixed(2)} GB/h`;

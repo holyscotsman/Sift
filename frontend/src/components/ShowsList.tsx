@@ -13,13 +13,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState, Pill, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fmtSize as fmtBytes } from "@/lib/format";
 import type { ShowSummary } from "@/lib/types";
-
-function fmtBytes(bytes: number): string {
-  if (!bytes) return "—";
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
-  return `${(bytes / 1e9).toFixed(1)} GB`;
-}
 
 function fmtWatched(show: ShowSummary): string {
   if (!show.plays) return "never";

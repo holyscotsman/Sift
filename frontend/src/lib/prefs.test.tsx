@@ -127,3 +127,43 @@ describe("a custom accent", () => {
     expect(localStorage.getItem("sift.accent")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe("a stored preference that is not one we know", () => {
+  it("falls back rather than being written onto the document", () => {
+    // `localStorage` is writable by anything on the origin and survives a release
+    // that renames a theme. An unrecognised value used to go straight onto
+    // `data-theme`, where it matches no CSS rule at all — the app then renders
+    // the default palette while Settings shows the stored name as selected.
+    // Silent, and impossible to explain from the screen.
+    //
+    // This is not hypothetical: a browser-QA harness wrote `"dark"` with quotes
+    // (JSON, where the app stores raw) and three whole theme passes rendered the
+    // default palette while reporting success.
+    localStorage.setItem("sift.theme", '"dark"'); // quoted — not a Theme
+    localStorage.setItem("sift.density", "roomy"); // renamed away
+
+    render(
+      <PrefsProvider>
+        <Probe />
+      </PrefsProvider>,
+    );
+
+    expect(root().dataset.theme).toBe("dark");
+    expect(root().dataset.density).toBe("comfortable");
+    expect(screen.getByTestId("theme").textContent).toBe("dark");
+  });
+
+  it("NEGATIVE CONTROL: a value we do know is honoured", () => {
+    localStorage.setItem("sift.theme", "neon");
+
+    render(
+      <PrefsProvider>
+        <Probe />
+      </PrefsProvider>,
+    );
+
+    expect(root().dataset.theme).toBe("neon");
+  });
+});

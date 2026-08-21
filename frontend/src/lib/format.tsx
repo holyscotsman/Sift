@@ -73,3 +73,29 @@ export function formatAnswer(text: string): ReactNode[] {
   flushList();
   return blocks;
 }
+
+// ---------------------------------------------------------------------------
+// Sizes.
+//
+// There were six copies of this and five of them could not express a file
+// smaller than 50 MB: each went straight from bytes to
+// `(bytes / 1e9).toFixed(1) + " GB"`, so a 40 MB sample rendered as "0.0 GB".
+// That is not a rounding nicety on the Storage page — samples, trailers and
+// part-downloads are *by definition* small, and they are the whole category
+// tier 0 exists to reclaim. The one screen whose job is to report sizes could
+// not name the sizes it most needed to.
+//
+// Found by looking at a rendered page. jsdom has no opinion about whether
+// "0.0 GB" is a sensible thing to print, so every unit test was happy.
+
+/** Bytes as the largest unit that keeps the number meaningful. `—` for nothing. */
+export function fmtSize(bytes: number | null | undefined): string {
+  if (!bytes) return "—";
+  const n = Math.abs(bytes);
+  if (n >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
+  if (n >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  // No decimal below a gigabyte: "847 MB" is the useful precision, and "846.7 MB"
+  // is three digits nobody reads on a row that is one of two hundred.
+  if (n >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+  return `${Math.round(bytes / 1e3)} KB`;
+}
