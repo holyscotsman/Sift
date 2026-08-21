@@ -108,3 +108,101 @@ describe("NEGATIVE CONTROL: a healthy list", () => {
     expect(screen.queryByText(/incomplete/i)).not.toBeInTheDocument();
   });
 });
+
+// The quick filters, and the download that is supposed to match them.
+//
+// `routes_export` says the CSV "shares the exact filters/sort of /api/movies …
+// so the download always matches the visible set". That promise lives in one
+// `useMemo` reading the same `buildQuery` the list does, and nothing checked it.
+// A download that quietly differs from the screen is worse than one that fails:
+// the file looks right, and the difference is only discoverable by counting rows.
+
+function lastQuery(movies: ReturnType<typeof vi.spyOn>) {
+  return movies.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+}
+
+describe("the quick filters", () => {
+  it("ask for exactly what each one means, and nothing else", async () => {
+    // Each filter maps to a different set of params. A stray `in_plex` on the
+    // kids view would silently hide every kids film that is not owned yet, and
+    // the view would look correct while being wrong.
+    const movies = vi.spyOn(api, "movies").mockResolvedValue(page(["Alien"], 1) as never);
+
+    renderPage(<Library />);
+    await screen.findByText("Alien");
+
+    await userEvent.click(screen.getByRole("button", { name: /^kids$/i }));
+    await waitFor(() => {
+      const q = lastQuery(movies);
+      expect(q.is_kids).toBe(true);
+      expect(q.in_plex).toBeUndefined();
+      expect(q.monitored).toBeUndefined();
+      expect(q.cutoff_unmet).toBeUndefined();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /^monitored$/i }));
+    await waitFor(() => {
+      const q = lastQuery(movies);
+      expect(q.monitored).toBe(true);
+      expect(q.is_kids).toBeUndefined();
+    });
+  });
+
+  it("narrows upgrades to things you actually own", async () => {
+    // "Below cutoff" is a library view narrowed by Radarr's opinion. An upgrade
+    // for a film nobody has is not an upgrade, it is a suggestion — and that is
+    // the Missing page's job, not this one's.
+    const movies = vi.spyOn(api, "movies").mockResolvedValue(page(["Alien"], 1) as never);
+
+    renderPage(<Library />);
+    await screen.findByText("Alien");
+    await userEvent.click(screen.getByRole("button", { name: /below cutoff|upgrades/i }));
+
+    await waitFor(() => {
+      const q = lastQuery(movies);
+      expect(q.cutoff_unmet).toBe(true);
+      expect(q.in_plex).toBe(true);
+    });
+  });
+
+  it("goes back to the first page when the filter changes", async () => {
+    // Otherwise a filter change lands you at the offset of the list you just
+    // left, and the top of the new list is never shown.
+    const movies = vi
+      .spyOn(api, "movies")
+      .mockResolvedValue(page(fullPage("Alien"), 200) as never);
+
+    renderPage(<Library />);
+    await screen.findByText("Alien");
+    await waitFor(() => {
+      scrollToBottom();
+      expect(movies.mock.calls.length).toBeGreaterThan(1);
+    });
+    expect(lastQuery(movies).page).toBe(2);
+
+    await userEvent.click(screen.getByRole("button", { name: /^kids$/i }));
+    await waitFor(() => expect(lastQuery(movies).page).toBe(1));
+  });
+});
+
+describe("the CSV download", () => {
+  it("carries the same filters as the list on screen", async () => {
+    vi.spyOn(api, "movies").mockResolvedValue(page(["Alien"], 1) as never);
+
+    renderPage(<Library />);
+    await screen.findByText("Alien");
+    await userEvent.click(screen.getByRole("button", { name: /^kids$/i }));
+
+    const link = await screen.findByRole("link", { name: /csv|export|download/i });
+    await waitFor(() => {
+      const href = link.getAttribute("href") ?? "";
+      expect(href).toContain("is_kids=true");
+      // And not the filters it is *not* showing.
+      expect(href).not.toContain("monitored=true");
+      // Paging is a property of the screen, not of the export: the file is the
+      // whole set, capped server-side, not the sixty rows currently rendered.
+      expect(href).not.toContain("page=");
+      expect(href).not.toContain("page_size=");
+    });
+  });
+});
