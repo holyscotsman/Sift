@@ -2,6 +2,37 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.91.0 — A statement budget for every screen
+
+A performance sweep across every read endpoint the UI calls, on a library-sized
+dataset: 4,000 owned films, 300 shows, the full 25,000-entry canon.
+
+**It came back clean.** Nothing costs more than eight statements, nothing is doing
+an N+1, and continuing an endless list costs one statement where starting one
+costs three. Recorded as a finding rather than quietly dropped, because a sweep
+that only ever reports problems is one nobody can calibrate.
+
+So instead of a fix, the measurement became a guard. `test_endpoint_cost.py` puts
+a **statement and byte budget on every read endpoint**, and the numbers are the
+observed costs plus a little headroom rather than round numbers picked to pass.
+
+This is the read-side counterpart to `test_scan_cost.py`. Hosted Postgres bills
+for round trips and for bytes moved; the tests run on file-backed SQLite where
+both are effectively free, so an N+1 introduced in a route is invisible to every
+other test in the suite and surfaces weeks later as "the app got slow" on somebody
+else's database. Version 2607.15.1 exists because exactly that happened on the
+write side.
+
+**Two things the negative control caught, which is the point of having one.**
+`/api/health` was given a budget of two statements and costs zero — it probes
+external services and has no business reading the database at all, so the budget
+is now zero, which is a stronger claim than "small". And the continuation of an
+endless list was budgeted at two against an observed one; a mutation that puts the
+hidden-title counts back on every page slipped through at two and fails at one.
+A budget with slack in it is decoration.
+
+Verified against a real N+1 injected into the suggestions route: the guard turns
+red.
 ## 2607.90.0 — Two URLs that skipped the guard
 
 A security pass over the whole app, since it holds Plex, Radarr and TMDB
