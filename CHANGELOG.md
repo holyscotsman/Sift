@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.89.0 — The client every screen goes through
+
+`lib/api.ts` was at 42%, and the parts that were untested are the two mechanisms
+behind the bugs that started this whole thread: the **timeout** that turns a hung
+page read into a visible error, and the **401 handling** that drops a dead session
+back to the login screen instead of leaving every panel quietly broken.
+
+Both are code that only ever runs when something has already gone wrong — which
+is exactly when nobody is in a position to debug it.
+
+Pinned now, each with its opposite:
+
+* the stored session token is sent, but **an explicit credential wins** — on a
+  fresh install a stale token in storage would otherwise be sent in place of the
+  deploy token, and the rejection looks exactly like the deploy token being wrong;
+* a 401 clears the token and announces the death **once** — but a 401 from
+  `/api/auth/*` does not, because signing someone out for mistyping their
+  password clears the very token they are trying to replace, and a 500 is not a
+  session death either;
+* the server's own explanation survives rather than being replaced by the status
+  text, and a **non-JSON error body** (a proxy's HTML 502) does not throw a
+  second, different error on top of the first;
+* a request that never answers becomes *"Timed out waiting for a response"* after
+  45 seconds, and the timer it set is **cleared** rather than left to fire against
+  a request that already finished;
+* a 204 returns nothing instead of being parsed as JSON.
+
+Nine mutations, all red.
+
+**One test's name was wrong and is now right.** It claimed to distinguish a
+timeout from a caller cancelling; `ask` is the only call that takes a caller
+signal and it sets no timeout, so it exercises the cancel path and not the
+discrimination between the two. No call site currently passes both. The test says
+so, and says which branch will need its own pin when one does.
+
+`api.ts` goes from 43% to 54%; the frontend overall from 63% to 64%.
 ## 2607.88.0 — The TV list, at 2%
 
 `ShowsList` is read-only, so nothing in it can delete a file. It is also the only
