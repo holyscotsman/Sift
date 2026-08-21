@@ -95,3 +95,63 @@ describe("removing surplus episode copies", () => {
     await waitFor(() => expect(screen.queryByText(SURPLUS[0])).not.toBeInTheDocument());
   });
 });
+
+describe("when there are more surplus files than the dialog can list", () => {
+  function manyPaths(n: number) {
+    const paths = Array.from({ length: n }, (_, i) => `/tv/scrubs/s01e${i}.sd.mkv`);
+    vi.spyOn(api, "tvStorage").mockResolvedValue({
+      ...tvStorage(),
+      duplicates: [
+        {
+          ...tvStorage().duplicates[0],
+          surplus: n,
+          surplus_paths: paths,
+        },
+      ],
+    } as never);
+    return paths;
+  }
+
+  it("says how many it did not list", async () => {
+    // The dialog caps the list at twenty. Showing twenty of forty-five under a
+    // heading that says forty-five invites the reading that twenty is all of
+    // them — and this is the dialog where that reading removes files. A
+    // truncation nobody is told about is the same failure as no truncation,
+    // only quieter.
+    manyPaths(45);
+
+    renderPage(<Storage />);
+    await userEvent.click(await screen.findByRole("button", { name: /remove 45 surplus/i }));
+
+    expect(await screen.findByText(/and 25 more not listed here/i)).toBeInTheDocument();
+  });
+
+  it("NEGATIVE CONTROL: a list that fits says nothing about extras", async () => {
+    // The counter must not appear when there is nothing it is counting. A dialog
+    // that always warns is a dialog nobody reads.
+    manyPaths(4);
+
+    renderPage(<Storage />);
+    await userEvent.click(await screen.findByRole("button", { name: /remove 4 surplus/i }));
+
+    expect(await screen.findByText(/s01e0.sd.mkv/)).toBeInTheDocument();
+    expect(screen.queryByText(/more not listed here/i)).not.toBeInTheDocument();
+  });
+
+  it("still sends every path, not just the ones it showed", async () => {
+    // The cap is a display decision and must never become a scope decision. If
+    // it ever leaked into the request, twenty-five duplicate files would sit on
+    // disk after a removal that reported success.
+    const paths = manyPaths(45);
+    const act = vi
+      .spyOn(api, "actOnFinding")
+      .mockResolvedValue({ action_id: 1, job_ids: [], dry_run: true, detail: "Staged." } as never);
+
+    renderPage(<Storage />);
+    await userEvent.click(await screen.findByRole("button", { name: /remove 45 surplus/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /queue removal/i }));
+
+    expect(act).toHaveBeenCalledTimes(1);
+    expect((act.mock.calls[0][0] as { paths: string[] }).paths).toEqual(paths);
+  });
+});

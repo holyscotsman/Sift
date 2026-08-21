@@ -2,6 +2,31 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.94.0 — A dialog that showed twenty of forty-five and said forty-five
+
+The confirm dialog for removing surplus episode copies lists the paths it is
+about to act on. It listed **twenty of them** and stopped, with no indication
+that there were any more.
+
+The heading says the real number — "Remove 45 surplus file(s) from Scrubs?" — so
+somebody reading carefully could work it out. Somebody scanning sees twenty paths
+under a heading that says forty-five and takes the twenty for the list. This is
+the dialog where that reading removes files.
+
+A truncation nobody is told about is the same failure as no truncation, only
+quieter. It now counts what it left out: *"and 25 more not listed here"*.
+
+Pinned with the mutation that matters most: **the display cap must never become a
+scope cap.** If twenty ever leaked from the list into the request, twenty-five
+duplicate files would still be sitting on disk after a removal that reported
+success — and the report would be the only evidence, which is to say none.
+
+Also pinned that the counter stays away when there is nothing to count. A dialog
+that always warns is a dialog nobody reads.
+
+`Storage.tsx` stays at 54% — the dialog was already exercised and this added one
+small branch to it. The honest figure, since the value here is the fix rather
+than the percentage. Three mutations, all red.
 ## 2607.93.0 — What the card actually says, in a browser
 
 Booted a real Sift with a 400-film library and drove every screen with Chromium.

@@ -133,6 +133,11 @@ function TierBoard({ book, plan }: { book: LedgerResponse; plan: PlanResponse | 
   );
 }
 
+// How many paths the confirm dialog lists before it starts counting instead.
+// Twenty fills the scroll box; past that the list stops being something anybody
+// reads and starts being something they scroll past.
+const PATHS_SHOWN = 20;
+
 export function Storage() {
   const [sizes, setSizes] = useState<MovieSizeResponse | null>(null);
   const [dupes, setDupes] = useState<DuplicatesResponse | null>(null);
@@ -593,12 +598,24 @@ export function Storage() {
               no access to them — and it moves them to a trash folder rather than deleting them, so
               a mistake is recoverable.
             </p>
+            {/* The list is capped, and the cap says so. A dialog that shows
+                twenty paths out of forty-five, under a heading that says
+                forty-five, invites the reading that twenty is the whole set —
+                and this is the dialog where that reading gets files removed.
+                A truncation nobody is told about is the same failure as no
+                truncation at all, only quieter. */}
             <ul className="max-h-40 overflow-y-auto text-xs text-fg3">
-              {(confirming?.surplus_paths ?? []).slice(0, 20).map((path) => (
+              {(confirming?.surplus_paths ?? []).slice(0, PATHS_SHOWN).map((path) => (
                 <li key={path} className="truncate">
                   {path}
                 </li>
               ))}
+              {(confirming?.surplus_paths ?? []).length > PATHS_SHOWN && (
+                <li className="pt-1 font-semibold text-fg2">
+                  and {(confirming?.surplus_paths ?? []).length - PATHS_SHOWN} more not
+                  listed here
+                </li>
+              )}
             </ul>
           </div>
         }
