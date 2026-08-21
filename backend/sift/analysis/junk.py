@@ -509,9 +509,11 @@ def shadow_diff(
     rather than on cases chosen to prove a point — and it is why v2 computes in
     shadow at all instead of simply replacing v1 on a version bump.
 
-    Two statements regardless of library size: both score tables are read whole
-    and joined in memory against the titles, which is the same shape the scoring
-    loop uses and for the same reason.
+    Three statements regardless of library size: both score tables are read whole
+    and joined in memory, then one chunked read hydrates titles for the page that
+    is actually returned. That is the same shape the scoring loop uses and for
+    the same reason — on hosted Postgres a per-row lookup is a round trip, and a
+    diff over a few thousand films would be a few thousand of them.
     """
     v1_rows = {row.movie_id: row for row in session.scalars(select(Score))}
     v2_rows = {row.movie_id: row for row in session.scalars(select(ScoreV2))}
