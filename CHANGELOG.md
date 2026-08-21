@@ -2,6 +2,45 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.90.0 — Two URLs that skipped the guard
+
+A security pass over the whole app, since it holds Plex, Radarr and TMDB
+credentials and is meant to be reachable from the internet. Most of it came back
+clean, and the two things that did not are the same thing twice.
+
+`reject_unsafe_base_url` refuses a URL pointing at cloud instance metadata, and it
+lives in `BaseClient.__init__` so that every client gets it without anybody having
+to remember. **Two paths build their own httpx client and so never pass through
+it:**
+
+* **the Ollama provider.** `routes_config` already guards this exact URL before
+  probing it, with a comment saying why — it "builds its own httpx client, so it
+  was the one path that could be pointed at 169.254.169.254 and used as a
+  reachability oracle". The provider that calls the *saved* URL on every scan had
+  no such check, so a URL that failed the connection test could still be saved and
+  then used.
+* **the deploy hook.** A stored URL the server POSTs to on request is an SSRF
+  primitive. Blind and authenticated, so not the worst of its kind — but the guard
+  exists so that "refuse to send credentials to the metadata endpoint" is true
+  *everywhere* rather than nearly everywhere. A control with a hole in it is worse
+  than no control, because everybody stops checking.
+
+Both now go through the same function as everything else, and both keep working
+for the setup people actually have: a local Ollama on `127.0.0.1` or a LAN
+address, and a real Render hook.
+
+**What the rest of the pass found: nothing.** Recorded because a security review
+that only ever reports findings is one nobody can calibrate. No endpoint echoes a
+stored secret back — probed live against `/api/config`, `/api/settings`,
+`/api/health`, `/api/status`, `/api/system/version` and the decisions export.
+Nothing logs one. Passwords are PBKDF2-SHA256 at 240,000 rounds; sign-in is rate
+limited at five failures a minute; session tokens last thirty days and asset
+tokens fifteen minutes. Tokens that ride in a query string — posters, CSV, the
+scan socket — are accepted at *asset* scope only, so one recovered from an access
+log cannot reach the API, and the decisions *import* correctly refuses asset
+scope. No raw SQL, no `dangerouslySetInnerHTML`, CORS limited to the dev server.
+
+Four mutations, all red.
 ## 2607.89.0 — The client every screen goes through
 
 `lib/api.ts` was at 42%, and the parts that were untested are the two mechanisms
