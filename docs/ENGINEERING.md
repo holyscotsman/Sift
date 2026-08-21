@@ -317,6 +317,16 @@ here so they are not re-litigated, not so they can be admired.
   nobody knows either way.
 - **Reclaim tiers are ordered safest-first, never by size.** The ordering is the
   claim the page makes about being dependable; sorted by bytes, tier 2 leads.
+- **An optimistic UI mark reverts when its write is refused.** Junk keeps, the
+  rescan schedule chip: both highlight immediately and both put the previous
+  value back on failure. A mark left standing tells somebody a setting is in
+  force when nothing was stored.
+- **A "clears on failure" test needs something to clear.** Assert the stale value
+  was on screen *first*, then break the next request. A control where the request
+  always failed proves only that the initial state is empty.
+- **`fireEvent.change`, not `userEvent.type`, for range inputs.** Arrow keys do
+  not move a slider under jsdom, so a typed keystroke fires no change event and
+  nothing downstream runs.
 - **"Nothing here" and "nothing matched your filter" are different sentences.**
   On the Activity page especially: an empty state keyed on the filtered row count
   tells somebody their delete was never recorded. Key it on the unfiltered data

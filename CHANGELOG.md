@@ -2,6 +2,50 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.119.0 — The Settings tabs that change behaviour, and 80% frontend coverage
+
+`Settings.test.tsx` covers the destructive and identity-bearing parts — the
+unreadable-credentials banner, the password change, the dry-run switch, the
+factory reset. This covers the tuning, which was the largest single gap left.
+
+**The threshold preview.** The sliders move a number nobody can hold in their
+head; the preview is the only thing that turns "junk cutoff 70" into "this would
+flag 412 titles", and it has to arrive before the save rather than after a
+re-score. A failed preview clears the count rather than leaving a stale one, and a
+stale count is worse than none — it describes a setting that is no longer
+selected, which is the one thing the panel exists not to do.
+
+**The rescan schedule** puts the choice back when the save is refused. The chip
+highlights immediately, which is right; what it must not do is keep highlighting a
+schedule the server never accepted, because the owner walks away believing a
+rescan is booked and none is. The chips are also disabled until the current
+setting is known, or a click would save a schedule chosen against nothing.
+
+**The Radarr add defaults** stay off the page entirely when Radarr has nothing to
+offer — two empty selects imply a choice that does not exist, and the historical
+default still applies. An unset profile is sent as `""` rather than `Number("")`,
+which is `0`, which is a real profile id Radarr would reject.
+
+**The poster cache** cannot be cleared when already empty, and re-reads its size
+afterwards rather than assuming zero: the server decides what survives a clear, and
+printing a number it was never told is the page inventing one.
+
+### One test was vacuous and was rebuilt
+
+The failed-preview control asserted that nothing was on screen after a preview
+that *always* failed — there was never a stale value to clear, so removing
+`setPreview(null)` left it green. It now lets a preview land first and breaks the
+next one. (It also needed `fireEvent.change` rather than `userEvent.type`: arrow
+keys do not move a range input under jsdom, so the typed keystroke fired no change
+event and the second preview never happened.)
+
+Eight mutations run, all eight red at the expected test after the rebuild.
+
+`Settings.tsx` 56% → 76%.
+
+**Frontend coverage is now 80.7% statements and 82.2% lines**, up from 66% at the
+start of this pass — the target set when the sweep began.
+
 ## 2607.118.0 — What the Library remembers, and what it refuses to
 
 `Library.test.tsx` pins the paging failure — a dropped page that used to vanish
