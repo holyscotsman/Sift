@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sift"
 # Version scheme: YYMM.major.patch  (see docs/ENGINEERING.md / CHANGELOG.md)
-version = "2607.91.0"
+version = "2607.92.0"
 description = "Sift — a portable metadata brain that analyzes a Plex + Radarr library to find missing movies and flag removals."
 readme = "README.md"
 requires-python = ">=3.12"
