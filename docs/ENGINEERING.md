@@ -294,6 +294,19 @@ here so they are not re-litigated, not so they can be admired.
 - **A Missing page costs two statements, pinned exactly.** All three subtractions
   are `EXISTS` clauses inside the count and the page. Moving one into Python
   costs exactly one more round trip, so a loose bound would not catch it.
+- **The shadow diff compares stored bands, never recomputed ones.** v1's band is
+  read from `Score.signals["band"]` and only falls back to `scoring.band()` for
+  rows written before bands were stored. Recomputing under today's thresholds
+  would relabel films the old engine judged under different cutoffs and invent
+  disagreements neither engine ever had — which corrupts the one number the
+  v1→v2 cutover is decided on.
+- **`insufficient` is not a rung on the band ladder.** It is v2 declining to
+  answer, and it is counted as its own outcome. Ordering it against
+  keep/borderline/junk sorts it below `keep`, so every abstention would read as
+  v2 wanting to *keep* a film it explicitly refused to judge.
+- **The shadow diff costs three statements, measured.** Two whole-table score
+  reads plus one chunked title hydrate, constant from five films to four hundred.
+  The docstring previously claimed two and had forgotten the hydrate.
 
 ---
 

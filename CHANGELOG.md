@@ -2,6 +2,60 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.105.0 — The eval that decides the cutover was itself unverified
+
+`shadow_diff` is how the v1→v2 scoring cutover gets decided. Its own docstring
+calls it "the only honest eval that exists for taste", because it runs on the
+owner's real library rather than on cases chosen to prove a point. It had no
+tests at all, which meant the numbers on the one screen that decision rests on
+were unchecked.
+
+Twelve pins, covering the four things it can get quietly wrong:
+
+**Who is compared.** Only films *both* engines scored. A film v1 scored and v2
+did not is an absence, not a disagreement, and counting it reports drift no
+engine ever claimed.
+
+**Which direction.** keep→junk is v2 being stricter, junk→keep is v2 being
+gentler, and anything→`insufficient` is v2 declining to answer. `insufficient`
+is not a rung on the keep/borderline/junk ladder, so an ordering comparison
+against it is meaningless — ranked naively it sorts below `keep` and every
+abstention would be reported as v2 wanting to *keep* a film it has explicitly
+refused to judge. That is the number the cutover is read from.
+
+**Which band counts as v1's.** The stored band, not a recomputation. A film
+scored 45 under a borderline cutoff of 40 was borderline when v1 judged it;
+recomputing under a later cutoff of 50 relabels it and manufactures a
+disagreement neither engine ever had. Rows written before bands were stored still
+fall back to the thresholds, so the diff does not silently shrink to the newest
+scans.
+
+**Which films reach the page.** Ranked by gap size, then truncated — not the
+reverse. Cutting before ranking returns whichever films came back first, an
+arbitrary sample presented as "the worst disagreements", which is precisely how
+a shadow eval lies.
+
+**The stated cost was wrong and now is not.** The docstring claimed two
+statements. Measured: three — two whole-table score reads plus one chunked title
+hydrate, identical for a five-film and a four-hundred-film library. The claim was
+off by the hydrate it forgot; on hosted Postgres, where every statement is a round
+trip, that is the number worth stating accurately.
+
+**Two fixtures were vacuous and were rebuilt.** The tie-break test used ids
+1/2/3-style values, and a set of small ints iterates in sorted order anyway — it
+passed with the ordering removed entirely. It now uses ids whose set order
+genuinely differs, and asserts that in the fixture so it cannot silently rot. The
+limit test had ascending ids and descending gaps, so truncate-before-sort returned
+the same three rows; the gap now grows with the id, which makes the two orders
+opposites.
+
+One mutation is honestly green: removing the tmdb_id tie-break alone leaves the
+order stable, because `sorted(shared)` upstream already delivers it. Removing
+*both* turns the test red. The pin is on the contract, not on which of the two
+mechanisms happens to be carrying it, and the test says so.
+
+`analysis/junk.py` coverage 81% → 93%.
+
 ## 2607.104.0 — One dead seed must not kill the list
 
 `tv_recommend.suggest` is the async half of the show recommender: for each show
