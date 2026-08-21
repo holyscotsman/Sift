@@ -360,6 +360,17 @@ here so they are not re-litigated, not so they can be admired.
   write into the automation that manages the library, so it takes the same floor
   as a delete. A downgrade whose write-back failed must never look like one that
   applied.
+- **A `.catch` on a detached promise inside an effect is not what keeps a page
+  alive.** An unhandled rejection there never reaches the render, so removing the
+  catch leaves the test green (verified on both `Library`'s section list and
+  `Activity`'s scan list). What protects the page is that the fetches are
+  independent. Pin the page still rendering, not the catch.
+- **A stored preference is untrusted input.** `localStorage` is writable by
+  anything on the origin and survives renames. Validate a stored sort or view
+  against the allowed set — an unrecognised value goes into the query string and
+  comes back 422 as a blank page with no explanation.
+- **`renderPage(ui, route)`** mounts a page at a real URL. Pages that read search
+  params cannot be tested in the state a deep link puts them in without it.
 
 ---
 
