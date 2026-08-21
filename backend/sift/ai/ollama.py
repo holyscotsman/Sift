@@ -11,6 +11,7 @@ import time
 
 import httpx
 
+from ..clients.base import reject_unsafe_base_url
 from .provider import Completion
 
 
@@ -26,6 +27,14 @@ class OllamaProvider:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.model = model
+        # The same guard every other client gets from ``BaseClient``. This
+        # provider builds its own httpx client, so it was outside it — and the
+        # *test* endpoint in ``routes_config`` already guards this exact URL,
+        # explicitly because it "could be pointed at 169.254.169.254 and used as
+        # a reachability oracle". The saved-and-used path had no such check, so
+        # a URL that failed the test could still be saved and then called on
+        # every scan.
+        reject_unsafe_base_url("ollama", base_url)
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"), timeout=timeout, transport=transport
         )

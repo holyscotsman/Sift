@@ -26,6 +26,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..clients.base import ClientError, reject_unsafe_base_url
 from ..services import config_store, updates
 from .deps import AuthDep, get_session_factory
 from .schemas import RestartResponse, UpdateResponse, VersionStatus
@@ -106,6 +107,15 @@ async def update(
                 "copy the URL, and paste it into Settings › Connections › Updates."
             ),
         )
+    # A stored URL the server POSTs to on request is an SSRF primitive, and this
+    # was the one place a user-supplied URL reached httpx without the guard every
+    # client gets. Blind and authenticated, so not the worst of its kind — but the
+    # guard exists precisely so that "refuse to send credentials to the metadata
+    # endpoint" is true everywhere rather than nearly everywhere.
+    try:
+        reject_unsafe_base_url("deploy hook", str(hook))
+    except ClientError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(str(hook))
