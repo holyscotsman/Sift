@@ -2,6 +2,66 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.107.0 — The library-kind form, and a message that reached nobody
+
+`SectionsForm` is the highest-consequence form in the app and sat at 31%
+coverage. It decides what Sift reads as a film — and Plex calls a Home Videos
+library a *movie* library, so a wrong answer here puts family footage into the
+removal queue, the film counts, and the size baselines every verdict is measured
+against. The backend route behind its Save button was returning a 500 on every
+attempt for as long as it existed (fixed in 2607.101.0) and nothing noticed,
+because neither side had a test.
+
+Now pinned: both facts appear side by side (what Plex calls it *and* why Sift
+disagrees); the current choice is `aria-pressed`, not merely styled; Save is
+disabled until something changes and sends nothing before it is pressed; a failed
+save keeps the edit so pressing Save again retries it; and — the property the
+code comment already explained — **the whole map is sent, not only what the user
+touched.** An override set back to Plex's own answer still has to be transmitted
+or the previous one sticks on the server, and the screen goes on describing a
+setup that is not in effect.
+
+Also separated: a Plex that cannot be read and a Plex with no libraries. Both
+rendered as "nothing here" before; they are different problems and only one of
+them is worth going to look for.
+
+### A message written to state nothing rendered
+
+`ShowSuggestions` was at **0%** — not one line had ever run under test. Writing
+the first failure test found the bug: the `catch` set `detail`, but the render
+only consulted `detail` once `items` was non-null. A failed request therefore
+left the loading skeleton shimmering permanently and the reason reached nobody.
+
+Fixed by giving the message somewhere to go, and by passing the server's own
+explanation through rather than a fixed string — a missing TMDB key is worth
+saying out loud.
+
+### Relative time
+
+`lib/time.ts` is small and was at 36%, but it writes the sentence under "Last
+scan", every line of the activity log, and the `hoursSince` comparison that
+decides whether the app offers to scan again. Pinned: the unit fits the distance,
+the hour boundary is 48 h rather than 24 (a scan that ran yesterday afternoon
+reads better as "36 h ago" than "2 d ago"), and a clock ahead of the browser reads
+"just now" rather than "-5 min ago".
+
+`hoursSince` deliberately makes the *opposite* choice and returns a negative
+rather than clamping: it feeds `>=` comparisons where a clamp to zero and a
+genuine "just scanned" would be indistinguishable.
+
+### One mutation came back green and the test says so
+
+Removing the `Math.max(0, …)` clamp in `relativeTime` leaves the future-timestamp
+test passing — any negative minute count is also less than 1, so the "just now"
+branch catches it first. Removing both does turn it red. The clamp is
+belt-and-braces; the test claims the output, not the line.
+
+Six mutations run; five red at the expected test.
+
+Frontend coverage 71.7% → 74.5% statements, 73.2% → 76.0% lines.
+`SectionsForm.tsx` 31% → 96%, `ShowSuggestions.tsx` 0% → 100%, `time.ts` 36% →
+100%.
+
 ## 2607.105.0 — The eval that decides the cutover was itself unverified
 
 `shadow_diff` is how the v1→v2 scoring cutover gets decided. Its own docstring
