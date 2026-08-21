@@ -373,6 +373,10 @@ here so they are not re-litigated, not so they can be admired.
 - **Sonarr's series endpoint is a whole-object PUT.** Send the object Sonarr
   gave you with one field changed. A partial payload is read as the new value for
   every field it omits, which silently unmonitors shows and blanks paths.
+- **A scan-progress subscriber is bounded and lossy, deliberately.** The pipeline
+  awaits `publish` on the loop it is scanning on, so a blocking put stops the
+  scan and an unbounded queue leaks on any backgrounded tab. Frames are dropped
+  past 100; the next frame supersedes the last anyway.
 - **Hosted Postgres needs `pool_pre_ping` + `pool_recycle`.** Neon scales to
   zero; without them the first request after a quiet period is an intermittent
   500 from a stale pooled connection. SQLite deliberately does not get them.
