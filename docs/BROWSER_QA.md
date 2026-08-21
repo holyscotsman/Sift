@@ -15,6 +15,11 @@ Both exit non-zero on a finding, so either can gate a release. `audit:layout`
 writes a screenshot per screen per theme into `frontend/shots/` (git-ignored) —
 looking at those is the part no script does.
 
+**Run it against an instance with a library in it.** Every check here is about
+what is on screen, so an empty install passes all of them trivially and reports
+clean — a false green, and the most useless kind. A real scanned library is
+ideal; anything with films, a duplicate and a few junk candidates is enough.
+
 ## Why this exists separately from the unit suite
 
 jsdom has no layout and no compositing. It cannot see:
@@ -41,7 +46,16 @@ entire theme passes rendered the default palette while reporting success.** The
 audit now asserts the applied theme on every screen, so that cannot happen quietly
 again.
 
-## Current state — clean
+## Current state — clean, verified against a built release
+
+Last run: **2607.122.0**, a clean build of merged `main`, server restarted onto it,
+nothing rebuilt during the run.
+
+That qualification is not pedantry. An earlier run rebuilt the frontend partway
+through and the four passes ended up testing two different builds — the early ones
+had the size-formatter fix and the later ones did not, so the neon screenshots
+still showed `0.0 GB` while the report claimed clean. Build once, restart, then
+run.
 
 Ten screens (`/`, `/library`, `/missing`, `/collections`, `/junk`, `/storage`,
 `/ask`, `/profile`, `/activity`, `/settings`) at 1440×1000 and 390×844, in dark,
@@ -59,12 +73,13 @@ the theme they claimed**:
 - **No console errors** beyond poster 404s and the scan websocket, both of which
   are artefacts of an unconfigured local instance rather than defects.
 
-One error *was* real and is fixed: rebuilding the frontend under a running server
-threw `Failed to fetch dynamically imported module`. Every page is a lazy import
-and the Update button on Settings is an in-app action, so any tab open across an
-update hits it — and the boundary's primary button was "Try again", which
-re-renders the same dead import. Now handled as its own failure (2607.123.0). A
-test artefact that turned out to describe the real update path.
+One error *was* real and is fixed. Rebuilding the frontend under a running server
+threw `Failed to fetch dynamically imported module` — which looked like a pure
+test artefact until it didn't. Every page is a lazy import, and the Update button
+on Settings is an in-app action: any tab open across an update hits exactly this
+on its next navigation, and the boundary's primary button was "Try again", which
+re-renders the same dead import and fails identically. Handled as its own failure
+in 2607.124.0. The clean run above has no console errors at all.
 
 ## Waiting on a human
 
@@ -82,6 +97,10 @@ standard but deliberate and uniform. What stands out from that baseline:
 | Activity | `Payload` | 53×16 |
 | Junk | `Signal breakdown` | 139×16 |
 | Junk | `Clear selection` | 89×16 |
+| Storage | `Show what counts as normal here` | 362×20 |
+
+The skip link (`106×21`) is reported too and is fine: it is keyboard-only and
+only visible while focused, so it is never a tap target.
 
 The Activity pair is the one worth a look: two 16px-tall buttons sitting inline on
 the same row, which is the geometry that gets mis-tapped. The Junk row checkbox

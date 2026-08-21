@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.127.0 — The audit result, honestly qualified
+
+The layout audit now records *which build it ran against*, because the first
+recorded run did not and the claim was wrong because of it.
+
+That run rebuilt the frontend partway through, so its four passes tested two
+different builds: the early ones had the size-formatter fix and the later ones did
+not. The neon screenshots still showed `0.0 GB` while the report said clean across
+all thirty screen-theme combinations. Nothing was broken — the *claim* was.
+
+Re-run properly against **2607.122.0**, a clean build of merged `main` with the
+server restarted onto it and nothing touched during the run:
+
+- No horizontal page overflow.
+- No text clipped without an ellipsis or a `title`.
+- No literal `undefined`, `NaN`, `[object Object]` or `Invalid Date`.
+- **No console errors at all** — the stale-chunk error the previous run produced
+  was self-inflicted, and is now handled on its own terms besides.
+- All three themes verified applied on every screen.
+
+Seventeen findings remain, every one a touch target on the phone pass, all already
+written up as waiting on a decision. The skip link is among them and is fine: it
+is keyboard-only and only visible while focused, so it is never a tap target —
+noted so it is not mistaken for an open item.
+
+The lesson is in the doc: build once, restart, then run.
+
 ## 2607.126.0 — A wedged browser tab must never stall the scan
 
 `ScanHub` sits between the ingest pipeline and every open browser tab. The
