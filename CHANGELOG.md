@@ -2,6 +2,57 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.120.0 — How the engine is built, which nothing checked
+
+`_resolve_url` was pinned. What `make_engine` does with the URL once it has it was
+not, and both branches carry a setting that fails silently rather than loudly.
+
+**Hosted Postgres gets `pool_pre_ping` and a recycle window.** Neon scales
+connections to zero, and a pooled connection to a database that has gone to sleep
+surfaces as an error on the *next* request rather than the one that idled. Without
+these the first page load after a quiet period is a 500 — intermittent,
+unreproducible on a warm instance, and exactly the shape of bug that gets blamed on
+the app. Inspected on the engine rather than by connecting, so it needs no Postgres
+and no driver.
+
+**SQLite does not get them**, and that is a separate assertion rather than an
+afterthought: a single `create_engine` carrying both option sets would satisfy the
+first test while taxing every local session with a query per checkout.
+
+**Foreign keys are enforced per connection.** Every `ON DELETE CASCADE` in the
+schema depends on that pragma. Without it a deleted film leaves its scores, copies
+and media files behind — and the tests that rely on the cascade would pass against
+a database that never cascades.
+
+**A pooled connection can be reused on another thread.** `check_same_thread=False`
+is what lets the pipeline marshal database work onto a worker thread, which is the
+whole reason a scan does not block the event loop.
+
+### Two mutations came back green, and one of them was my test's fault
+
+The thread test opened its connection *inside* the worker thread, which never
+trips SQLite's check at all — it passed with `check_same_thread=True`, proving
+nothing. It now opens one on the main thread, returns it to the pool, and checks
+the same connection back out from the worker. That mutation is red.
+
+The other stands: the `if url != "sqlite://"` guard is not what stops an in-memory
+database using WAL. SQLite refuses WAL for `:memory:` on its own, so removing the
+guard leaves the test green. The guard avoids a pragma that would do nothing, and
+the test pins the journal mode each database actually ends up in rather than
+claiming to protect the line.
+
+Five mutations run; four red at the expected test.
+
+`db/session.py` 82% → 84%. The modest jump is the honest number: the Postgres
+branch was one uncovered line and everything else in the module was already
+exercised by the suite.
+
+**Flagged:** the remaining eight uncovered lines are `session_scope`, in its
+entirety, and it has **no callers anywhere in the codebase** — every session is
+opened through `factory()` or `in_thread` instead. Left in place and named here
+rather than deleted: removing working code is the owner's call, not a test
+sweep's, and writing tests for it would be covering something nothing runs.
+
 ## 2607.119.0 — The Settings tabs that change behaviour, and 80% frontend coverage
 
 `Settings.test.tsx` covers the destructive and identity-bearing parts — the
