@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.116.0 — What the Junk queue does after you decide
+
+`Junk.test.tsx` already pins the moments where the screen could say something
+untrue about a *removal*. This covers the moments where it could say something
+untrue about what is **stored**.
+
+**A Keep that failed to save rolls the row back.** The row is marked kept
+immediately, which is right — the screen should feel instant. What it must not do
+is leave that mark standing when the write failed: the owner moves on believing a
+title is protected and the next scan puts it straight back in the queue. The bulk
+path rolls back per row and names the title, because "some titles failed" does not
+tell anybody which one is still unprotected.
+
+**Undoing a staged removal does not touch the Keep override.** Only a Keep holds
+server-side state. A reset that always cleared the override would silently strip
+protection set on the Library page, as a side effect of changing your mind about
+something else entirely.
+
+**The sort choice persists, and the default is score.** A disk purge is a session,
+not a click — but score is the safety-relevant order and has to be what an empty
+`localStorage` gives you, rather than whatever was last used.
+
+**Re-running the AI review leaves the selection alone.** Re-running the
+*explanation* of a queue is not a reason to re-tick the dozen titles somebody just
+spared; losing it means starting a two-hundred-candidate pass again. And when no
+provider is configured the message says the reason is the deterministic one — the
+review is an explanation, never a verdict, and reporting it as `via deterministic`
+invites reading it as a judgement.
+
+**The sort fixture was vacuous and was rebuilt.** The Matrix was both the higher
+score and the larger file, so the two sort orders were identical and the test
+could not tell them apart. The Matrix now scores higher while Toy Story is the
+bigger file, which is the disagreement the size sort exists for.
+
+Eight mutations run, all eight red at the expected test.
+
+`Junk.tsx` 61% → 85%. Frontend crosses 78% statements / 79.8% lines.
+
 ## 2607.115.0 — The score on the home screen, and the cache that made tests lie
 
 `Dashboard.tsx` sat at 56%. The library-health score is the first number anybody
