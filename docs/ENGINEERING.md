@@ -366,6 +366,12 @@ here so they are not re-litigated, not so they can be admired.
 - **Sonarr's series endpoint is a whole-object PUT.** Send the object Sonarr
   gave you with one field changed. A partial payload is read as the new value for
   every field it omits, which silently unmonitors shows and blanks paths.
+- **Hosted Postgres needs `pool_pre_ping` + `pool_recycle`.** Neon scales to
+  zero; without them the first request after a quiet period is an intermittent
+  500 from a stale pooled connection. SQLite deliberately does not get them.
+- **A thread-safety test must cross the boundary with the *same* connection.**
+  Opening one inside the worker thread never trips SQLite's `check_same_thread`
+  at all. Open on the main thread, return it to the pool, check it back out.
 - **A quality write-back is dry-run by default and raises when refused.** It is a
   write into the automation that manages the library, so it takes the same floor
   as a delete. A downgrade whose write-back failed must never look like one that
@@ -388,6 +394,10 @@ here so they are not re-litigated, not so they can be admired.
 
 - **Live scan against the real family server** still needs the operator to run it
   with real Plex/Radarr credentials (the `Done when` gate for ingestion).
+- **`db/session.py:session_scope` is dead.** No caller anywhere in the codebase —
+  every session is opened through `factory()` or `in_thread` instead. Flagged
+  rather than deleted: removing working code is a call for the owner, not a test
+  sweep.
 - **Visual sign-off** on all 8 screens across the 3 themes (per DoD).
 - **To enable real deletes:** set `SIFT_ACTIONS__DRY_RUN=false` in Render when ready
   — until then every approved removal is staged (audit-only).
