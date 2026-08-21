@@ -2,6 +2,32 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.102.0 — What a repeated delete answers
+
+The status codes on the destructive path, which is where a client's retry logic
+reads them. A refusal that arrives as a 500 looks transient and gets retried; a
+double-submit that arrives as a 200 tells the person it worked twice.
+
+The 403 for an unapproved delete — the golden guard, surfaced over HTTP — was
+already pinned. The rest of the mapping was not.
+
+**Executing the same action twice** now has a test. A double-click on Approve, or
+a client retrying a request whose response it never saw, must not read as another
+successful removal: 409 says *this already happened*, which is the only answer
+that lets a client tell a retry apart from a fresh action. Unknown ids on approve,
+reject and execute answer 404 rather than falling through to a 500. And a rejected
+action cannot then be executed — rejection is a decision, and a later execute must
+not quietly overturn it.
+
+**The first version of the repeat test proved nothing**, which is worth recording
+because it looked right. It executed a delete for a film Radarr does not manage,
+so the *first* call was already a 409 for an entirely different reason and the
+second one matching it meant nothing at all. The film now exists with a
+``radarr_id``, so the first call genuinely succeeds and the second genuinely
+conflicts.
+
+Four mutations, all red.
+
 ## 2607.101.0 — Two scans against one library
 
 A scan writes the whole library snapshot. Two at once against one database is the

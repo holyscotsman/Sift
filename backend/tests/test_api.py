@@ -456,3 +456,64 @@ def test_status_answers_in_a_handful_of_statements(client):
     # Eight COUNTs plus the scan-run lookup was ten. Six leaves room for the
     # scan-run read, the two aggregates, collections, actions and a transaction.
     assert statements["n"] <= 6, f"{statements['n']} statements for one status poll"
+
+
+# The status codes on the destructive path, which is where a client's retry logic
+# reads them. A refusal that arrives as a 500 looks transient and gets retried; a
+# double-submit that arrives as a 200 tells the person it worked twice.
+
+
+def test_approving_an_action_that_does_not_exist_is_a_404(client):
+    c, _ = client
+    assert c.post("/api/actions/999999/approve").status_code == 404
+
+
+def test_rejecting_an_action_that_does_not_exist_is_a_404(client):
+    c, _ = client
+    assert c.post("/api/actions/999999/reject").status_code == 404
+
+
+def test_executing_an_action_that_does_not_exist_is_a_404(client):
+    c, _ = client
+    assert c.post("/api/actions/999999/execute").status_code == 404
+
+
+def test_executing_the_same_action_twice_is_a_conflict_not_a_success(client):
+    """A double-click on Approve, or a client retrying a request whose response
+    it never saw. The second call must not read as another successful removal —
+    409 says "this already happened", which is the only answer that lets a client
+    tell a retry apart from a fresh action."""
+    c, factory = client
+    # The film has to be one Radarr manages, or the *first* execute is already a
+    # 409 for a different reason and the test proves nothing about repetition.
+    with factory() as session:
+        session.add(Movie(tmdb_id=603, title="The Matrix", in_plex=True, radarr_id=5001))
+        session.commit()
+    action = c.post(
+        "/api/actions",
+        json={"type": "delete", "movie_tmdb_id": 603, "payload": {"delete_files": True}},
+    ).json()
+    c.post(f"/api/actions/{action['id']}/approve")
+    first = c.post(f"/api/actions/{action['id']}/execute")
+    assert first.status_code == 200, first.text
+
+    second = c.post(f"/api/actions/{action['id']}/execute")
+
+    assert second.status_code == 409
+    assert second.status_code != 500  # a policy answer, not a crash
+
+
+def test_NEGATIVE_CONTROL_a_rejected_action_cannot_then_be_executed(client):
+    """Rejection is a decision, and the engine must not let a later execute
+    quietly overturn it."""
+    c, _ = client
+    action = c.post(
+        "/api/actions",
+        json={"type": "delete", "movie_tmdb_id": 603, "payload": {"delete_files": True}},
+    ).json()
+    assert c.post(f"/api/actions/{action['id']}/reject").status_code == 200
+
+    resp = c.post(f"/api/actions/{action['id']}/execute")
+
+    assert resp.status_code in (403, 409)
+    assert resp.status_code != 200
