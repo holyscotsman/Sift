@@ -7,22 +7,31 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
+import { resetSharedCache } from "@/lib/hooks";
 import { Dashboard } from "@/pages/Dashboard";
 import { renderPage } from "@/test/harness";
 
+// Named as `Counts` names them. The first version invented `watched`/`unwatched`
+// and omitted `collections`, `watch_records`, `watched_titles` and
+// `actions_pending`; `as never` at the call site meant nothing complained.
 const COUNTS = {
   movies: 0,
   owned: 0,
   monitored: 0,
+  collections: 0,
+  watch_records: 0,
+  watched_titles: 0,
+  actions_pending: 0,
   upgrades: 0,
   junk_flagged: 0,
   musthave_pending: 0,
-  watched: 0,
-  unwatched: 0,
 };
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // `useStatus`/`useHealth` share results through a module-level window that
+  // outlives a test, so without this the second test reads the first one's data.
+  resetSharedCache();
   vi.spyOn(api, "health").mockResolvedValue({ services: [] } as never);
   vi.spyOn(api, "activity").mockResolvedValue([] as never);
   vi.spyOn(api, "getSettings").mockResolvedValue({

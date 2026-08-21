@@ -2,6 +2,59 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.115.0 — The score on the home screen, and the cache that made tests lie
+
+`Dashboard.tsx` sat at 56%. The library-health score is the first number anybody
+sees, and the page's own comment calls it "deterministic, auditable" — start at
+100, subtract named deductions, show every one. None of that had a test.
+
+**The junk deduction is a share of the library, not a count.** Fifty junk
+candidates in a hundred titles is a different problem from fifty in five thousand,
+and a raw count scores them the same. It is also capped at 40: uncapped, a library
+that is 90% junk deducts 72 points for that alone and leaves no room for anything
+else to register.
+
+**An empty library scores 0, not 100.** With no titles there are no deductions, so
+a naive `100 − 0` tells somebody who has never scanned that their library is in
+excellent health.
+
+**Unconfigured is not unreachable.** The page comment says so and now a test does:
+a service that is set up but momentarily down does not earn a "connect it" card. A
+card that appears every time the box is off teaches people to ignore the panel,
+and the panel is how real problems surface.
+
+**Actionable queues sort above setup cards.** Reviewing a junk queue changes the
+library today; connecting Tautulli is housekeeping. Ordered the other way the
+actionable item is below the fold.
+
+**Staleness needs twice the interval, and needs an interval at all.** With the
+rescan interval at zero, `hoursSince(finished) > interval * 2` is true for every
+snapshot ever taken and the warning is permanent on any install that has not set
+one. The negative control is deliberately nine hours against a six-hour interval,
+not three: three is under the interval *and* under twice it, so it would pass
+against either threshold and prove nothing about the "twice". One skipped rescan
+is a laptop that was asleep; two is a snapshot worth doubting.
+
+### The cache that made tests lie
+
+`useStatus` and `useHealth` share results through two module-level maps, which is
+what makes the window work — and it means they outlive anything that mounts and
+unmounts, including a test. The second test in a file was reading the first one's
+data for the length of the TTL and passing for the wrong reason. `resetSharedCache()`
+is now exported and called from `beforeEach`. It is also the right thing to call
+when the session identity changes, since the cache would otherwise hand the next
+caller a status read taken under the previous token.
+
+**A fourth mismatched fixture.** `COUNTS` invented `watched`/`unwatched` and
+omitted `collections`, `watch_records`, `watched_titles` and `actions_pending`;
+`as never` meant nothing complained. Corrected.
+
+Eight mutations run, eight red at the expected test — one of them only after the
+staleness control was rebuilt, because the first version passed against both the
+real threshold and the mutant.
+
+`Dashboard.tsx` 56% → 86%. `hooks.ts` 91% → 90% statements but 96% lines.
+
 ## 2607.113.0 — Two scan phases that had never run under test
 
 Two whole phases of the ingest pipeline were uncovered, for the same structural

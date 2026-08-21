@@ -334,6 +334,15 @@ here so they are not re-litigated, not so they can be admired.
   answering "no such film" increments `resolve_attempts` and leaves the entry
   pending until the ceiling. A network error records nothing at all — otherwise
   an outage burns the ceiling and marks real canon unresolvable.
+- **Health deductions are shares, capped, and named.** Junk and upgrade counts
+  are scaled to library size and capped at 40 and 20; an empty library scores 0
+  rather than a deduction-free 100. Every point lost is printed under the orb.
+- **Unconfigured is not unreachable.** A service that is set up but momentarily
+  down never earns a "connect it" card. Only `disabled` and `not configured`
+  count.
+- **`resetSharedCache()` in every `beforeEach` that renders a polling page.**
+  `useStatus`/`useHealth` share results through module-level maps that outlive a
+  test, so the second test in a file otherwise reads the first one's data.
 
 ---
 
