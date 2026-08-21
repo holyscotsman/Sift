@@ -36,17 +36,24 @@ function tvStorage() {
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(api, "getSettings").mockResolvedValue({ actions_dry_run: true } as never);
+  // Named as the types name them. The first version of these invented
+  // `excess_bytes`/`undersized` on `MovieSizeResponse` and `total_bytes`/`by_tier`
+  // on `LedgerResponse`; `as never` silences the compiler, so every summary
+  // figure on the page rendered "undefined" and the tests here passed regardless.
   vi.spyOn(api, "movieSizes").mockResolvedValue({
     items: [],
-    excess_bytes: 0,
-    undersized: [],
+    total_reclaimable: 0,
+    oversized_count: 0,
+    truncated_count: 0,
+    bad_rip_count: 0,
+    short_films_cleared: 0,
   } as never);
   vi.spyOn(api, "duplicates").mockResolvedValue({ items: [], total_surplus: 0 } as never);
   vi.spyOn(api, "baselines").mockResolvedValue({ buckets: [] } as never);
   vi.spyOn(api, "ledger").mockResolvedValue({
     items: [],
-    total_bytes: 0,
-    by_tier: {},
+    total_reclaimable: 0,
+    tiers: [],
   } as never);
   vi.spyOn(api, "tvStorage").mockResolvedValue(tvStorage() as never);
 });
