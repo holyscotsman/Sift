@@ -179,3 +179,129 @@ describe("changing the password", () => {
     expect(message).toHaveStyle({ color: "var(--junk)" });
   });
 });
+
+// The Autonomy tab. Write mode is the single most consequential switch in the
+// app: every other destructive step is confirmed one item at a time, and this is
+// the one that decides whether any of them are real.
+
+async function openAutonomy() {
+  renderPage(<Settings />);
+  await userEvent.click(await screen.findByRole("button", { name: /^autonomy$/i }));
+}
+
+describe("switching writes to live", () => {
+  it("asks first, like every other destructive step", async () => {
+    // It used to be a single click, with the warning appearing only after the
+    // switch had already happened. The app confirms deleting one film and did
+    // not confirm the setting that makes deleting films real.
+    const setConfig = vi.spyOn(api, "setActionsConfig");
+
+    await openAutonomy();
+    await userEvent.click(await screen.findByRole("button", { name: /live — send to radarr/i }));
+
+    expect(await screen.findByText(/cannot be undone/i)).toBeInTheDocument();
+    expect(setConfig).not.toHaveBeenCalled();
+  });
+
+  it("goes live once confirmed, and says so", async () => {
+    const setConfig = vi
+      .spyOn(api, "setActionsConfig")
+      .mockResolvedValue({ dry_run: false } as never);
+
+    await openAutonomy();
+    await userEvent.click(await screen.findByRole("button", { name: /live — send to radarr/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /go live/i }));
+
+    expect(setConfig).toHaveBeenCalledWith(false);
+    expect(await screen.findByText(/Live mode: approving a removal will delete/i)).toBeInTheDocument();
+  });
+
+  it("NEGATIVE CONTROL: cancelling changes nothing", async () => {
+    const setConfig = vi.spyOn(api, "setActionsConfig");
+
+    await openAutonomy();
+    await userEvent.click(await screen.findByRole("button", { name: /live — send to radarr/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+
+    expect(setConfig).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Live mode: approving a removal/i)).not.toBeInTheDocument();
+  });
+
+  it("NEGATIVE CONTROL: going back to staged does not ask", async () => {
+    // Confirming a safe action is not free — it teaches people to click through
+    // the confirmations that matter. Returning to staged makes nothing happen
+    // that was not going to happen anyway.
+    const setConfig = vi
+      .spyOn(api, "setActionsConfig")
+      .mockResolvedValue({ dry_run: true } as never);
+    vi.spyOn(api, "getActionsConfig").mockResolvedValue({ dry_run: false } as never);
+
+    await openAutonomy();
+    await userEvent.click(await screen.findByRole("button", { name: /staged \(dry-run\)/i }));
+
+    expect(setConfig).toHaveBeenCalledWith(true);
+  });
+
+  it("does not offer either switch before it knows the current mode", async () => {
+    // A button that acts on a state it has not read yet can flip the setting to
+    // whatever it assumed. Both are disabled until the server answers.
+    let release: (v: unknown) => void = () => {};
+    vi.spyOn(api, "getActionsConfig").mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+
+    await openAutonomy();
+
+    expect(await screen.findByText(/Loading…/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /live — send to radarr/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /staged \(dry-run\)/i })).toBeDisabled();
+    release({ dry_run: true });
+  });
+});
+
+describe("factory reset", () => {
+  it("asks before wiping anything", async () => {
+    const reset = vi.spyOn(api, "resetInstance");
+
+    await openAccount();
+    await userEvent.click(await screen.findByRole("button", { name: /reset everything/i }));
+
+    expect(await screen.findByText(/wipes your library snapshot/i)).toBeInTheDocument();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("passes the thumbnails choice the button actually made", async () => {
+    // Two buttons, one endpoint, one boolean. Getting it backwards silently
+    // throws away a poster cache the person asked to keep — which is not a
+    // disaster, but it is the exact kind of thing nobody notices for months.
+    const reset = vi.spyOn(api, "resetInstance").mockResolvedValue({ ok: true } as never);
+
+    await openAccount();
+    await userEvent.click(await screen.findByRole("button", { name: /reset · keep thumbnails/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^reset$/i }));
+
+    expect(reset).toHaveBeenCalledWith(true);
+  });
+
+  it("NEGATIVE CONTROL: the other button keeps nothing", async () => {
+    const reset = vi.spyOn(api, "resetInstance").mockResolvedValue({ ok: true } as never);
+
+    await openAccount();
+    await userEvent.click(await screen.findByRole("button", { name: /reset everything/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^reset$/i }));
+
+    expect(reset).toHaveBeenCalledWith(false);
+  });
+
+  it("NEGATIVE CONTROL: cancelling wipes nothing", async () => {
+    const reset = vi.spyOn(api, "resetInstance");
+
+    await openAccount();
+    await userEvent.click(await screen.findByRole("button", { name: /reset everything/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+
+    expect(reset).not.toHaveBeenCalled();
+  });
+});

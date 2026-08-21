@@ -2,6 +2,39 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.92.0 — The switch that makes every delete real was one click
+
+Covering the Autonomy tab found the gap it exists to guard.
+
+**Switching writes to live had no confirmation.** One click on "Live — send to
+Radarr" and approving any removal deletes the file for good. The warning that says
+so appeared only *after* the switch had already happened.
+
+The app confirms deleting one film. It did not confirm the setting that decides
+whether deleting films is real. That is the wrong way round: every other
+destructive step here is gated one item at a time, and this is the one that makes
+all of them count.
+
+Going live now asks, in the same dialog every other irreversible action uses. It
+also says the thing people most need to hear at that moment — per-item approval
+still applies; what changed is what approving *means*.
+
+**Only that direction asks.** Going back to staged makes nothing happen that was
+not going to happen anyway, and a confirmation on a safe action is not free: it
+teaches people to click through the ones that matter.
+
+Pinned along with it: neither button is offered before the current mode has been
+read, since a button that acts on a state it has not loaded can flip the setting
+to whatever it assumed; the live-mode warning stays; and cancelling changes
+nothing.
+
+Factory reset was already confirmed properly, and is now pinned too — including
+that the "keep thumbnails" button actually keeps them. Two buttons, one endpoint,
+one boolean: getting it backwards silently discards a poster cache somebody asked
+to keep, which is not a disaster and is exactly the kind of thing nobody notices
+for months.
+
+`Settings.tsx` goes from 37% to 56%; the frontend overall to 65.5%. Eight
 ## 2607.91.0 — A statement budget for every screen
 
 A performance sweep across every read endpoint the UI calls, on a library-sized

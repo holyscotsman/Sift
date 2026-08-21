@@ -813,6 +813,15 @@ function Scoring() {
 function Autonomy() {
   const [dryRun, setDryRun] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  // Going live is the single most consequential switch in the app: every other
+  // destructive step is confirmed individually, and this is the one that makes
+  // all of them real. It was a single unconfirmed click, with the warning
+  // appearing only *after* the switch had already happened.
+  //
+  // Only this direction asks. Going back to staged makes nothing happen that
+  // was not going to happen anyway, and a confirm on a safe action teaches
+  // people to click through the ones that are not.
+  const [confirmingLive, setConfirmingLive] = useState(false);
 
   useEffect(() => {
     api.getActionsConfig().then((a) => setDryRun(a.dry_run)).catch(() => setDryRun(null));
@@ -825,6 +834,7 @@ function Autonomy() {
       setDryRun(res.dry_run);
     } finally {
       setSaving(false);
+      setConfirmingLive(false);
     }
   }
 
@@ -852,7 +862,7 @@ function Autonomy() {
             Staged (dry-run)
           </button>
           <button
-            onClick={() => toggle(false)}
+            onClick={() => setConfirmingLive(true)}
             disabled={saving || dryRun === null}
             className={`rounded-md border px-4 py-2 text-sm font-semibold ${
               dryRun === false ? "border-accent-line text-accent" : "border-line text-fg2 hover:bg-bg2"
@@ -867,6 +877,26 @@ function Autonomy() {
           </p>
         )}
         {dryRun === null && <p className="mt-2 text-xs text-fg3">Loading…</p>}
+        <ConfirmModal
+          open={confirmingLive}
+          title="Send writes to Radarr for real?"
+          confirmLabel="Go live"
+          busy={saving}
+          onCancel={() => setConfirmingLive(false)}
+          onConfirm={() => void toggle(false)}
+          body={
+            <>
+              <p>
+                Approving a removal will delete the file in Radarr. That cannot be
+                undone from here.
+              </p>
+              <p className="mt-2 text-fg3">
+                Per-item approval still applies — nothing is deleted without you
+                approving that exact title. This changes what approving means.
+              </p>
+            </>
+          }
+        />
       </Section>
 
       <RescanSection />
