@@ -16,6 +16,7 @@ import type {
   DecisionsImportResult,
   RadarrOptions,
   ServiceHealth,
+  ShadowDiffResponse,
   ThresholdPreview,
   Thresholds,
   VersionStatus,
@@ -50,7 +51,12 @@ export function Settings() {
         <div className="min-w-0 flex-1">
           {tab === "Appearance" && <Appearance />}
           {tab === "Connections" && <Connections />}
-          {tab === "Scoring" && <Scoring />}
+          {tab === "Scoring" && (
+            <>
+              <Scoring />
+              <ShadowDiff />
+            </>
+          )}
           {tab === "Autonomy" && <Autonomy />}
           {tab === "Account" && <Account />}
         </div>
@@ -808,6 +814,145 @@ function Scoring() {
       </button>
     </Section>
   );
+}
+
+// The v1-vs-v2 disagreements, on the owner's own library.
+//
+// v2 has been computing in shadow on every scan and changing nothing. This is the
+// screen that lets it earn the right to change something: the endpoint has existed
+// since the scorer did, and nothing consumed it — so the one decision it exists to
+// inform (cut over, or don't) rested on a tool nobody could look at.
+//
+// Deliberately read-only, and deliberately not a "switch to v2" button. The
+// cutover is a separate, considered act; this is the evidence for it.
+function ShadowDiff() {
+  const [data, setData] = useState<ShadowDiffResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || data || error) return;
+    api
+      .shadowDiff()
+      .then(setData)
+      .catch((e: unknown) =>
+        setError((e as { message?: string })?.message || "Couldn't read the shadow scores."),
+      );
+  }, [open, data, error]);
+
+  return (
+    <Section title="Shadow scores">
+      <p className="max-w-prose text-sm text-fg2">
+        A second scorer runs on every scan and changes nothing. This is where it and
+        the live one disagree about your own library — which is the only honest way
+        to judge it, because the alternative is a set of examples chosen to make a
+        point.
+      </p>
+
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="mt-3 rounded-md border border-line px-4 py-2 text-sm font-semibold text-fg2 hover:bg-bg2"
+        >
+          Show the disagreements
+        </button>
+      ) : error ? (
+        <p className="mt-3 text-sm" style={{ color: "var(--junk)" }}>
+          {error}
+        </p>
+      ) : !data ? (
+        <p className="mt-3 text-sm text-fg2" role="status">
+          Comparing…
+        </p>
+      ) : data.compared === 0 ? (
+        <p className="mt-3 text-sm text-fg2">
+          Nothing to compare yet — the shadow scorer runs during a scan, so this
+          fills in after the next one.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap gap-5 text-sm">
+            <Figure label="Compared" value={data.compared} />
+            <Figure label="Disagree" value={data.disagreements} />
+            {/* Stricter and gentler are the two that matter: one means v2 would
+                queue films v1 keeps, the other means it would spare films v1
+                flags. Abstained is neither — it is v2 declining to answer. */}
+            <Figure label="v2 stricter" value={data.v2_stricter} tone="junk" />
+            <Figure label="v2 gentler" value={data.v2_gentler} tone="keep" />
+            <Figure label="v2 abstained" value={data.v2_abstained} />
+          </div>
+
+          {data.items.length === 0 ? (
+            <p className="mt-4 text-sm text-fg2">
+              The two scorers agree on every title they have both seen.
+            </p>
+          ) : (
+            <div className="panel mt-4 divide-y divide-line">
+              {data.items.slice(0, 40).map((row) => (
+                <div key={row.tmdb_id} className="flex flex-wrap items-center gap-2 p-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-semibold" title={row.title}>
+                    {row.title}
+                    {row.year ? <span className="ml-2 text-xs text-fg3">{row.year}</span> : null}
+                  </span>
+                  <Pill tone={bandTone(row.v1_band)}>{row.v1_band}</Pill>
+                  <span className="text-xs text-fg3">→</span>
+                  <Pill tone={bandTone(row.v2_band)}>{row.v2_band}</Pill>
+                  <span className="w-32 shrink-0 text-right font-mono text-xs text-fg3">
+                    {Math.round(row.v1_score)} → {Math.round(row.v2_score)}
+                  </span>
+                  {row.v2_rule ? (
+                    <span className="w-14 shrink-0 text-right text-xs text-fg3">{row.v2_rule}</span>
+                  ) : (
+                    <span className="w-14 shrink-0" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {data.items.length > 40 && (
+            <p className="mt-2 text-xs text-fg3">
+              Showing the 40 largest disagreements of {data.items.length}.
+            </p>
+          )}
+          <p className="mt-3 max-w-prose text-xs text-fg3">
+            Nothing here changes anything. Switching the live scorer over is a
+            separate, deliberate step.
+          </p>
+        </>
+      )}
+    </Section>
+  );
+}
+
+function Figure({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "junk" | "keep";
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-fg3">{label}</span>
+      <span
+        className="text-xl font-bold tabular-nums"
+        style={tone ? { color: `var(--${tone})` } : undefined}
+      >
+        {value.toLocaleString()}
+      </span>
+    </div>
+  );
+}
+
+// `insufficient` is v2 declining to answer, not a rung on the ladder — it gets a
+// neutral tone rather than being coloured as though it were a verdict.
+function bandTone(band: string): "junk" | "borderline" | "keep" | "neutral" {
+  if (band === "junk") return "junk";
+  if (band === "borderline") return "borderline";
+  if (band === "keep") return "keep";
+  return "neutral";
 }
 
 function Autonomy() {

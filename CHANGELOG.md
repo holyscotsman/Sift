@@ -2,6 +2,67 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.124.0 — The shadow scorer can now be looked at
+
+`GET /api/junk/shadow-diff` has existed since the v2 scorer did, is fully
+schema'd, and — as of 2607.105.0 — thoroughly tested. **Nothing in the frontend
+consumed it.** No `api.shadowDiff()`, no type, no page.
+
+So the one decision it exists to inform — cut the live scorer over to v2, or
+don't — rested on a tool nobody could open. That is the same shape as
+`/api/duplicates`, which was built and unconsumed until the Storage page arrived.
+
+Settings → Scoring now carries a **Shadow scores** panel, directly under the
+threshold sliders it belongs beside.
+
+It reports the summary as **three separate outcomes, never one**. v2 being
+*stricter* means it would queue films the live scorer keeps; *gentler* means it
+would spare films the live scorer flags. Those are opposite risks, and a single
+"40 disagreements" says nothing about which one you are taking. *Abstained* is
+neither — it is v2 explicitly declining to answer, and folding it into either
+direction reports an opinion the scorer refused to give.
+
+Each row shows the disagreement as a **direction** (`junk → keep`, `90 → 10`) plus
+which P-rule fired, because a pair of numbers without the arrow does not say who
+moved.
+
+Three deliberate restraints:
+
+- **It fetches nothing until it is opened.** A whole-library comparison on every
+  visit to Settings, for a panel most visits are not there for.
+- **"Nothing compared yet" and "the two scorers agree" are different sentences.**
+  They look identical if you only print the disagreement count, and they mean
+  opposite things: *the scorer is ready* versus *the scorer has never run*.
+- **There is no "switch to v2" button, and that is the point.** The cutover is a
+  separate, considered act. A button here turns "look at the evidence" into "act
+  on it", which is the opposite of what a shadow eval is for. The panel says so
+  in as many words, and a test asserts the button's absence.
+
+Seven mutations run, all seven red at the expected test.
+
+### And an open tab surviving an update
+
+The same browser run threw `Failed to fetch dynamically imported module` on
+`/ask`, which I had caused by rebuilding the frontend under a running server.
+That is not only a test artefact: **every page is a lazy import, and pressing
+Update on Settings is a supported in-app action.** Any tab open across an update
+hits exactly this on its next navigation.
+
+The route boundary already caught it and kept the shell alive — but its primary
+button was "Try again", which re-renders the same dead import and fails
+identically, every time. The one button that can work sat second.
+
+A stale chunk is now recognised as its own failure (matching Chrome's, Firefox's
+*and* Safari's wording — one vendor's string leaves the other two with the useless
+button), reloads itself **once**, and if that does not fix it says *"Sift has been
+updated — this tab is running the previous version"* with only the button that can
+help. The once-guard matters: a half-finished deploy or a proxy serving a stale
+index would otherwise spin the reload forever. When `sessionStorage` throws —
+private windows, blocked site data — it shows the error rather than starting a
+loop it cannot stop.
+
+Seven more mutations, all seven red.
+
 ## 2607.122.0 — The layout audit, committed
 
 The browser pass that found the `0.0 GB` formatter and the silently-ignored theme

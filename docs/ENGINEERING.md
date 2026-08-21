@@ -306,6 +306,11 @@ here so they are not re-litigated, not so they can be admired.
   answer, and it is counted as its own outcome. Ordering it against
   keep/borderline/junk sorts it below `keep`, so every abstention would read as
   v2 wanting to *keep* a film it explicitly refused to judge.
+  The Settings panel reports it as its own figure for the same reason, and gives
+  it a neutral tone rather than colouring it as a verdict.
+- **The shadow panel has no cutover button, deliberately.** It is evidence for a
+  decision, not the decision. A button there turns "look at this" into "act on
+  it", which is the opposite of what a shadow eval is for.
 - **The shadow diff costs three statements, measured.** Two whole-table score
   reads plus one chunked title hydrate, constant from five films to four hundred.
   The docstring previously claimed two and had forgotten the hydrate.

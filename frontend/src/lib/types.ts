@@ -759,3 +759,26 @@ export interface ValidatedCanonResponse {
   total: number;
   coverage: CanonCoverage;
 }
+
+/** One title where the shadow (v2) score disagrees with the live (v1) one. */
+export interface ShadowDiffRow {
+  tmdb_id: number;
+  title: string;
+  year: number | null;
+  v1_band: string;
+  v1_score: number;
+  v2_band: string;
+  v2_score: number;
+  v2_rule: string | null;
+  v2_confidence: number;
+}
+
+export interface ShadowDiffResponse {
+  items: ShadowDiffRow[];
+  compared: number;
+  disagreements: number;
+  v2_stricter: number;
+  v2_gentler: number;
+  // v2 declining to answer — not a rung on the keep/borderline/junk ladder.
+  v2_abstained: number;
+}
