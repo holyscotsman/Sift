@@ -99,6 +99,21 @@ function shared<T>(key: string, fetcher: () => Promise<T>, ttlMs: number): Promi
   return started;
 }
 
+/** Drop everything the shared window is holding.
+ *
+ * The two maps above are module-level, which is what makes the window work at
+ * all — and it means they outlive anything that mounts and unmounts, including a
+ * test. Without this, the second test in a file reads the first one's data for
+ * the length of the TTL and passes for the wrong reason.
+ *
+ * Also correct to call whenever the session identity changes: the cache would
+ * otherwise hand the next caller a status read taken under the previous token.
+ */
+export function resetSharedCache(): void {
+  inflight.clear();
+  recent.clear();
+}
+
 // The window is a fraction of the poll interval, so a second consumer joins the
 // tick rather than doubling it, and successive ticks still fetch for real.
 export function useHealth(pollMs = 20000): AsyncState<HealthResponse> {
