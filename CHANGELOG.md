@@ -2,6 +2,46 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.117.0 — The write-back that stops a downgrade being undone
+
+`SonarrClient.set_quality_profile` is the piece the design notes call
+non-negotiable, and none of it had run. Its own docstring states the reason: a
+season left pointing at a high cutoff is re-fetched by Sonarr's next search, so
+the space comes back and is quietly spent again. **Applying a downgrade without
+writing this back is worse than doing nothing** — it costs the picture and keeps
+the disk.
+
+Four properties, all of which fail quietly rather than loudly:
+
+- **Dry run is the default, and a staged change reaches no network at all.** This
+  is a write into the automation that manages the library, so it takes the same
+  floor as the delete path: the caller opts *into* the live write, and one that
+  forgot the argument stages.
+- **The whole series object goes back.** Sonarr's series endpoint is a whole-object
+  PUT — everything absent from the payload is taken as the new value, so sending
+  only the changed field is how a write-back silently unmonitors a show or blanks
+  its path.
+- **The caller's copy is not mutated.** The payload is built with a spread rather
+  than by assigning into the dict it was handed; mutating in place would leave the
+  caller believing the change had applied even when the write was staged or failed.
+- **A refused write raises.** A downgrade whose write-back failed must not look
+  like one that applied — that is exactly the state the guard exists to prevent,
+  and swallowing the error would create it deliberately.
+
+Plus the boundary edges: a non-list answer from any of the four read endpoints is
+an empty list rather than a crash mid-scan (a proxy, a login page and an error
+body all arrive as valid JSON of the wrong shape), an unreachable Sonarr is a
+status rather than an exception, and the API key never appears in a health message.
+
+And Overseerr, which had two calls and no tests: a movie request sends
+`mediaType`/`mediaId`, and health probes `/api/v1/status` rather than inheriting a
+default — a client that probed the wrong path would report every working Overseerr
+as down, and the add button would silently fall back to Radarr.
+
+Seven mutations run, all seven red at the expected test.
+
+`clients/sonarr.py` 77% → 100%, `clients/overseerr.py` 77% → 100%.
+
 ## 2607.116.0 — What the Junk queue does after you decide
 
 `Junk.test.tsx` already pins the moments where the screen could say something

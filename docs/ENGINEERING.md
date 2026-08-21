@@ -353,6 +353,13 @@ here so they are not re-litigated, not so they can be admired.
 - **A fixture whose two orderings coincide cannot test a sort.** The Junk sort
   fixture had the highest score on the largest file, so score and size produced
   the same list. Build the disagreement into the fixture.
+- **Sonarr's series endpoint is a whole-object PUT.** Send the object Sonarr
+  gave you with one field changed. A partial payload is read as the new value for
+  every field it omits, which silently unmonitors shows and blanks paths.
+- **A quality write-back is dry-run by default and raises when refused.** It is a
+  write into the automation that manages the library, so it takes the same floor
+  as a delete. A downgrade whose write-back failed must never look like one that
+  applied.
 
 ---
 
