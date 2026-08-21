@@ -2,6 +2,44 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.128.0 — The version check behind the Update button
+
+Picked up from the stale-chunk work: this is the only thing that tells the owner
+an update exists, and the button it feeds is what invalidates every chunk hash in
+an open tab. So "there is an update" needs to be true when it says so, and "I
+could not check" needs to stay distinguishable from "you are current".
+
+The comparison arithmetic and the never-checked-and-offline case were pinned.
+Everything between was not.
+
+**The cache is not an optimisation, it is the difference between polite and
+abusive.** The Settings page polls; without it every open tab on every instance
+is a request to GitHub. `force` exists to get past it, because somebody who has
+just updated wants the new number now rather than in fifty minutes.
+
+**A failure after a success returns the answer already held**, and — the part
+that needed its own control — **does not clear it**. Clearing on failure would
+return the stale answer once and `None` for every check after, which is the
+banner-flicker the fallback exists to prevent, delayed by one request.
+
+**A fork checks its own repository.** Otherwise it reports itself permanently out
+of date against somebody else's release cadence, and the Update button offers to
+install a stranger's code. A *blank* override falls back to the default, because
+an empty environment variable is how a deploy platform represents "unset" and
+taken literally it builds a URL with no repo in it.
+
+### One mutation came back green and the test says so
+
+GitHub serving an error page is a 200 with HTML in it, which parses to nothing.
+Two guards independently stop that wedging the check for an hour — `if version:`
+on the write and `cached is not None` on the read — and either alone is
+sufficient. Removing both turns the test red. It now pins the recovery rather
+than claiming to protect one line, and is named for what it checks.
+
+Seven mutations run; six red at the expected test.
+
+`services/updates.py` 86% → **100%**.
+
 ## 2607.127.0 — The audit result, honestly qualified
 
 The layout audit now records *which build it ran against*, because the first
