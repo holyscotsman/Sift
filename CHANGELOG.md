@@ -2,6 +2,38 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.104.0 — One dead seed must not kill the list
+
+`tv_recommend.suggest` is the async half of the show recommender: for each show
+you actually finished, two TMDB lookups, merged. `rank` and `anchors` have their
+own tests; this had none, and it carries two properties the pure functions cannot
+express.
+
+The first is written in a comment beside the `except` that exists for it: **one
+dead seed must not kill the list.** A seed whose lookup fails should cost its own
+contribution and nothing else — a library with six watched shows should not lose
+all six suggestions because one of them 404s. Pinned, along with the client being
+closed even when a seed throws, which is a `finally` nothing was checking.
+
+The second is the merge. A show that two of your favourites both point at is a
+better suggestion than one either points at alone, and it should say so.
+
+**Two mutations came back green, and one of them was a real gap.** Asserting that
+both reasons appear on the card leaves the *weight* accumulation untested —
+replacing the running total with the latest anchor's passes, because with a single
+candidate there is no ordering to get wrong. There are two candidates now, one
+named twice and the other better on its own merits, so only the added weight can
+put the doubly-named one first.
+
+The other green is honest and recorded rather than papered over: deleting the
+`if not seeds: return []` early exit changes nothing, because an empty seed list
+means the loop body never runs and `rank({})` is already empty. It is an
+optimisation that avoids constructing a client, not the guard — the same shape as
+the Radarr shortcut in the version before this. The test now asserts the thing
+that *is* load-bearing: nothing is asked of TMDB at all.
+
+Five mutations red, one honestly reported green.
+
 ## 2607.103.0 — Two endpoints that exist to degrade well
 
 `/api/settings/radarr_options` offers real root folders and quality profiles so
