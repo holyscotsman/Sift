@@ -2,6 +2,50 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.126.0 — A wedged browser tab must never stall the scan
+
+`ScanHub` sits between the ingest pipeline and every open browser tab. The
+pipeline `await`s `publish_progress` **on the event loop it is scanning on**, so
+anything that can block there blocks the scan itself — and a browser tab is not a
+reliable reader. A backgrounded tab is throttled, a suspended laptop reads nothing
+at all, and a closed one does not say so until a write fails.
+
+The socket's auth gate was covered. What happens once it is open was not.
+
+**The load-bearing property**: each subscriber's queue is bounded at 100 and
+written with `put_nowait` under `suppress(QueueFull)`. Frames past the bound are
+dropped on arrival. Unbounded, one backgrounded tab is a memory leak; blocking,
+one is a stopped scan. Dropping progress frames is the right trade — they are a
+picture of a moving thing and the next one supersedes the last. Pinned by
+publishing a thousand frames to a subscriber that never reads, each under a
+one-second `wait_for`; the blocking version fails on the first.
+
+The negative control is separate and necessary: an unbounded queue would also
+never block, so "it did not hang" proves nothing on its own. The bound is asserted
+at exactly 100, and the frames kept are the *oldest* — worth knowing, because a
+subscriber that resumes sees the start of what it missed and then a jump, not a
+smooth tail.
+
+Also pinned: publishing to a scan nobody is watching is a no-op rather than a
+`KeyError` (the ordinary case — a CLI scan, or a browser that has gone, and this
+path runs on every frame of every unwatched scan); each scan hears only its own
+progress; every subscriber to one scan gets the frame, because two tabs open on
+the same scan is ordinary rather than an edge; the last reader leaving forgets the
+scan, or the hub accumulates an entry per scan for the life of a process that runs
+for weeks; **one of two readers leaving keeps the other subscribed**, which
+dropping the whole scan on the first unsubscribe would silently break; and
+unsubscribing something never subscribed is harmless, because the socket handler
+unsubscribes in a `finally` that runs even when the connection failed first.
+
+Progress is published with `asdict`, so a field added to `ScanProgress` reaches
+the UI without a second edit — the kind of drift that otherwise shows up as a dial
+that stopped moving. All seven fields asserted, not a chosen subset.
+
+Six mutations run, all six red at the expected test.
+
+`api/ws.py` 87% → 91%. The four lines still uncovered are the socket's send loop,
+which needs a real connection rather than the hub.
+
 ## 2607.124.0 — The shadow scorer can now be looked at
 
 `GET /api/junk/shadow-diff` has existed since the v2 scorer did, is fully
