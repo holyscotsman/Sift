@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.103.0 — Two endpoints that exist to degrade well
+
+`/api/settings/radarr_options` offers real root folders and quality profiles so
+the add defaults are a choice rather than a guess. **Every failure path in it
+returns empty** — unconfigured, unreachable, misconfigured — because the UI reads
+empty as "defaults apply", and a 500 there would break a Settings page somebody is
+visiting precisely because their connection is broken. The unreachable case is the
+common one: Radarr configured, the box off.
+
+`/api/settings/test/{service}` probes live and then **drops the cached health
+sweep**. That second half is the one worth guarding. The dots poll a fifteen-second
+cache, and somebody who has just fixed a URL and pressed Test is watching those
+dots — a stale sweep tells them the fix did not work.
+
+Both pinned, with a negative control that a *reachable* Radarr offers its real
+choices. Without that, every one of these tests would pass on an endpoint that
+returns empty unconditionally, which is the failure mode of every
+graceful-degradation test.
+
+**One mutation came back green and the test now says so.** Deleting the
+`not enabled` shortcut does not break anything: the call falls through to
+`RadarrClient(...)`, which raises `ClientError` for a missing base URL, and that is
+caught a few lines below. The shortcut is an optimisation that avoids building a
+client at all, not the guard — so the test covers the behaviour rather than
+claiming to protect a line that is not load-bearing.
+
+Three mutations red, one honestly reported green.
 ## 2607.102.0 — What a repeated delete answers
 
 The status codes on the destructive path, which is where a client's retry logic
