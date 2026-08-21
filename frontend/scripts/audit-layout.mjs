@@ -1,14 +1,32 @@
+#!/usr/bin/env node
 /**
- * A real browser over every screen, at desktop and phone widths.
+ * Layout audit against a running Sift: every screen, three themes, two widths.
  *
- * jsdom has no layout and no compositing, so it cannot see text clipped by a
- * container, a row that overflows its card, or a control pushed off-screen. This
- * is the pass that can — it is how the caption truncation on Missing was found,
- * which every unit test had happily reported as present.
+ * The companion to `audit-a11y.mjs`. That one asks whether a screen can be *used*;
+ * this one asks whether it can be *read*. jsdom has no layout and no compositing,
+ * so it cannot see text clipped by its container, a row that overflows its card,
+ * a control pushed off-screen, or a number rendered as "0.0 GB" — all of which
+ * every unit test reports as present and correct.
+ *
+ * Two findings came out of the first run of this: the size formatter could not
+ * express a file under 50 MB (which is the whole tier-0 category on Storage), and
+ * a preference read straight out of localStorage put an unmatched value on
+ * `data-theme` and silently rendered the default palette.
+ *
+ * Screenshots land in ./shots for eyeballing, which is the part no script does.
+ *
+ * Usage:
+ *   sift serve
+ *   npm --prefix frontend run audit:layout
+ *   PLAYWRIGHT_CHROMIUM=/path/to/chrome npm --prefix frontend run audit:layout
+ *
+ * Exits non-zero if anything is found, so it can gate a release if wanted.
  */
 import { chromium } from "playwright";
 
-const BASE = "http://127.0.0.1:8799";
+const BASE = process.env.SIFT_URL || "http://127.0.0.1:8756";
+const USER = process.env.SIFT_USER || "owner";
+const PASS = process.env.SIFT_PASS || "";
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM;
 const launch = () => chromium.launch({ executablePath, args: ["--no-sandbox"] });
 
@@ -27,15 +45,19 @@ async function run(label, width, height, theme) {
 
   // The theme is a persisted preference, so it has to be in place before the app
   // reads it — setting it after mount would screenshot a repaint mid-flight.
-  await page.addInitScript((t) => localStorage.setItem("sift.theme", JSON.stringify(t)), theme);
+  // The raw string, not JSON: `prefs.tsx` stores and reads it unencoded. Writing
+  // `"dark"` with quotes here is what made three whole theme passes render the
+  // default palette while reporting success — and it is why the assertion below
+  // exists at all.
+  await page.addInitScript((t) => localStorage.setItem("sift.theme", t), theme);
   await page.goto(BASE, { waitUntil: "networkidle" });
 
   // AuthGate fills before React mounts, so wait for the button to exist, submit,
   // and wait for it to detach — otherwise every screenshot is the login box.
   const signIn = page.getByRole("button", { name: /^sign in$/i });
   if (await signIn.count()) {
-    await page.getByLabel(/username/i).fill("owner");
-    await page.getByLabel(/password/i).fill("qa-password-1234");
+    await page.getByLabel(/username/i).fill(USER);
+    await page.getByLabel(/password/i).fill(PASS);
     await Promise.all([
       page.waitForResponse((r) => r.url().includes("/api/auth/login")),
       signIn.click(),
@@ -54,7 +76,7 @@ async function run(label, width, height, theme) {
     }
 
     const name = path === "/" ? "dashboard" : path.slice(1);
-    await page.screenshot({ path: `/tmp/claude-0/shots/${label}-${name}.png`, fullPage: true });
+    await page.screenshot({ path: `./shots/${label}-${name}.png`, fullPage: true });
 
     // Horizontal overflow of the page itself is always a bug: every wide thing
     // (tables, code, diagrams) is supposed to scroll inside its own container.
@@ -135,5 +157,10 @@ await run("phone", 390, 844, "dark");
 await run("light", 1440, 1000, "light");
 await run("neon", 1440, 1000, "neon");
 
-if (findings.length === 0) console.log("clean: no layout, overflow or console findings");
-else { console.log(`${findings.length} finding(s):`); for (const f of findings) console.log(" - " + f); }
+if (findings.length === 0) {
+  console.log("clean: no clipping, overflow, theme or console findings");
+} else {
+  console.log(`${findings.length} finding(s):`);
+  for (const f of findings) console.log(" - " + f);
+  process.exitCode = 1;
+}

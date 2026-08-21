@@ -11,7 +11,8 @@
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "audit:a11y": "node scripts/audit-a11y.mjs"
+    "audit:a11y": "node scripts/audit-a11y.mjs",
+    "audit:layout": "node scripts/audit-layout.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

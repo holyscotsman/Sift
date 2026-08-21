@@ -2,6 +2,37 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.122.0 — The layout audit, committed
+
+The browser pass that found the `0.0 GB` formatter and the silently-ignored theme
+is now a script in the repo rather than something reconstructed each time, and its
+findings have somewhere to live: `docs/BROWSER_QA.md`.
+
+`npm run audit:layout` drives a real browser over all ten screens at 1440×1000 and
+390×844, in dark, light and neon. It checks the four things jsdom structurally
+cannot see — horizontal page overflow, text clipped without an ellipsis or a
+`title`, literal `undefined`/`NaN`/`[object Object]`/`Invalid Date` on screen, and
+console errors — and writes a screenshot per screen per theme for the part no
+script does. It exits non-zero on a finding, so it can gate a release.
+
+It also **asserts the applied theme on every screen**, because the harness bug
+that surfaced the preference-validation defect made three whole theme passes render
+the default palette while reporting success. That cannot happen quietly again.
+
+The `undefined`/`NaN` check is the one worth naming: four mismatched test fixtures
+have now shipped a page rendering the string `undefined` past a green suite, and
+this is the check that would have caught every one of them.
+
+Current state is clean on all four checks across all thirty screen-theme
+combinations. Two things are recorded in `BROWSER_QA.md` as **waiting on a human**
+rather than changed unilaterally, because control sizing and typography are design
+decisions: a handful of 16px-tall inline controls (two of them adjacent on an
+Activity row, which is the geometry that gets mis-tapped), and the Junk header
+wrapping a figure away from its unit.
+
+**Also removes `frontend/qa-run.mjs`**, which a `git add -A` swept into 2607.119.0
+by accident. It was this script, at the repository root, before it had a home.
+
 ## 2607.121.0 — A 40 MB file was reported as "0.0 GB"
 
 Found by looking at a rendered Storage page, which is the only way it could have

@@ -133,6 +133,8 @@ Visual/UI units are additionally queued for human visual sign-off and marked
 - `docs/optimization/HISTORY.md` — what each optimization cycle changed and why,
   with the measured numbers. `LOOP_LOG.md` and `metrics.jsonl` beside it are the
   running record of the continuous-improvement loop.
+- `docs/BROWSER_QA.md` — what a real browser found that jsdom structurally
+  cannot, and the visual decisions waiting on a human.
 - `CHANGELOG.md` — release history under the `YYMM.major.patch` scheme.
 - `README.md` — user-facing overview.
 
@@ -405,6 +407,9 @@ here so they are not re-litigated, not so they can be admired.
   rather than deleted: removing working code is a call for the owner, not a test
   sweep.
 - **Visual sign-off** on all 8 screens across the 3 themes (per DoD).
+  `npm --prefix frontend run audit:layout` now drives all ten screens across all
+  three themes and writes screenshots to `frontend/shots/`; the measurable checks
+  are clean, and `docs/BROWSER_QA.md` lists the two design calls still open.
 - **To enable real deletes:** set `SIFT_ACTIONS__DRY_RUN=false` in Render when ready
   — until then every approved removal is staged (audit-only).
 - Optional/gated features still deferred: real AI answers (needs an Anthropic or
