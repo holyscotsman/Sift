@@ -242,5 +242,10 @@ async def set_sections(
     with factory() as session:
         config_store.set_config(session, {"plex": {"section_kinds": body.section_kinds}})
     # Rebuild the live settings, or the next scan reads the old mapping.
-    await runtime.rebuild(request.app)
+    #
+    # `rebuild` takes the AppState, not the app — the three other call sites in
+    # this file pass `state`, and this one passed `request.app`, which has no
+    # `session_factory` and raised AttributeError. Every attempt to correct a
+    # library mapping was a 500, and nothing noticed because nothing tested it.
+    await runtime.rebuild(get_state(request))
     return await list_sections(request)

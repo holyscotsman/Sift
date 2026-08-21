@@ -2,6 +2,43 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.100.0 — Correcting a Plex library mapping was a 500
+
+`/api/config/sections` decides what each Plex library *is* — films, shows, or left
+alone. Its own docstring says why that matters: Plex calls a Home Videos library a
+*movie* library, so without an override family footage is read as films, into the
+removal queue, the film counts, and the size baselines every verdict is measured
+against.
+
+**Correcting it never worked.** `set_sections` called
+`runtime.rebuild(request.app)`, and `rebuild` takes the `AppState`, not the app.
+`request.app` has no `session_factory`, so every attempt to fix a mapping raised
+`AttributeError` and returned a 500. The three other `rebuild` call sites in the
+same file all pass `state`; this one was the odd one out.
+
+**Strict mypy passes this**, which is worth recording: Starlette types
+`request.app` as `Any`, so the type checker has nothing to object to. A call that
+crashed on every invocation type-checked cleanly. That is what the endpoint having
+no tests at all was hiding.
+
+The planner underneath (`ingest/sections.py`) was well covered — including the
+Home Videos case. The HTTP layer around it had nothing, which is exactly the seam
+where this lived.
+
+Pinned now: Home Videos and Music are left alone by default while Films and TV
+Shows are read; an override reaches the **live settings object the next scan
+reads**, not merely the response, since "takes effect on the next scan" is a claim
+about the rebuild rather than about the write; and a Plex that is unconfigured or
+unreachable returns a status rather than a 500 — the setup wizard calls this before
+anything is connected, and a laptop away from home hits the second case daily.
+
+Two bugs in the tests themselves, both instructive. Mutating the fixture's
+settings after `create_app` leaves the app holding the old copy, so the
+"unconnected" case was asserting against a Plex it still thought was connected.
+And reaching for live state needs the same accessor the routes use.
+
+Four mutations, all red.
+
 ## 2607.99.0 — Six dots that were only a colour
 
 The connection-health row is the app's most compressed piece of state: six 8px
