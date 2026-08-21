@@ -477,7 +477,11 @@ describe("a card whose film the sources know nothing about", () => {
     expect(await screen.findAllByText(/Zorns Lemma/)).not.toHaveLength(0);
     // The complete one still shows everything it knows.
     expect(await screen.findAllByText(/Seven Samurai/)).not.toHaveLength(0);
-    expect(screen.getByText(/Akira Kurosawa · Action, Drama · 207 min/)).toBeInTheDocument();
+    // Two facts, not four: the caption lives on a 108px card and anything past
+    // the second is clipped by CSS rather than composed wrongly, which is why a
+    // real browser was needed to notice. The director moved to the reason line.
+    expect(screen.getByText(/Action · 207 min/)).toBeInTheDocument();
+    expect(screen.getByText(/You own 3 films by Akira Kurosawa/)).toBeInTheDocument();
   });
 
   it("puts the reason from your own shelf on the card, not the tier", async () => {

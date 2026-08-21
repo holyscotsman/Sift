@@ -53,15 +53,43 @@ function personalReason(item: SuggestionItem): string | undefined {
   const reasons = item.reasons ?? [];
   return (
     reasons.find((r) => r.startsWith("You own")) ??
-    reasons.find((r) => r.includes("of your library"))
+    reasons.find((r) => r.includes("of your library")) ??
+    // Nothing personal to say about this one. Naming the director is still worth
+    // more than silence — it is the fact people recognise a film by — and it is
+    // the only place the director appears now that the caption carries genre and
+    // runtime instead.
+    ((item.directors ?? [])[0] ? `Directed by ${(item.directors ?? [])[0]}` : undefined)
   );
 }
 
+// Two facts, because two is what fits.
+//
+// This line lives on a 108px card and truncates with an ellipsis. It used to
+// carry four — tier, director, genres, runtime — which in a real browser rendered
+// as "Essential · Joel Coe…" on every single card: the tier, half a name, and
+// nothing else. Every fact after the first was invisible, including the two this
+// line was widened to show. No unit test could see that; the string was composed
+// correctly and then clipped by CSS.
+//
+// So the two that survive are the two the other lines do not already say. The
+// title line carries the year. The reason line names the director whenever the
+// director is *why* this film is here — which is most of the time, and far more
+// usefully than a bare name would. Tier is a filter chip at the top of the page
+// and the sort order of the list itself.
+//
+// That leaves genre and runtime: what kind of film, and how long an evening.
 function describe(item: SuggestionItem): string {
   const runtime = item.runtime ? `${item.runtime} min` : null;
-  const director = (item.directors ?? []).slice(0, 2).join(", ") || null;
-  const genres = (item.genres ?? []).slice(0, 2).join(", ") || null;
-  return [TIER_LABEL[item.tier], director, genres, runtime].filter(Boolean).join(" · ");
+  // One genre. Two fitted in a mock-up and not in a browser: "Comedy, Drama ·
+  // 116 min" is twenty-three characters where the card holds about twenty, so
+  // the runtime clipped off every card that had two genres. Measured by asking
+  // the rendered page which lines had scrollWidth past clientWidth, rather than
+  // by counting characters and hoping.
+  const genres = (item.genres ?? [])[0] || null;
+  const line = [genres, runtime].filter(Boolean).join(" · ");
+  // With no metadata at all there is still the tier to say, rather than an empty
+  // line where a fact should be.
+  return line || TIER_LABEL[item.tier] || "";
 }
 
 export function Missing() {

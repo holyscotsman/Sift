@@ -2,6 +2,42 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.93.0 — What the card actually says, in a browser
+
+Booted a real Sift with a 400-film library and drove every screen with Chromium.
+The API errors it turned up were all poster 404s from an instance with no TMDB
+key — expected, not bugs. Looking at the pixels found something no test could.
+
+**The Missing card's caption was truncated to uselessness.** It carried four
+facts — tier, director, genres, runtime — in a line that lives on a 108px card,
+and rendered as `Essential · Joel Coe…` on every single card: the tier, half a
+name, and nothing else. The genres and runtime added two versions ago were
+*never visible to anybody*.
+
+Nothing in the suite could see it. The string was composed correctly and then
+clipped by CSS, and jsdom has no layout, so the assertion that the caption
+contained all four facts passed while the browser showed one and a half.
+
+The caption now carries the two things the other lines do not already say —
+**one genre and the runtime**: what kind of film, and how long an evening. The
+title line already has the year. The reason line names the director whenever the
+director is *why* the film is there, which is most of the time and far more
+useful than a bare name. Tier is a filter chip and the sort order of the list.
+
+Where there is no personal reason, the reason line now reads *"Directed by …"*
+rather than falling silent — that is the fact people recognise a film by, and it
+is the only place a director appears now.
+
+**Two genres was also too many.** "Comedy, Drama · 116 min" is twenty-three
+characters where the card holds about twenty, so the runtime clipped off every
+card that had two. Found by asking the rendered page which lines had
+`scrollWidth` past `clientWidth`, rather than by counting characters and hoping.
+Afterwards the only lines still clipping are long film titles, which is what a
+poster grid does and what the tooltip is for.
+
+The cards now read: *Barton Fink · 1991 / Comedy · 116 min / You own 3 films by
+Joel Coen*. Three lines, three different facts, all of them legible.
+
 ## 2607.92.0 — The switch that makes every delete real was one click
 
 Covering the Autonomy tab found the gap it exists to guard.
