@@ -43,6 +43,7 @@ import type {
   ScanStartResponse,
   ServiceHealth,
   SettingsResponse,
+  ShadowDiffResponse,
   StatusResponse,
   ThresholdPreview,
   Thresholds,
@@ -257,6 +258,15 @@ export const api = {
     }),
   junk: (limit = 200) =>
     request<JunkResponse>(`/api/junk?limit=${limit}`, {}, PAGE_LOAD_TIMEOUT_MS),
+  // The v1-vs-v2 disagreements on the owner's own library. Read-only: v2 computes
+  // in shadow and changes nothing, and looking at this is how it earns the right
+  // to change something.
+  shadowDiff: (limit = 200) =>
+    request<ShadowDiffResponse>(
+      `/api/junk/shadow-diff?limit=${limit}`,
+      {},
+      PAGE_LOAD_TIMEOUT_MS,
+    ),
   runReview: (limit = 50) =>
     request<ReviewRunResponse>(`/api/review/run?limit=${limit}`, { method: "POST" }),
   upgrades: (limit = 200) => request<UpgradesResponse>(`/api/upgrades?limit=${limit}`),
