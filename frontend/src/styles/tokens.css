@@ -36,6 +36,16 @@
 
 /* ---------------------------------------------------------------- Dark (primary) */
 :root[data-theme="dark"] {
+  /* Ink equals the tint here: the pill background is dark and these already
+     measure 5.8-9.3:1 on it. */
+  --keep-ink: var(--keep);
+  --borderline-ink: var(--borderline);
+  /* Not `var(--junk)`. The junk pill sits on a *card*, not on the page, and the
+     18% tint over that lighter surface lands at 4.48:1 — failing by 0.02, and
+     only visible because the browser measured the real composite rather than
+     the backdrop I assumed. Eight points brighter clears it at 4.72:1 without
+     changing `--junk` itself, which is also a border and a score colour. */
+  --junk-ink: #ff7392;
   --bg-0: #070812;
   --bg-1: linear-gradient(158deg, #191c33, #0f1124);
   --bg-1s: #141731;
@@ -45,7 +55,13 @@
   --line-2: rgba(150, 165, 255, 0.22);
   --fg: #eef0ff;
   --fg-2: #9ea6d4;
-  --fg-3: #6a7099;
+  /* Measured, not chosen. `text-fg3` is the caption colour on every card and
+     row, rendered at 10-12px, which WCAG counts as small text and holds to
+     4.5:1. Dark sat at 4.17:1 and light at 3.22:1 — the second is a real
+     readability problem rather than a marginal one. These are the smallest
+     hue-preserving shifts that clear it; neon already passed at 4.82:1 and is
+     untouched. */
+  --fg-3: #7177a0;
   --accent: #2ee6e6;
   --accent2: #e85cf5;
   --grad: linear-gradient(120deg, #2ee6e6, #8a7bf0 52%, #e85cf5);
@@ -69,6 +85,15 @@
 
 /* ---------------------------------------------------------------------- Light */
 :root[data-theme="light"] {
+  /* Pill text. On a dark theme the tinted background is dark and the base
+     colour reads fine on it, so ink and tint are the same value. On a light
+     theme the same 18% tint is a *pale* wash and the same mid-tone text
+     lands at 2.2-2.8:1 — measured, and unreadable rather than marginal.
+     These are the same hues darkened until they clear 4.5:1 on their own
+     pill. */
+  --keep-ink: #0c6c3f;
+  --borderline-ink: #81550a;
+  --junk-ink: #a53345;
   --bg-0: #eceef7;
   --bg-1: linear-gradient(158deg, #ffffff, #f2f4fc);
   --bg-1s: #ffffff;
@@ -78,7 +103,7 @@
   --line-2: rgba(40, 60, 140, 0.22);
   --fg: #161a2e;
   --fg-2: #4c5680;
-  --fg-3: #7b83a6;
+  --fg-3: #61698c;
   --accent: #0e9fb2;
   --accent2: #c33bd6;
   --grad: linear-gradient(120deg, #12b3c4, #7b6ce0 52%, #d24ae0);
@@ -102,6 +127,16 @@
 
 /* ----------------------------------------------------------------------- Neon */
 :root[data-theme="neon"] {
+  /* Ink equals the tint here: the pill background is dark and these already
+     measure 5.8-9.3:1 on it. */
+  --keep-ink: var(--keep);
+  --borderline-ink: var(--borderline);
+  /* Not `var(--junk)`. The junk pill sits on a *card*, not on the page, and the
+     18% tint over that lighter surface lands at 4.48:1 — failing by 0.02, and
+     only visible because the browser measured the real composite rather than
+     the backdrop I assumed. Eight points brighter clears it at 4.72:1 without
+     changing `--junk` itself, which is also a border and a score colour. */
+  --junk-ink: #ff7392;
   --bg-0: #04030c;
   --bg-1: linear-gradient(158deg, #141034, #0a0820);
   --bg-1s: #120f30;

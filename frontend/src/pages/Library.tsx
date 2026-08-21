@@ -325,6 +325,11 @@ export function Library() {
               <select
                 value={section}
                 onChange={(e) => setSection(e.target.value)}
+                // A select with no accessible name is announced as its current
+                // value and nothing else: "combo box, Films". The visible label
+                // is the option text, which says what is *selected*, never what
+                // is being chosen.
+                aria-label="Plex library section"
                 className="rounded-md border border-line bg-panel px-2 py-1 text-sm text-fg"
               >
                 <option value="">All</option>
@@ -339,6 +344,7 @@ export function Library() {
           <label className="text-fg3">Sort</label>
           <select
             value={sort}
+            aria-label="Sort by"
             onChange={(e) => {
               setSort(e.target.value);
               setOrder(null);

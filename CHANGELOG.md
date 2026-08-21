@@ -2,6 +2,59 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.97.0 — Three accessibility failures a browser found
+
+The project's standards ask for keyboard and touch, colour-blind-safe glyphs and
+reduced motion. Nothing had ever audited against them. Ran axe over all ten
+screens of a real instance and found three violation types, two of them
+**critical**.
+
+**Two form controls with no accessible name.** The Library's section and sort
+selects, and the Taste Profile's weight sliders. A select with no name is
+announced as its current value and nothing else — "combo box, Films" — because
+the visible text is the option, which says what is *selected* and never what is
+being chosen. The sliders were worse: several to a page, each announced "slider,
+0.5", indistinguishable from one another. This is the same failure as the
+unlabelled login inputs fixed a few versions ago, in three more places.
+
+**Text below the contrast floor.** `--fg-3` is the caption colour on every card
+and row, rendered at 10–12px, which WCAG counts as small text and holds to
+4.5:1. Dark sat at **4.17:1** and light at **3.22:1** — the second is a real
+readability problem rather than a marginal one. Fixed with the smallest
+hue-preserving shifts that clear it; the neon theme already passed at 4.82:1 and
+is untouched.
+
+**Pills that inverted on the light theme.** The tint is `color-mix(colour 18%,
+transparent)`, which over a dark surface gives a dark wash under bright text and
+works. Over a *light* surface it gives a pale wash under the same mid-tone text,
+and all three tones measured **2.2–2.8:1**. Text and tint are now separate
+tokens — `--keep-ink`, `--borderline-ink`, `--junk-ink` — resolving to the tint
+colour on dark themes, where nothing changes, and to darkened variants on light.
+
+**And one that only a browser could see.** After all that, the junk pill still
+failed at **4.48:1** — by 0.02. My own arithmetic had said 5.83:1, because I
+composited the tint over the *page* background while the pill is actually drawn
+on a card. The browser measured the real backdrop. Eight points brighter on the
+ink clears it without touching `--junk`, which is also a border and a score
+colour.
+
+Both halves are now permanent. `frontend/src/test/contrast.test.ts` measures
+every pairing as arithmetic in the unit suite, including pill tints over both
+surfaces — with a negative control that checks the maths against the ratios WCAG
+publishes, because a contrast test measuring the wrong thing passes just as
+easily as one measuring the right thing. `npm run audit:a11y` runs the full
+browser sweep against a live instance and exits non-zero on any finding.
+
+The unit test was too strict at first and failed on five pairings the app never
+renders — `--fg-3` on `--bg-3`, which backs dots and rings and carries no text.
+Narrowed to the two surfaces text is actually drawn on rather than changing the
+palette to satisfy a test I had invented.
+
+A mutation also showed the stylesheet test could not see which token the *component*
+picks, so pointing `Pill` back at the tint colour would have undone the whole
+light-theme fix while leaving every assertion green. That is pinned separately now.
+
+All ten screens report zero. Seven mutations, all red.
 ## 2607.96.0 — The download that promised to match the screen
 
 `routes_export` states the promise plainly: the CSV "shares the exact
