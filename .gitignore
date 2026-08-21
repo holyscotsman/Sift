@@ -34,3 +34,6 @@ frontend/.vite/
 
 # vitest coverage output
 frontend/coverage/
+
+# layout-audit screenshots
+frontend/shots/
