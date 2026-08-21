@@ -2,6 +2,33 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.96.0 — The download that promised to match the screen
+
+`routes_export` states the promise plainly: the CSV "shares the exact
+filters/sort of `/api/movies` … so the download always matches the visible set".
+
+That promise lives in one `useMemo` reading the same `buildQuery` the list reads,
+and nothing checked it. **A download that quietly differs from the screen is worse
+than one that fails** — the file looks right, and the difference is only
+discoverable by counting rows.
+
+Pinned now, including that paging stays out of it: the file is the whole filtered
+set, capped server-side, not the sixty rows currently rendered. Two mutations
+cover both halves — building the export from a different query, and letting the
+page number into it.
+
+The quick filters are pinned too, and the assertion that matters is the negative
+one: each filter asks for what it means **and nothing else**. A stray `in_plex` on
+the kids view would silently hide every kids film not yet owned, and the view
+would look entirely correct while being wrong. "Below cutoff" deliberately does
+carry `in_plex`, because an upgrade for a film nobody has is not an upgrade — it
+is a suggestion, and that is the Missing page's job.
+
+And changing a filter returns to the first page, without which a filter change
+lands at the offset of the list you just left and the top of the new one is never
+shown.
+
+`Library.tsx` 71.6% → 72.3%. Five mutations, all red.
 ## 2607.95.0 — The audit log, and the setting that turns motion off
 
 Two surfaces where being wrong is quiet.
