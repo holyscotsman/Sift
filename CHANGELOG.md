@@ -2,6 +2,46 @@
 
 Versioning scheme: `YYMM.major.patch`.
 
+## 2607.121.0 — A 40 MB file was reported as "0.0 GB"
+
+Found by looking at a rendered Storage page, which is the only way it could have
+been: jsdom has no opinion about whether "0.0 GB" is a sensible thing to print, so
+every unit test in the suite was happy.
+
+There were **six copies** of the size formatter across the app and five of them
+went straight from bytes to `(bytes / 1e9).toFixed(1) + " GB"`. Anything under
+about 50 MB rendered as `0.0 GB`.
+
+That is not a rounding nicety on this screen. Samples, trailers, truncated
+downloads and `.partial` leftovers are *by definition* small — and they are the
+entire tier-0 category, the one the page recommends acting on first because
+nothing is lost. **The one screen whose job is to report sizes could not name the
+sizes of the files it most needed to describe**, and a seeded 40 MB sample showed
+`0.0 GB` beside the words "safe to delete".
+
+One formatter now, in `lib/format.tsx` beside the answer formatter that was
+already there: TB above a terabyte, GB above a gigabyte, whole MB above a
+megabyte, KB below that, and an em dash for absent — never `0 KB`, which reads as
+a real measurement of an empty file. Precision scales with the unit: the second
+decimal of a terabyte is a real 10 GB, while a decimal below a gigabyte is three
+digits nobody reads on a row that is one of two hundred.
+
+### A stored preference was untrusted input
+
+The same browser run surfaced a second one, by way of a bug in the harness. It
+wrote `"dark"` — JSON-quoted, where the app stores raw — and **three entire theme
+passes rendered the default palette while reporting success.** `read()` cast
+whatever was in `localStorage` straight through, and an unrecognised value lands
+on `data-theme` where it matches no CSS rule at all: the app renders the default
+while Settings shows the stored name as selected. Silent, and impossible to
+explain from the screen.
+
+`read()` now validates against the allowed set, which is the working decision
+already recorded for `Library`'s stored sort — applied where the same failure was
+actually observed rather than reasoned about.
+
+Six mutations run, all six red at the expected test.
+
 ## 2607.120.0 — How the engine is built, which nothing checked
 
 `_resolve_url` was pinned. What `make_engine` does with the URL once it has it was

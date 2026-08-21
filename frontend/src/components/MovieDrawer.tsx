@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Pill, Poster } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fmtSize } from "@/lib/format";
 import { useDrawer, useDrawerTarget } from "@/lib/drawer";
 import type { MovieDetail } from "@/lib/types";
 
@@ -130,9 +131,6 @@ function ProtectedPill({ tmdbId }: { tmdbId: number }) {
   );
 }
 
-function fmtSize(bytes: number | null): string {
-  return bytes ? `${(bytes / 1e9).toFixed(1)} GB` : "—";
-}
 function bandTone(band: string): "junk" | "borderline" | "keep" {
   return band === "junk" ? "junk" : band === "borderline" ? "borderline" : "keep";
 }

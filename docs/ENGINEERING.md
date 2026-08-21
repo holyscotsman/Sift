@@ -385,6 +385,12 @@ here so they are not re-litigated, not so they can be admired.
   anything on the origin and survives renames. Validate a stored sort or view
   against the allowed set — an unrecognised value goes into the query string and
   comes back 422 as a blank page with no explanation.
+  The same applies to `prefs.read()`: an unrecognised theme lands on `data-theme`,
+  matches no rule, and renders the default palette while Settings shows the stored
+  name as selected.
+- **One size formatter, `lib/format.tsx`.** There were six, and five could not
+  express a file under 50 MB — which is the whole tier-0 category on Storage.
+  Below a gigabyte the unit is MB (or KB), not `0.0 GB`.
 - **`renderPage(ui, route)`** mounts a page at a real URL. Pages that read search
   params cannot be tested in the state a deep link puts them in without it.
 

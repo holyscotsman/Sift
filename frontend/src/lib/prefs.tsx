@@ -23,9 +23,20 @@ interface Prefs {
 
 const PrefsContext = createContext<Prefs | null>(null);
 
-function read<T extends string>(key: string, fallback: T): T {
-  return (localStorage.getItem(key) as T) ?? fallback;
+/** A stored preference, or the fallback if it is not one of the values we know.
+ *
+ * The cast alone was not enough. `localStorage` is writable by anything on the
+ * origin and survives a release that renames a theme, and an unrecognised value
+ * goes straight onto `data-theme` where it matches no rule at all — the app then
+ * renders the default palette while its own Settings page shows the stored name
+ * as selected. Silent, and impossible to explain from the screen.
+ */
+function read<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
+  const stored = localStorage.getItem(key) as T | null;
+  return stored !== null && allowed.includes(stored) ? stored : fallback;
 }
+
+const DENSITIES: Density[] = ["comfortable", "compact"];
 
 // Sift derives a matching duotone from a chosen accent via a +58° hue shift.
 function hexToHsl(hex: string): [number, number, number] | null {
@@ -62,9 +73,9 @@ function deriveDuotone(hex: string): { accent: string; accent2: string; grad: st
 }
 
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => read<Theme>("sift.theme", "dark"));
+  const [theme, setThemeState] = useState<Theme>(() => read<Theme>("sift.theme", "dark", THEMES));
   const [density, setDensity] = useState<Density>(() =>
-    read<Density>("sift.density", "comfortable"),
+    read<Density>("sift.density", "comfortable", DENSITIES),
   );
   const [reduceMotion, setReduceMotionState] = useState<boolean>(
     () => localStorage.getItem("sift.reduceMotion") === "true",

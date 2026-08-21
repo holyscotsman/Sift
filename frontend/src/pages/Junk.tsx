@@ -11,6 +11,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { useToast } from "@/components/Toast";
 import { EmptyState, Pill, Poster, RingGauge, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
+import { fmtSize } from "@/lib/format";
 import { useDrawer } from "@/lib/drawer";
 import type { JunkCandidate } from "@/lib/types";
 
@@ -22,11 +23,6 @@ function bandColor(band: string): string {
 function bandTone(band: string): "junk" | "borderline" | "keep" {
   return band === "junk" ? "junk" : band === "borderline" ? "borderline" : "keep";
 }
-function fmtSize(bytes: number | null): string {
-  if (!bytes) return "—";
-  return `${(bytes / 1e9).toFixed(1)} GB`;
-}
-
 // Direct title page when the id is known; IMDb's own search otherwise — the
 // link always lands somewhere useful.
 // The recognition signal's detail reads "<tier> — <evidence>"; the tier alone is
