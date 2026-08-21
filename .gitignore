@@ -31,3 +31,6 @@ frontend/.vite/
 .DS_Store
 .idea/
 .vscode/
+
+# vitest coverage output
+frontend/coverage/

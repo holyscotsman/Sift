@@ -26,13 +26,19 @@ export function ShowSuggestions() {
         setItems(r.items);
         setDetail(r.detail);
       })
-      .catch(() => live && setDetail("Couldn't load suggestions."));
+      .catch((e: unknown) =>
+        live && setDetail((e as { message?: string })?.message || "Something went wrong."),
+      );
     return () => {
       live = false;
     };
   }, []);
 
   if (!items) {
+    // `detail` is only set here by the catch, and it has to have somewhere to go:
+    // without this branch a failed request left the skeleton shimmering forever
+    // and the reason was written to state nothing rendered.
+    if (detail) return <EmptyState title="Couldn't load suggestions" hint={detail} />;
     return (
       <div className="panel flex flex-col gap-2 p-4" aria-busy="true">
         <span className="sr-only" role="status">

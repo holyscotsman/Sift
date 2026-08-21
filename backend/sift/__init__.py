@@ -1,3 +1,3 @@
 """Sift — a portable metadata brain for a Plex + Radarr library."""
 
-__version__ = "2607.105.0"
+__version__ = "2607.107.0"
