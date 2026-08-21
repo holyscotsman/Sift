@@ -343,6 +343,16 @@ here so they are not re-litigated, not so they can be admired.
 - **`resetSharedCache()` in every `beforeEach` that renders a polling page.**
   `useStatus`/`useHealth` share results through module-level maps that outlive a
   test, so the second test in a file otherwise reads the first one's data.
+- **An optimistic mark must roll back when its write fails.** Junk rows show a
+  Keep the moment it is clicked and undo the mark if `setKeepOverride` rejects,
+  naming the title. A mark left standing tells somebody a film is protected when
+  nothing was stored.
+- **Only a Keep holds server-side state.** Resetting a *removal* decision must
+  never call `setKeepOverride(false)` — that would strip protection set elsewhere
+  as a side effect of changing your mind about something unrelated.
+- **A fixture whose two orderings coincide cannot test a sort.** The Junk sort
+  fixture had the highest score on the largest file, so score and size produced
+  the same list. Build the disagreement into the fixture.
 
 ---
 
