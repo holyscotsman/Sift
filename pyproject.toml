@@ -16,7 +16,10 @@ keywords = ["plex", "radarr", "tautulli", "tmdb", "media", "library", "curation"
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
-    "sqlalchemy>=2.0",
+    # Capped: SQLAlchemy 2.1 changes select() typing (Select[Movie] vs
+    # Select[tuple[Movie]]) and `mypy --strict` reports 24 errors. Lift the
+    # cap together with that migration.
+    "sqlalchemy>=2.0,<2.1",
     "alembic>=1.13",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
